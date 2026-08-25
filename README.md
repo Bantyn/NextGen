@@ -43,9 +43,85 @@ To run this project locally, follow these steps:
 - Node.js (v16 or higher)
 - MongoDB installed locally or a MongoDB Atlas URI
 
+
+### Project Flow
+                    ┌─────────────────┐
+                    │     Patient     │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ React Frontend  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   Backend API   │
+                    │ Auth + Logic    │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+       ┌────────────┐ ┌────────────┐ ┌─────────────┐
+       │  MongoDB   │ │  n8n + AI  │ │  Documents  │
+       │            │ │   Ollama   │ │   / OCR     │
+       └────────────┘ └────────────┘ └─────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Doctor Dashboard│
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Future HIS/ABDM │
+                    └─────────────────┘
+
 ### Installation
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/Bantyn/NextGen.git](https://github.com/Bantyn/NextGen.git)
-   cd patient-case-tracking
+   git clone https://github.com/Bantyn/NextGen.git
+   cd NextGen
+   ```
+
+2. **Switch to Your Branch:**
+   ```bash
+   # Check available branches
+   git branch -a
+
+   # Switch to your feature branch
+   git switch feature-branch-name
+   ```
+
+3. **Get the Latest Code from `test`:**
+   ```bash
+   # Before starting a new task, fetch and merge latest changes from origin/test
+   git fetch origin
+   git merge origin/test
+   ```
+
+4. **Complete Your Assigned Task & Check Status:**
+   ```bash
+   # Check your modified files
+   git status
+   ```
+
+5. **Add and Commit Your Changes:**
+   ```bash
+   # Stage your changes
+   git add .
+
+   # Create a descriptive commit message
+   git commit -m "feat: add patient registration module"
+   ```
+
+6. **Push Your Changes:**
+   ```bash
+   # Push your branch to remote (first push)
+   git push -u origin feature-branch-name
+
+   # Subsequent pushes
+   git push
+   ```
+
