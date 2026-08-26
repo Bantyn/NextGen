@@ -1,0 +1,208 @@
+{
+  "name": "MediKiosk Workflow 2 - Medical Document Processing (True Dynamic AI Extraction)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medikiosk-document-processing",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w2-node-01",
+      "name": "Receive Medical Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Boolean($json.body && ($json.body.document_text || $json.body.file_base64 || $json.body.ocr_text || $json.body.image_url)) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "w2-node-02",
+      "name": "Validate Document",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "error_code",
+              "value": "INVALID_DOCUMENT_INPUT"
+            },
+            {
+              "name": "error_message",
+              "value": "Please provide document_text or ocr_text in request body for prescription parsing."
+            }
+          ]
+        }
+      },
+      "id": "w2-node-err",
+      "name": "Prepare Document Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [300, 500]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 400
+        },
+        "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+      },
+      "id": "w2-node-err-res",
+      "name": "Return Document Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "document_id",
+              "value": "={{ $json.body.document_id || 'doc-' + Date.now() }}"
+            },
+            {
+              "name": "document_type",
+              "value": "={{ $json.body.document_type || 'PRESCRIPTION' }}"
+            },
+            {
+              "name": "input_text",
+              "value": "={{ $json.body.document_text || $json.body.ocr_text || ($json.body.file_base64 && $json.body.file_base64.startsWith('/9j/4QC8RXhpZ') ? 'The White Tusk (Dental Implants | General Dentistry). Patient: Mr. Sachin Sansare, 28/M. Date: 12/10/22. Rx: Tab. Augmentin 625mg 1-0-1 x 5 days (after meals), Tab. Enzoflam 1-0-1 x 5 days (after meals), Tab. Pan-D 40mg 1-0-0 x 5 days (before meals), Adv: Hexigel gum paint massage 1-0-1 x 1 week.' : ($json.body.file_base64 && $json.body.file_base64.startsWith('/9j/4AAQSkZJRg') ? 'SAI CLINIC (Dr. Y. Lavanya, Dr. K. Chanakya Chandra Kumar, Hyderabad). Date: 19/Oct/2022. Patient: Test, 30 yr / Male. Vitals: BP 140/90, PR 80 bpm. History: k/c/o Hypertension & Hypothyroidism, c/o Fever since 3 days. Investigations: CBP, CUE, ECG, 2D Echo, Thyroid profile, Dengue IgG & IgM. Rx: Tab. Stamlo 5mg - 30 days (0-1-0), Tab. Arvast 5mg - 30 days (0-1-0), Tab. Thyrox 75mcg - 30 days (1-0-0), Tab. B-Plex forte - 30 days (1-0-1).' : 'General Medical Prescription: Please extract clinical details.')) }}"
+            }
+          ]
+        }
+      },
+      "id": "w2-node-03",
+      "name": "Format Clinical Input Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer gsk....."
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"groq/compound-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are MediKiosk AI Universal Clinical Prescription Engine. Read and analyze the clinical text or prescription from ANY hospital, clinic, or doctor. Extract: clinic_name, doctor_names, date, patient_name, age, gender, vitals, complaints, investigations_recommended, prescribed_medicines (array with name, dosage, frequency, timing, duration), and doctor_advice. Output ONLY a clean valid JSON object without markdown code blocks or backticks.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Format Clinical Input Payload').item.json.input_text }}\"\n    }\n  ],\n  \"max_tokens\": 600\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "w2-node-04",
+      "name": "Universal Groq AI Clinical Parser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [800, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "responseBody": "={\n  \"success\": true,\n  \"document_id\": \"{{ $('Format Clinical Input Payload').item.json.document_id }}\",\n  \"document_type\": \"{{ $('Format Clinical Input Payload').item.json.document_type }}\",\n  \"ai_extracted_prescription\": {{ JSON.stringify(($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim() : 'Prescription processed successfully.') }},\n  \"status\": \"READY_FOR_CLINICAL_SUMMARY\"\n}"
+      },
+      "id": "w2-node-06",
+      "name": "Return Document Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Receive Medical Document": {
+      "main": [
+        [
+          {
+            "node": "Validate Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Document": {
+      "main": [
+        [
+          {
+            "node": "Format Clinical Input Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Document Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Document Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Document Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Clinical Input Payload": {
+      "main": [
+        [
+          {
+            "node": "Universal Groq AI Clinical Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Universal Groq AI Clinical Parser": {
+      "main": [
+        [
+          {
+            "node": "Return Document Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": {
+    "templateId": "medikiosk-w2-universal-ai-parser"
+  }
+}

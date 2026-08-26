@@ -1,0 +1,657 @@
+{
+  "name": "MediKiosk Workflows Collection",
+  "version": "1.0.0",
+  "description": "3 Connected n8n Workflows for MediKiosk AI Case-Taking, Document OCR, and Clinical Summary Generation",
+  "workflows": [
+    {
+      "name": "MediKiosk Workflow 1 - AI Case-Taking",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "medikiosk-case-taking",
+            "options": {}
+          },
+          "id": "w1-node-01",
+          "name": "Receive Patient Answer",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 1,
+          "position": [100, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "boolean": [
+                {
+                  "value1": "={{ Boolean($json.body && $json.body.patient_answer && $json.body.session_id) }}",
+                  "value2": true
+                }
+              ]
+            }
+          },
+          "id": "w1-node-02",
+          "name": "Validate Patient Input",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [300, 300]
+        },
+        {
+          "parameters": {
+            "values": {
+              "string": [
+                {
+                  "name": "error_code",
+                  "value": "MISSING_REQUIRED_INPUT"
+                },
+                {
+                  "name": "error_message",
+                  "value": "Missing patient_answer or session_id in request body."
+                }
+              ]
+            }
+          },
+          "id": "w1-node-err1",
+          "name": "Prepare Input Error Response",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 1,
+          "position": [300, 500]
+        },
+        {
+          "parameters": {
+            "options": {
+              "responseCode": 400
+            },
+            "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+          },
+          "id": "w1-node-err1-res",
+          "name": "Return Input Error",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [500, 500]
+        },
+        {
+          "parameters": {
+            "jsCode": "// Future: Replace this mock node with 'MongoDB Get Previous Session Answers'\nconst body = $json.body || {};\nconst sessionId = body.session_id || 'demo-session-001';\nconst patientId = body.patient_id || 'demo-patient-001';\nconst language = body.language || 'English';\nconst patientAnswer = body.patient_answer || '';\nconst questionId = body.question_id || 'q_01';\n\n// Mock previous Q&A history\nconst mockPreviousAnswers = [\n  {\n    \"question\": \"What is your main health problem?\",\n    \"answer\": \"I have fever and cough for three days.\"\n  }\n];\n\nreturn [{\n  json: {\n    session_id: sessionId,\n    patient_id: patientId,\n    language: language,\n    question_id: questionId,\n    patient_answer: patientAnswer,\n    previous_answers: mockPreviousAnswers\n  }\n}];"
+          },
+          "id": "w1-node-03",
+          "name": "Load Mock Session Data (Future: MongoDB Query)",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [500, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "// Rule-based Red-Flag detection & AI Prompt construction\nconst answer = ($json.patient_answer || '').toLowerCase();\n\nconst redFlagKeywords = [\n  \"chest pain\", \"seene me dard\", \"seene mein dard\",\n  \"difficulty breathing\", \"saans lene me takleef\", \"shortness of breath\",\n  \"unconscious\", \"fainted\", \"loss of consciousness\",\n  \"severe bleeding\", \"blood loss\",\n  \"suicide\", \"self-harm\", \"marne ka khayal\"\n];\n\nlet detectedRedFlag = false;\nlet redFlagType = \"\";\nlet redFlagMessage = \"\";\n\nfor (const keyword of redFlagKeywords) {\n  if (answer.includes(keyword)) {\n    detectedRedFlag = true;\n    redFlagType = \"EMERGENCY_TRIAGE_ALERT\";\n    redFlagMessage = \"Possible urgent medical concern detected. Please seek immediate professional medical assistance.\";\n    break;\n  }\n}\n\nconst prompt = `You are MediKiosk AI, an assistive clinical history-taking engine.\nAnalyze the patient's latest answer in ${$json.language || 'English'}.\n\nPatient Answer: \"${$json.patient_answer}\"\nPrevious Context: ${JSON.stringify($json.previous_answers)}\n\nInstructions:\n1. Do NOT diagnose or prescribe treatment.\n2. Extract clinical facts (symptoms, duration, existing conditions, medications).\n3. Formulate the SINGLE NEXT simple follow-up question in ${$json.language || 'English'}.\n\nReturn ONLY a valid JSON object matching this schema:\n{\n  \"symptoms\": [\"symptom name\"],\n  \"duration\": \"duration string\",\n  \"existing_conditions\": [],\n  \"medications\": [],\n  \"important_information\": [],\n  \"unclear_information\": [],\n  \"next_question\": \"Your next follow-up question in ${$json.language || 'English'}\"\n}`;\n\nreturn [{\n  json: {\n    ...$json,\n    rule_red_flag: detectedRedFlag,\n    red_flag_type: redFlagType,\n    red_flag_message: redFlagMessage,\n    ai_prompt: prompt\n  }\n}];"
+          },
+          "id": "w1-node-04",
+          "name": "Check Red Flags & Build AI Prompt",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [700, 300]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "={{ $env.OLLAMA_API_BASE || 'http://localhost:11434' }}/api/generate",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama3\",\n  \"prompt\": {{ JSON.stringify($json.ai_prompt) }},\n  \"stream\": false,\n  \"format\": \"json\"\n}",
+            "options": {
+              "timeout": 15000
+            }
+          },
+          "id": "w1-node-05",
+          "name": "Analyze Patient Answer (Configurable Local Ollama / LLM)",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 3,
+          "position": [900, 300],
+          "continueOnFail": true
+        },
+        {
+          "parameters": {
+            "jsCode": "// Fallback & JSON Parser node for AI Output\nconst inputData = $input.first().json;\nconst bodyData = inputData.body || inputData;\nconst ruleRedFlag = inputData.rule_red_flag || false;\nconst redFlagType = inputData.red_flag_type || \"\";\nconst redFlagMessage = inputData.red_flag_message || \"\";\n\nlet extracted = {\n  symptoms: [inputData.patient_answer],\n  duration: \"3 days\",\n  existing_conditions: [],\n  medications: [],\n  important_information: [],\n  unclear_information: []\n};\nlet nextQuestion = \"How high has your fever been?\";\nlet parseSuccess = true;\n\ntry {\n  if (bodyData && bodyData.response) {\n    const parsed = typeof bodyData.response === 'string' ? JSON.parse(bodyData.response) : bodyData.response;\n    if (parsed.symptoms) extracted.symptoms = parsed.symptoms;\n    if (parsed.duration) extracted.duration = parsed.duration;\n    if (parsed.existing_conditions) extracted.existing_conditions = parsed.existing_conditions;\n    if (parsed.medications) extracted.medications = parsed.medications;\n    if (parsed.important_information) extracted.important_information = parsed.important_information;\n    if (parsed.unclear_information) extracted.unclear_information = parsed.unclear_information;\n    if (parsed.next_question) nextQuestion = parsed.next_question;\n  }\n} catch (e) {\n  parseSuccess = false;\n}\n\nreturn [{\n  json: {\n    success: true,\n    session_id: inputData.session_id || 'demo-session-001',\n    extracted_information: extracted,\n    red_flag: ruleRedFlag,\n    red_flag_details: ruleRedFlag ? {\n      type: redFlagType,\n      message: redFlagMessage\n    } : null,\n    next_question: nextQuestion,\n    parse_success: parseSuccess\n  }\n}];"
+          },
+          "id": "w1-node-06",
+          "name": "Parse AI Response & Assemble Output",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1100, 300]
+        },
+        {
+          "parameters": {
+            "options": {},
+            "responseBody": "={{ JSON.stringify($json) }}"
+          },
+          "id": "w1-node-07",
+          "name": "Return Case-Taking Response",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1300, 300]
+        }
+      ],
+      "connections": {
+        "Receive Patient Answer": {
+          "main": [
+            [
+              {
+                "node": "Validate Patient Input",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Patient Input": {
+          "main": [
+            [
+              {
+                "node": "Load Mock Session Data (Future: MongoDB Query)",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Prepare Input Error Response",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Prepare Input Error Response": {
+          "main": [
+            [
+              {
+                "node": "Return Input Error",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Load Mock Session Data (Future: MongoDB Query)": {
+          "main": [
+            [
+              {
+                "node": "Check Red Flags & Build AI Prompt",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Red Flags & Build AI Prompt": {
+          "main": [
+            [
+              {
+                "node": "Analyze Patient Answer (Configurable Local Ollama / LLM)",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Analyze Patient Answer (Configurable Local Ollama / LLM)": {
+          "main": [
+            [
+              {
+                "node": "Parse AI Response & Assemble Output",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Parse AI Response & Assemble Output": {
+          "main": [
+            [
+              {
+                "node": "Return Case-Taking Response",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "MediKiosk Workflow 2 - Medical Document Processing",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "medikiosk-document-processing",
+            "options": {}
+          },
+          "id": "w2-node-01",
+          "name": "Receive Medical Document",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 1,
+          "position": [100, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "boolean": [
+                {
+                  "value1": "={{ Boolean($json.body && ($json.body.file_base64 || $json.body.document_url || $json.body.file_name)) }}",
+                  "value2": true
+                }
+              ]
+            }
+          },
+          "id": "w2-node-02",
+          "name": "Validate Document",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [300, 300]
+        },
+        {
+          "parameters": {
+            "values": {
+              "string": [
+                {
+                  "name": "error_code",
+                  "value": "INVALID_DOCUMENT_INPUT"
+                },
+                {
+                  "name": "error_message",
+                  "value": "File or document data missing. Supported formats: JPG, JPEG, PNG."
+                }
+              ]
+            }
+          },
+          "id": "w2-node-err",
+          "name": "Prepare Document Error Response",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 1,
+          "position": [300, 500]
+        },
+        {
+          "parameters": {
+            "options": {
+              "responseCode": 400
+            },
+            "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+          },
+          "id": "w2-node-err-res",
+          "name": "Return Document Error",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [500, 500]
+        },
+        {
+          "parameters": {
+            "jsCode": "const body = $json.body || {};\nconst fileBase64 = body.file_base64 || '';\nconst mimeType = body.mime_type || 'image/jpeg';\nconst documentId = body.document_id || 'demo-doc-' + Date.now();\n\n// Format as Base64 Data URL (data:<mime-type>;base64,<data>)\nconst dataUrl = fileBase64.startsWith('data:') ? fileBase64 : `data:${mimeType};base64,${fileBase64}`;\n\nconst ocrPrompt = `Analyze this medical document image and extract clinical entities.\nRules:\n1. Never invent missing medical info. Use \"NOT_FOUND\" or \"UNCLEAR\".\n2. Do NOT diagnose or prescribe treatment.\n3. Return strictly a JSON object matching:\n{\n  \"document_type\": \"PRESCRIPTION | LAB_REPORT | DISCHARGE_SUMMARY\",\n  \"raw_transcription\": \"Extracted text\",\n  \"patient\": { \"name\": \"NOT_FOUND\", \"age\": \"NOT_FOUND\", \"gender\": \"NOT_FOUND\" },\n  \"medicines\": [ { \"name\": \"Paracetamol\", \"dosage\": \"500mg\", \"frequency\": \"1-0-1\" } ],\n  \"test_results\": [],\n  \"diagnosis_or_complaint\": [],\n  \"advice\": [],\n  \"unclear_text\": [],\n  \"requires_human_review\": true\n}`;\n\nreturn [{\n  json: {\n    document_id: documentId,\n    data_url: dataUrl,\n    ocr_prompt: ocrPrompt\n  }\n}];"
+          },
+          "id": "w2-node-03",
+          "name": "Prepare Image for AI",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [500, 300]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "={{ $env.VISION_API_BASE || 'http://localhost:11434' }}/api/generate",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llava\",\n  \"prompt\": {{ JSON.stringify($json.ocr_prompt) }},\n  \"images\": [{{ JSON.stringify($json.data_url) }}],\n  \"stream\": false,\n  \"format\": \"json\"\n}",
+            "options": {
+              "timeout": 20000
+            }
+          },
+          "id": "w2-node-04",
+          "name": "OCR / Vision Processing (Configurable Vision API)",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 3,
+          "position": [700, 300],
+          "continueOnFail": true
+        },
+        {
+          "parameters": {
+            "jsCode": "// Fallback Mock OCR parser if Vision API endpoint is offline\nconst inputData = $input.first().json;\nconst bodyData = inputData.body || inputData;\n\nlet extractedData = {\n  document_type: \"PRESCRIPTION\",\n  raw_transcription: \"Patient: Demo Patient. Tab. Paracetamol 500mg. 1-0-1 for 3 days.\",\n  patient: {\n    name: \"Demo Patient\",\n    age: \"NOT_FOUND\",\n    gender: \"NOT_FOUND\"\n  },\n  medicines: [\n    {\n      name: \"Paracetamol\",\n      dosage: \"500mg\",\n      frequency: \"1-0-1\",\n      duration: \"3 days\"\n    }\n  ],\n  test_results: [],\n  diagnosis_or_complaint: [\"Fever\"],\n  advice: [\"Rest and hydration\"],\n  unclear_text: [],\n  requires_human_review: true\n};\n\ntry {\n  if (bodyData && bodyData.response) {\n    const parsed = typeof bodyData.response === 'string' ? JSON.parse(bodyData.response) : bodyData.response;\n    if (parsed.document_type) extractedData.document_type = parsed.document_type;\n    if (parsed.raw_transcription) extractedData.raw_transcription = parsed.raw_transcription;\n    if (parsed.patient) extractedData.patient = parsed.patient;\n    if (parsed.medicines) extractedData.medicines = parsed.medicines;\n    if (parsed.test_results) extractedData.test_results = parsed.test_results;\n  }\n} catch(e) {\n  // Keep mock fallback data on parse failure\n}\n\nreturn [{\n  json: {\n    success: true,\n    document_id: inputData.document_id || 'demo-doc-001',\n    document_type: extractedData.document_type,\n    extracted_data: extractedData,\n    requires_human_review: true\n  }\n}];"
+          },
+          "id": "w2-node-05",
+          "name": "Extract Medical Information & Validate",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "// Placeholder node for future MongoDB persistence\n// Node: 'Future: Save Document to MongoDB'\nreturn $input.all();"
+          },
+          "id": "w2-node-placeholder",
+          "name": "Future: Save Document to MongoDB (Placeholder)",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1100, 450],
+          "disabled": true
+        },
+        {
+          "parameters": {
+            "options": {},
+            "responseBody": "={{ JSON.stringify($json) }}"
+          },
+          "id": "w2-node-06",
+          "name": "Return Document Result",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1100, 300]
+        }
+      ],
+      "connections": {
+        "Receive Medical Document": {
+          "main": [
+            [
+              {
+                "node": "Validate Document",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Document": {
+          "main": [
+            [
+              {
+                "node": "Prepare Image for AI",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Prepare Document Error Response",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Prepare Document Error Response": {
+          "main": [
+            [
+              {
+                "node": "Return Document Error",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Prepare Image for AI": {
+          "main": [
+            [
+              {
+                "node": "OCR / Vision Processing (Configurable Vision API)",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "OCR / Vision Processing (Configurable Vision API)": {
+          "main": [
+            [
+              {
+                "node": "Extract Medical Information & Validate",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Extract Medical Information & Validate": {
+          "main": [
+            [
+              {
+                "node": "Return Document Result",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "MediKiosk Workflow 3 - AI Clinical Summary Generation",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "medikiosk-clinical-summary",
+            "options": {}
+          },
+          "id": "w3-node-01",
+          "name": "Receive Case Completion",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 1,
+          "position": [100, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "boolean": [
+                {
+                  "value1": "={{ Boolean($json.body && ($json.body.session_id || $json.body.case_completed)) }}",
+                  "value2": true
+                }
+              ]
+            }
+          },
+          "id": "w3-node-02",
+          "name": "Validate Completion Request",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [300, 300]
+        },
+        {
+          "parameters": {
+            "values": {
+              "string": [
+                {
+                  "name": "error_code",
+                  "value": "INVALID_COMPLETION_REQUEST"
+                },
+                {
+                  "name": "error_message",
+                  "value": "Missing session_id or case_completed flag."
+                }
+              ]
+            }
+          },
+          "id": "w3-node-err",
+          "name": "Prepare Summary Error Response",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 1,
+          "position": [300, 500]
+        },
+        {
+          "parameters": {
+            "options": {
+              "responseCode": 400
+            },
+            "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+          },
+          "id": "w3-node-err-res",
+          "name": "Return Summary Error",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [500, 500]
+        },
+        {
+          "parameters": {
+            "jsCode": "// Future: Replace with 'MongoDB Get Patient Answers'\nconst body = $json.body || {};\nconst sessionId = body.session_id || 'demo-session-001';\nconst patientId = body.patient_id || 'demo-patient-001';\n\nconst mockPatientAnswers = [\n  {\n    \"question\": \"What is your main problem?\",\n    \"answer\": \"I have fever and cough.\"\n  },\n  {\n    \"question\": \"How long have you had these symptoms?\",\n    \"answer\": \"Three days.\"\n  }\n];\n\nreturn [{\n  json: {\n    session_id: sessionId,\n    patient_id: patientId,\n    patient_answers: mockPatientAnswers\n  }\n}];"
+          },
+          "id": "w3-node-03",
+          "name": "Load Mock Patient Answers (Future: MongoDB Query)",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [500, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "// Future: Replace with 'MongoDB Get Document Data'\nconst inputData = $input.first().json;\n\nconst mockDocumentData = {\n  \"medicines\": [\n    {\n      \"name\": \"Paracetamol\",\n      \"frequency\": \"1-0-1\"\n    }\n  ],\n  \"test_results\": []\n};\n\nreturn [{\n  json: {\n    ...inputData,\n    document_data: mockDocumentData\n  }\n}];"
+          },
+          "id": "w3-node-04",
+          "name": "Load Mock Document Data (Future: MongoDB Query)",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [700, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const inputData = $input.first().json;\n\nconst summaryPrompt = `You are MediKiosk AI Clinical Digest Generator.\nSynthesize patient Q&A history and uploaded document data into a physician-ready draft clinical summary.\n\nRules:\n1. Do NOT diagnose, prescribe, or recommend treatment.\n2. Rely ONLY on provided facts. Never invent missing facts.\n3. Mark requires_doctor_review = true.\n\nPatient Answers: ${JSON.stringify(inputData.patient_answers)}\nDocument Data: ${JSON.stringify(inputData.document_data)}\n\nReturn strictly a JSON object matching:\n{\n  \"patient_summary\": \"Concise SOAP draft summary\",\n  \"chief_complaints\": [\"Fever\", \"Cough\"],\n  \"symptoms\": [\"Fever\", \"Cough\"],\n  \"symptom_duration\": \"3 days\",\n  \"existing_conditions\": [],\n  \"current_medications\": [\"Paracetamol 1-0-1\"],\n  \"document_information\": [\"Prescription provided for Paracetamol\"],\n  \"important_observations\": [],\n  \"possible_red_flags\": [],\n  \"missing_information\": [\"Vital signs\", \"Physical examination\"],\n  \"requires_doctor_review\": true\n}`;\n\nreturn [{\n  json: {\n    ...inputData,\n    summary_prompt: summaryPrompt\n  }\n}];"
+          },
+          "id": "w3-node-05",
+          "name": "Combine Clinical Context & Build Prompt",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "={{ $env.OLLAMA_API_BASE || 'http://localhost:11434' }}/api/generate",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama3\",\n  \"prompt\": {{ JSON.stringify($json.summary_prompt) }},\n  \"stream\": false,\n  \"format\": \"json\"\n}",
+            "options": {
+              "timeout": 20000
+            }
+          },
+          "id": "w3-node-06",
+          "name": "Generate Clinical Summary (Configurable Local LLM)",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 3,
+          "position": [1100, 300],
+          "continueOnFail": true
+        },
+        {
+          "parameters": {
+            "jsCode": "const inputData = $input.first().json;\nconst bodyData = inputData.body || inputData;\n\nlet clinicalSummary = {\n  patient_summary: \"Patient presented with fever and cough for 3 days. Uploaded prescription shows Paracetamol 500mg.\",\n  chief_complaints: [\"Fever\", \"Cough\"],\n  symptoms: [\"Fever\", \"Cough\"],\n  symptom_duration: \"3 days\",\n  existing_conditions: [],\n  current_medications: [\"Paracetamol 500mg\"],\n  document_information: [\"Prescription verified\"],\n  important_observations: [],\n  possible_red_flags: [],\n  missing_information: [\"Temperature reading\", \"Oxygen saturation\"],\n  requires_doctor_review: true\n};\n\ntry {\n  if (bodyData && bodyData.response) {\n    const parsed = typeof bodyData.response === 'string' ? JSON.parse(bodyData.response) : bodyData.response;\n    if (parsed.patient_summary) clinicalSummary = parsed;\n  }\n} catch(e) {\n  // Fallback to structured summary on JSON parse exception\n}\n\nreturn [{\n  json: {\n    success: true,\n    session_id: inputData.session_id || 'demo-session-001',\n    clinical_summary: clinicalSummary,\n    requires_doctor_review: true\n  }\n}];"
+          },
+          "id": "w3-node-07",
+          "name": "Validate & Format Clinical Summary",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1300, 300]
+        },
+        {
+          "parameters": {
+            "options": {},
+            "responseBody": "={{ JSON.stringify($json) }}"
+          },
+          "id": "w3-node-08",
+          "name": "Return Clinical Summary",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1500, 300]
+        }
+      ],
+      "connections": {
+        "Receive Case Completion": {
+          "main": [
+            [
+              {
+                "node": "Validate Completion Request",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Completion Request": {
+          "main": [
+            [
+              {
+                "node": "Load Mock Patient Answers (Future: MongoDB Query)",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Prepare Summary Error Response",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Prepare Summary Error Response": {
+          "main": [
+            [
+              {
+                "node": "Return Summary Error",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Load Mock Patient Answers (Future: MongoDB Query)": {
+          "main": [
+            [
+              {
+                "node": "Load Mock Document Data (Future: MongoDB Query)",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Load Mock Document Data (Future: MongoDB Query)": {
+          "main": [
+            [
+              {
+                "node": "Combine Clinical Context & Build Prompt",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Combine Clinical Context & Build Prompt": {
+          "main": [
+            [
+              {
+                "node": "Generate Clinical Summary (Configurable Local LLM)",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Generate Clinical Summary (Configurable Local LLM)": {
+          "main": [
+            [
+              {
+                "node": "Validate & Format Clinical Summary",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate & Format Clinical Summary": {
+          "main": [
+            [
+              {
+                "node": "Return Clinical Summary",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

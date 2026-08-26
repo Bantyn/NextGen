@@ -1,0 +1,332 @@
+{
+  "name": "MediKiosk Workflow 1 - AI Case-Taking (Groq Valid Model)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medikiosk-case-taking",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w1-node-01",
+      "name": "Receive Patient Answer",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Boolean($json.body && $json.body.patient_answer && $json.body.session_id) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "w1-node-02",
+      "name": "Validate Patient Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "error_code",
+              "value": "MISSING_REQUIRED_INPUT"
+            },
+            {
+              "name": "error_message",
+              "value": "Missing patient_answer or session_id in request body."
+            }
+          ]
+        }
+      },
+      "id": "w1-node-err1",
+      "name": "Prepare Input Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [300, 500]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 400
+        },
+        "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+      },
+      "id": "w1-node-err1-res",
+      "name": "Return Input Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || 'demo-session-001' }}"
+            },
+            {
+              "name": "patient_id",
+              "value": "={{ $json.body.patient_id || 'demo-patient-001' }}"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.body.language || 'Hindi' }}"
+            },
+            {
+              "name": "patient_answer",
+              "value": "={{ $json.body.patient_answer || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "w1-node-03",
+      "name": "Load Session Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.patient_answer.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "chest pain"
+            },
+            {
+              "value1": "={{ $json.patient_answer.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "breath"
+            },
+            {
+              "value1": "={{ $json.patient_answer.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "seene me"
+            },
+            {
+              "value1": "={{ $json.patient_answer.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "છાતી"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "w1-node-04-if",
+      "name": "Check Red Flags",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "boolean": [
+            {
+              "name": "red_flag",
+              "value": true
+            }
+          ],
+          "string": [
+            {
+              "name": "red_flag_type",
+              "value": "EMERGENCY_TRIAGE_ALERT"
+            },
+            {
+              "name": "red_flag_message",
+              "value": "Possible urgent medical concern detected. Please seek immediate professional medical assistance."
+            }
+          ]
+        }
+      },
+      "id": "w1-node-rf-true",
+      "name": "Set Red Flag Alert True",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "boolean": [
+            {
+              "name": "red_flag",
+              "value": false
+            }
+          ]
+        }
+      },
+      "id": "w1-node-rf-false",
+      "name": "Set Red Flag Alert False",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer gsk....."
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"groq/compound-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are MediKiosk AI clinical intake assistant. The patient is communicating in {{ $('Load Session Data').item.json.language }}. Analyze their exact medical symptom complaint: '{{ $('Load Session Data').item.json.patient_answer }}'. Ask ONLY the SINGLE most relevant, polite follow-up medical question strictly in {{ $('Load Session Data').item.json.language }} script. Do not diagnose. Output ONLY the question, without any preamble or explanation.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Load Session Data').item.json.patient_answer }}\"\n    }\n  ],\n  \"max_tokens\": 70\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "w1-node-05",
+      "name": "Analyze Patient Answer (Groq Cloud API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1100, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "responseBody": "={\n  \"success\": true,\n  \"session_id\": \"{{ $('Load Session Data').item.json.session_id }}\",\n  \"patient_id\": \"{{ $('Load Session Data').item.json.patient_id }}\",\n  \"language\": \"{{ $('Load Session Data').item.json.language }}\",\n  \"patient_answer\": \"{{ $('Load Session Data').item.json.patient_answer }}\",\n  \"extracted_information\": {\n    \"symptoms\": [\"{{ $('Load Session Data').item.json.patient_answer }}\"],\n    \"duration\": \"as reported\",\n    \"existing_conditions\": [],\n    \"medications\": []\n  },\n  \"red_flag\": {{ $('Set Red Flag Alert True').isExecuted ? true : false }},\n  \"red_flag_details\": {{ $('Set Red Flag Alert True').isExecuted ? '{\"type\":\"EMERGENCY_TRIAGE_ALERT\",\"message\":\"Possible urgent medical concern detected.\"}' : 'null' }},\n  \"next_question\": \"{{ ($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content.replace(/\\n/g, ' ').replace(/\"/g, '\\\\\"').trim() : 'કૃપા કરીને તમારા લક્ષણો વિશે વધુ જણાવો.' }}\"\n}"
+      },
+      "id": "w1-node-07",
+      "name": "Return Case-Taking Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1350, 300]
+    }
+  ],
+  "connections": {
+    "Receive Patient Answer": {
+      "main": [
+        [
+          {
+            "node": "Validate Patient Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Patient Input": {
+      "main": [
+        [
+          {
+            "node": "Load Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Input Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Session Data": {
+      "main": [
+        [
+          {
+            "node": "Check Red Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Red Flags": {
+      "main": [
+        [
+          {
+            "node": "Set Red Flag Alert True",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Red Flag Alert False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Red Flag Alert True": {
+      "main": [
+        [
+          {
+            "node": "Analyze Patient Answer (Groq Cloud API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Red Flag Alert False": {
+      "main": [
+        [
+          {
+            "node": "Analyze Patient Answer (Groq Cloud API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Patient Answer (Groq Cloud API)": {
+      "main": [
+        [
+          {
+            "node": "Return Case-Taking Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": {
+    "templateId": "medikiosk-w1-groq-compound-mini-live"
+  }
+}
