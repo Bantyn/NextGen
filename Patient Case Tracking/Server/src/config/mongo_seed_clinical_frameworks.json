@@ -1,0 +1,268 @@
+[
+  {
+    "_id": "FRAMEWORK_CHEST_PAIN",
+    "category": "CHEST_PAIN",
+    "title": "Chest Pain (છાતીમાં દુખાવો / सीने में दर्द)",
+    "protocol": "SOCRATES",
+    "red_flag_triggers": [
+      "breathlessness",
+      "left arm radiation",
+      "jaw pain",
+      "profuse sweating",
+      "choking",
+      "છાતીમાં ભારેપણું",
+      "શ્વાસ ચડવો",
+      "સીને મેં દર્દ"
+    ],
+    "questions": [
+      {
+        "step": "O",
+        "topic": "Onset & Timing",
+        "question_gu": "છાતીમાં દુખાવો ક્યારે અને કેવી રીતે શરૂ થયો? અચાનક કે ધીમે-ધીમે?",
+        "question_hi": "सीने में दर्द कब और कैसे शुरू हुआ? अचानक या धीरे-धीरे?",
+        "question_en": "When and how did the chest pain start? Suddenly or gradually?"
+      },
+      {
+        "step": "S",
+        "topic": "Site & Location",
+        "question_gu": "દુખાવો છાતીમાં કઈ જગ્યાએ છે? ડાબી બાજુ, વચ્ચે કે જમણી બાજુ?",
+        "question_hi": "दर्द सीने में किस जगह है? बाईं तरफ, बीच में या दाईं तरफ?",
+        "question_en": "Where exactly is the pain? Left side, center, or right side?"
+      },
+      {
+        "step": "C",
+        "topic": "Character of Pain",
+        "question_gu": "દુખાવો કેવો લાગે છે? ભારે દબાણ જેવો, સોય ભોંકાતી હોય તેવો કે બળતરા જેવો?",
+        "question_hi": "दर्द कैसा लगता है? भारी दबाव जैसा, चुभन जैसा या जलन जैसा?",
+        "question_en": "How does it feel? Heavy squeezing pressure, sharp stabbing, or burning sensation?"
+      },
+      {
+        "step": "R",
+        "topic": "Radiation",
+        "question_gu": "શું દુખાવો ડાબા હાથ, ગરદન, જડબા કે પીઠ તરફ ફેલાય છે?",
+        "question_hi": "क्या दर्द बाएं हाथ, गर्दन, जबड़े या पीठ की तरफ फैलता है?",
+        "question_en": "Does the pain radiate to your left arm, neck, jaw, or back?"
+      },
+      {
+        "step": "A",
+        "topic": "Associated Symptoms",
+        "question_gu": "દુખાવાની સાથે શ્વાસ ચડવો, ખૂબ પરસેવો વળવો કે ગભરામણ થાય છે?",
+        "question_hi": "दर्द के साथ सांस फूलना, पसीना आना या घबराहટ हो रही है?",
+        "question_en": "Are you experiencing shortness of breath, profuse sweating, or dizziness?"
+      },
+      {
+        "step": "E",
+        "topic": "Exacerbating Factors",
+        "question_gu": "ચાલવાથી કે વજન ઉપાડવાથી દુખાવો વધે છે? આરામ કરવાથી રાહત મળે છે?",
+        "question_hi": "चलने से दर्द बढ़ता है? आराम करने से राहत मिलती है?",
+        "question_en": "Does walking or exertion make it worse? Does resting provide relief?"
+      },
+      {
+        "step": "S",
+        "topic": "Severity Scale",
+        "question_gu": "૧ થી ૧૦ ના સ્કેલ પર દુખાવો કેટલો તીવ્ર છે? (૧ = સામાન્ય, ૧૦ = અસહ્ય)",
+        "question_hi": "1 से 10 के पैमाने पर दर्द कितना तेज है? (1 = हल्का, 10 = असहनीय)",
+        "question_en": "On a scale of 1 to 10, how severe is the pain?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_FEVER",
+    "category": "FEVER",
+    "title": "Fever & Shivering (તાવ / बुखार)",
+    "protocol": "INFECTIOUS_OPD",
+    "red_flag_triggers": [
+      "high fever with rash",
+      "stiff neck",
+      "altered consciousness",
+      "persistent vomiting",
+      "ખૂબ ધ્રુજારી"
+    ],
+    "questions": [
+      {
+        "step": "duration",
+        "topic": "Duration & Timing",
+        "question_gu": "તાવ કેટલા દિવસથી આવે છે? દિવસમાં કયા સમયે વધારે રહે છે?",
+        "question_hi": "बुखार कितने दिनों से आ रहा है? दिन में किस समय ज्यादा तेज होता है?",
+        "question_en": "How many days have you had the fever? Does it peak at a specific time?"
+      },
+      {
+        "step": "chills",
+        "topic": "Chills & Shivering",
+        "question_gu": "શું તાવ આવતા પહેલા ઠંડી લાગીને ધ્રુજારી આવે છે?",
+        "question_hi": "क्या बुखार आने से पहले तेज ठंड लगकर कंपकंपी छूटती है?",
+        "question_en": "Do you experience chills or severe shivering before the fever rises?"
+      },
+      {
+        "step": "associated",
+        "topic": "Associated Symptoms",
+        "question_gu": "તાવ સાથે માથું દુખવું, ઉધરસ, પેશાબમાં બળતરા કે પેટમાં દુખાવો છે?",
+        "question_hi": "बुखार के साथ सिरदर्द, खांसी, पेशाब में जलन या पेट दर्द है?",
+        "question_en": "Along with fever, do you have headache, cough, burning urination, or body pain?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_COUGH_COLD",
+    "category": "COUGH_COLD",
+    "title": "Cough & Respiratory (ઉધરસ / खांसी व जुकाम)",
+    "protocol": "RESPIRATORY_OPD",
+    "red_flag_triggers": [
+      "blood in cough",
+      "severe breathlessness",
+      "stridor",
+      "cyanosis",
+      "લોહી નીકળવું"
+    ],
+    "questions": [
+      {
+        "step": "nature",
+        "topic": "Dry or Wet Cough",
+        "question_gu": "ઉધરસ સૂકી આવે છે કે કફ/ગળફા સાથે નીકળે છે?",
+        "question_hi": "खांसी सूखी है या बलगम/कफ के साथ आ रही है?",
+        "question_en": "Is your cough dry, or do you have phlegm/mucus?"
+      },
+      {
+        "step": "hemoptysis",
+        "topic": "Blood in Sputum",
+        "question_gu": "ઉધરસમાં ક્યારેય લોહી કે લાલ રંગનો કફ જોવા મળ્યો છે?",
+        "question_hi": "क्या खांसी में कभी खून या लाल रंग का बलगम दिखा है?",
+        "question_en": "Have you ever noticed any blood in your cough?"
+      },
+      {
+        "step": "wheezing",
+        "topic": "Wheezing & Breathlessness",
+        "question_gu": "શું શ્વાસ લેતી વખતે સીટી જેવો અવાજ આવે છે કે શ્વાસ ચડે છે?",
+        "question_hi": "क्या सांस लेते समय सीटी जैसी आवाज आती है या सांस फूलती है?",
+        "question_en": "Do you have wheezing sounds in chest or difficulty breathing?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_STOMACH_PAIN",
+    "category": "STOMACH_PAIN",
+    "title": "Abdominal / Gastrointestinal (પેટમાં દુખાવો / पेट दर्द)",
+    "protocol": "GASTRO_OPD",
+    "red_flag_triggers": [
+      "black tarry stools",
+      "persistent vomiting",
+      "rigid abdomen",
+      "jaundice with fever"
+    ],
+    "questions": [
+      {
+        "step": "location",
+        "topic": "Location in Abdomen",
+        "question_gu": "પેટમાં દુખાવો ઉપરના ભાગમાં (છાતી નીચે), નાભિ પાસે કે નીચેના ભાગમાં છે?",
+        "question_hi": "पेट में दर्द ऊपरी हिस्से (सीने के नीचे), नाभि के पास या निचले हिस्से में है?",
+        "question_en": "Where in the stomach is the pain? Upper abdomen, navel, or lower abdomen?"
+      },
+      {
+        "step": "meals",
+        "topic": "Relation to Meals",
+        "question_gu": "શું જમ્યા પછી દુખાવો વધે છે કે ભૂખ્યા પેટે વધારે દુખે છે?",
+        "question_hi": "क्या खाना खाने के बाद दर्द बढ़ता है या खाली पेट ज्यादा दर्द होता है?",
+        "question_en": "Does the pain worsen after eating meals or when your stomach is empty?"
+      },
+      {
+        "step": "bowel",
+        "topic": "Bowel Habits & Vomiting",
+        "question_gu": "ઝાડા (ડાયરીયા), કબજિયાત કે ઉલ્ટી જેવી કોઈ તકલીફ છે?",
+        "question_hi": "दस्त (लूज मोशन), कब्ज या उल्टी जैसी कोई परेशानी है?",
+        "question_en": "Are you experiencing loose motions, constipation, or vomiting?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_HEADACHE",
+    "category": "HEADACHE",
+    "title": "Headache & Neurological (માથાનો દુખાવો / सिरदर्द)",
+    "protocol": "NEURO_OPD",
+    "red_flag_triggers": [
+      "thunderclap headache",
+      "vision loss",
+      "limb weakness",
+      "neck stiffness with fever"
+    ],
+    "questions": [
+      {
+        "step": "nature",
+        "topic": "Location & Character",
+        "question_gu": "માથાનો દુખાવો અડધા માથામાં થાય છે કે આખા માથામાં? નસ ખેંચાતી હોય તેવો ધબકારા વાળો છે?",
+        "question_hi": "सिरदर्द आधे सिर में है या पूरे सिर में? क्या नसों में धड़कन (माइग्रेन) जैसा महसूस होता है?",
+        "question_en": "Is the headache on one side or all over? Is it a throbbing/pulsating pain?"
+      },
+      {
+        "step": "aura",
+        "topic": "Light Sensitivity & Nausea",
+        "question_gu": "શું અજવાળું કે અવાજ અસહ્ય લાગે છે? આંખો સામે ઝબકારા કે ઉલટી જેવું થાય છે?",
+        "question_hi": "क्या रोशनी या तेज आवाज से परेशानी होती है? उल्टी जैसा महसूस होता है?",
+        "question_en": "Do bright lights or loud sounds bother you? Any nausea?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_BODY_JOINT_PAIN",
+    "category": "BODY_JOINT_PAIN",
+    "title": "Joint & Musculoskeletal (સાંધા અને શરીરનો દુખાવો / जोड़ों का दर्द)",
+    "protocol": "AYUSH_RHEUMATOID_OPD",
+    "red_flag_triggers": [
+      "hot red swollen joint with fever",
+      "inability to bear weight"
+    ],
+    "questions": [
+      {
+        "step": "joints",
+        "topic": "Affected Joints",
+        "question_gu": "કયા સાંધામાં દુખાવો થાય છે? ઘૂંટણ, કમર, ખભા કે આંગળીઓમાં?",
+        "question_hi": "किन जोड़ों में दर्द हो रहा है? घुटने, कमर, कंधे या उंगलियों में?",
+        "question_en": "Which joints are affected? Knees, lower back, shoulders, or fingers?"
+      },
+      {
+        "step": "stiffness",
+        "topic": "Morning Stiffness",
+        "question_gu": "શું સવારે ઊઠતી વખતે સાંધા જકડાઈ જાય છે? ચાલ્યા પછી થોડી રાહત થાય છે?",
+        "question_hi": "क्या सुबह उठने पर जोड़ों में जकड़न (Stiffness) रहती है? चलने से आराम मिलता है?",
+        "question_en": "Do you experience joint stiffness in the morning? Does movement ease pain?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_SKIN_PROBLEM",
+    "category": "SKIN_PROBLEM",
+    "title": "Skin & Dermatological (ચામડીના રોગ / त्वचा रोग)",
+    "protocol": "DERMA_OPD",
+    "red_flag_triggers": [
+      "rapidly spreading rash with fever",
+      "blistering on mucous membranes"
+    ],
+    "questions": [
+      {
+        "step": "appearance",
+        "topic": "Itching & Lesions",
+        "question_gu": "ચામડી પર ખંજવાળ વધારે આવે છે? લાલ ચકામા, ફોલ્લીઓ કે સૂકી પોપડી જેવું છે?",
+        "question_hi": "त्वचा पर खुजली ज्यादा है? लाल चकत्ते, दाने या सूखी पपड़ी जैसी दिख रही है?",
+        "question_en": "Is there intense itching? Are there red patches, pimples, or dry scaling?"
+      }
+    ]
+  },
+  {
+    "_id": "FRAMEWORK_OTHER",
+    "category": "OTHER",
+    "title": "General Clinical Intake (સામાન્ય તપાસ / सामान्य तकलीफ)",
+    "protocol": "GENERAL_OPD",
+    "red_flag_triggers": [
+      "syncope or sudden fainting",
+      "rapid unexplained weight loss"
+    ],
+    "questions": [
+      {
+        "step": "onset",
+        "topic": "Onset & Impact",
+        "question_gu": "આ તકલીફ ક્યારથી શરૂ થઈ અને આનાથી તમારા રોજિંદા કામમાં શું મુશ્કેલી પડે છે?",
+        "question_hi": "यह परेशानी कब से शुरू हुई और इससे आपकी दिनचर्या में क्या असर पड़ रहा है?",
+        "question_en": "When did this issue begin, and how is it impacting your daily activities?"
+      }
+    ]
+  }
+]

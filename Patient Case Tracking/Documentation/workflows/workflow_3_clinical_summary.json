@@ -1,208 +1,229 @@
 {
-  "name": "MediKiosk Workflow 3 - AI Clinical Summary Generation (Groq Ready)",
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "medikiosk-clinical-summary",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "w3-node-01",
-      "name": "Receive Case Completion",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [100, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "boolean": [
-            {
-              "value1": "={{ Boolean($json.body && ($json.body.session_id || $json.body.case_completed)) }}",
-              "value2": true
-            }
-          ]
-        }
-      },
-      "id": "w3-node-02",
-      "name": "Validate Completion Request",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [300, 300]
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            {
-              "name": "error_code",
-              "value": "INVALID_COMPLETION_REQUEST"
+    "name": "MediKiosk Workflow 3 - AI Clinical Summary Generation (Groq Ready)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "medikiosk-clinical-summary",
+                "responseMode": "responseNode",
+                "options": {}
             },
-            {
-              "name": "error_message",
-              "value": "Missing session_id or case_completed flag."
-            }
-          ]
-        }
-      },
-      "id": "w3-node-err",
-      "name": "Prepare Summary Error Response",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [300, 500]
-    },
-    {
-      "parameters": {
-        "options": {
-          "responseCode": 400
+            "id": "w3-node-01",
+            "name": "Receive Case Completion",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
         },
-        "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
-      },
-      "id": "w3-node-err-res",
-      "name": "Return Summary Error",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [500, 500]
-    },
-    {
-      "parameters": {
-        "keepOnlySet": false,
-        "values": {
-          "string": [
-            {
-              "name": "session_id",
-              "value": "={{ $json.body.session_id || 'demo-session-001' }}"
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ Boolean($json.body && ($json.body.session_id || $json.body.case_completed)) }}",
+                            "value2": true
+                        }
+                    ]
+                }
             },
-            {
-              "name": "patient_id",
-              "value": "={{ $json.body.patient_id || 'demo-patient-001' }}"
-            },
-            {
-              "name": "case_history",
-              "value": "={{ $json.body.case_history || 'Patient complaints: Fever for 10 days with body ache and cough. Uploaded prescription: Paracetamol 500mg.' }}"
-            }
-          ]
-        }
-      },
-      "id": "w3-node-03",
-      "name": "Load Session Details",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [500, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer gsk....."
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+            "id": "w3-node-02",
+            "name": "Validate Completion Request",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                300,
+                300
+            ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"groq/compound-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are MediKiosk AI Clinical Digest Synthesizer. Synthesize the patient case history into a concise, professional physician draft summary in English. Include Chief Complaints, Duration, and Key Observations. Do NOT prescribe drugs or give medical advice. Keep it strictly factual.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Load Session Details').item.json.case_history }}\"\n    }\n  ],\n  \"max_tokens\": 160\n}",
-        "options": {
-          "timeout": 20000
-        }
-      },
-      "id": "w3-node-06",
-      "name": "Generate Clinical Summary (Groq AI)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 3,
-      "position": [750, 300],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "options": {
-          "responseCode": 200
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "error_code",
+                            "value": "INVALID_COMPLETION_REQUEST"
+                        },
+                        {
+                            "name": "error_message",
+                            "value": "Missing session_id or case_completed flag."
+                        }
+                    ]
+                }
+            },
+            "id": "w3-node-err",
+            "name": "Prepare Summary Error Response",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 1,
+            "position": [
+                300,
+                500
+            ]
         },
-        "responseBody": "={\n  \"success\": true,\n  \"session_id\": \"{{ $('Load Session Details').item.json.session_id }}\",\n  \"patient_id\": \"{{ $('Load Session Details').item.json.patient_id }}\",\n  \"clinical_summary\": {\n    \"physician_draft_summary\": \"{{ ($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content.replace(/\\n/g, ' ').replace(/\"/g, '\\\\\"').trim() : 'Patient presented with prolonged fever and body ache. Advised clinical review.' }}\",\n    \"chief_complaints\": [\"Fever\", \"Body Ache\"],\n    \"symptom_duration\": \"10 days\",\n    \"requires_doctor_review\": true\n  },\n  \"review_status\": \"PENDING_DOCTOR_APPROVAL\"\n}"
-      },
-      "id": "w3-node-08",
-      "name": "Return Clinical Summary",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1050, 300]
+        {
+            "parameters": {
+                "options": {
+                    "responseCode": 400
+                },
+                "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+            },
+            "id": "w3-node-err-res",
+            "name": "Return Summary Error",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                500,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "keepOnlySet": false,
+                "values": {
+                    "string": [
+                        {
+                            "name": "session_id",
+                            "value": "={{ $json.body.session_id || 'demo-session-001' }}"
+                        },
+                        {
+                            "name": "patient_id",
+                            "value": "={{ $json.body.patient_id || 'demo-patient-001' }}"
+                        },
+                        {
+                            "name": "case_history",
+                            "value": "={{ $json.body.case_history || 'Patient complaints: Fever for 10 days with body ache and cough. Uploaded prescription: Paracetamol 500mg.' }}"
+                        }
+                    ]
+                }
+            },
+            "id": "w3-node-03",
+            "name": "Load Session Details",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.groq.com/openai/v1/chat/completions",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.GROQ_API_KEY || '<GROQ_API_KEY>' }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"groq/compound-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are MediKiosk AI Clinical Digest Synthesizer. Synthesize the patient case history into a concise, professional physician draft summary in English. Include Chief Complaints, Duration, and Key Observations. Do NOT prescribe drugs or give medical advice. Keep it strictly factual.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Load Session Details').item.json.case_history }}\"\n    }\n  ],\n  \"max_tokens\": 160\n}",
+                "options": {
+                    "timeout": 20000
+                }
+            },
+            "id": "w3-node-06",
+            "name": "Generate Clinical Summary (Groq AI)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 3,
+            "position": [
+                750,
+                300
+            ],
+            "continueOnFail": true
+        },
+        {
+            "parameters": {
+                "options": {
+                    "responseCode": 200
+                },
+                "responseBody": "={\n  \"success\": true,\n  \"session_id\": \"{{ $('Load Session Details').item.json.session_id }}\",\n  \"patient_id\": \"{{ $('Load Session Details').item.json.patient_id }}\",\n  \"clinical_summary\": {\n    \"physician_draft_summary\": \"{{ ($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content.replace(/\\n/g, ' ').replace(/\"/g, '\\\\\"').trim() : 'Patient presented with prolonged fever and body ache. Advised clinical review.' }}\",\n    \"chief_complaints\": [\"Fever\", \"Body Ache\"],\n    \"symptom_duration\": \"10 days\",\n    \"requires_doctor_review\": true\n  },\n  \"review_status\": \"PENDING_DOCTOR_APPROVAL\"\n}"
+            },
+            "id": "w3-node-08",
+            "name": "Return Clinical Summary",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Receive Case Completion": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Completion Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Completion Request": {
+            "main": [
+                [
+                    {
+                        "node": "Load Session Details",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Prepare Summary Error Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Summary Error Response": {
+            "main": [
+                [
+                    {
+                        "node": "Return Summary Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Load Session Details": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Clinical Summary (Groq AI)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Clinical Summary (Groq AI)": {
+            "main": [
+                [
+                    {
+                        "node": "Return Clinical Summary",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {},
+    "staticData": null,
+    "meta": {
+        "templateId": "medikiosk-w3-groq-compound-mini"
     }
-  ],
-  "connections": {
-    "Receive Case Completion": {
-      "main": [
-        [
-          {
-            "node": "Validate Completion Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validate Completion Request": {
-      "main": [
-        [
-          {
-            "node": "Load Session Details",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Summary Error Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Summary Error Response": {
-      "main": [
-        [
-          {
-            "node": "Return Summary Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Session Details": {
-      "main": [
-        [
-          {
-            "node": "Generate Clinical Summary (Groq AI)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generate Clinical Summary (Groq AI)": {
-      "main": [
-        [
-          {
-            "node": "Return Clinical Summary",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {},
-  "staticData": null,
-  "meta": {
-    "templateId": "medikiosk-w3-groq-compound-mini"
-  }
 }

@@ -100,7 +100,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer gsk....."
+              "value": "Bearer {{ $env.GROQ_API_KEY || '<GROQ_API_KEY>' }}"
             },
             {
               "name": "Content-Type",
