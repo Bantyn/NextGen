@@ -181,7 +181,7 @@
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [
+          "parameters": [ 
             {
               "name": "Authorization",
               "value": "Bearer gsk....."
