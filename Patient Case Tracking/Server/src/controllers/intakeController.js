@@ -289,86 +289,118 @@ export const handleIntakeChat = async (req, res) => {
       });
     }
 
-    // 2. Call Direct Groq Compound LLM for Context-Aware Clinical Reasoning
+    // 2. Check if n8n Intake Webhook is available
+    const n8nWebhook = process.env.N8N_INTAKE_WEBHOOK || process.env.N8N_WORKFLOW_URL;
+    if (n8nWebhook && !n8nWebhook.includes('localhost:5678')) {
+      try {
+        const n8nRes = await fetch(n8nWebhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id,
+            patient_id,
+            language,
+            opd_mode,
+            patient_answer: patientText,
+            current_clinical_state,
+            conversation_history,
+          }),
+        });
+
+        if (n8nRes.ok) {
+          const n8nData = await n8nRes.json();
+          if (n8nData && (n8nData.assistant_message || n8nData.output || n8nData?.choices?.[0]?.message?.content)) {
+            const assistantMsg = n8nData.assistant_message || n8nData.output || n8nData?.choices?.[0]?.message?.content;
+            return res.status(200).json({
+              success: true,
+              assistant_message: assistantMsg,
+              intent: n8nData.intent || 'SYMPTOM_INFORMATION',
+              risk_state: n8nData.risk_state || 'ASSESSING',
+              next_question: n8nData.next_question || assistantMsg,
+              quick_chips: n8nData.quick_chips || [],
+              extracted_entities: n8nData.extracted_entities || {},
+              red_flag: n8nData.red_flag || { detected: false, priority: 'LOW' },
+              history_complete: Boolean(n8nData.history_complete),
+              doctor_review_required: Boolean(n8nData.doctor_review_required),
+              session_status: n8nData.session_status || 'IN_PROGRESS',
+            });
+          }
+        }
+      } catch (n8nErr) {
+        console.warn('[n8n Intake Webhook Call Failed, trying Groq AI]:', n8nErr.message);
+      }
+    }
+
+    // 3. Call Direct Groq Compound / LLM for Context-Aware Clinical Reasoning
     const groqApiKey = process.env.GROQ_API_KEY;
     if (groqApiKey && groqApiKey.startsWith('gsk_')) {
-      try {
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'groq/compound-mini',
-            messages: [
-              {
-                role: 'system',
-                content: INTAKE_SYSTEM_PROMPT,
-              },
-              {
-                role: 'user',
-                content: `Patient Input: "${patientText}"
+      const candidateModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'groq/compound'];
+      
+      for (const model of candidateModels) {
+        try {
+          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${groqApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content: INTAKE_SYSTEM_PROMPT,
+                },
+                {
+                  role: 'user',
+                  content: `Patient Input: "${patientText}"
 Preferred Language: ${language}
 OPD Mode: ${opd_mode}
 Current Known Clinical State: ${JSON.stringify(current_clinical_state)}
 Recent Conversation Turns: ${JSON.stringify(conversation_history.slice(-6))}`,
-              },
-            ],
-            temperature: 0.2,
-            max_tokens: 800,
-          }),
-        });
+                },
+              ],
+              temperature: 0.2,
+              max_tokens: 800,
+            }),
+          });
 
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const rawContent = data?.choices?.[0]?.message?.content;
-          
-          let cleaned = String(rawContent || '').trim();
-          if (cleaned.startsWith('```json')) {
-            cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (cleaned.startsWith('```')) {
-            cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
-          }
+          if (groqRes.ok) {
+            const data = await groqRes.json();
+            const rawContent = data?.choices?.[0]?.message?.content;
+            
+            let cleaned = String(rawContent || '').trim();
+            if (cleaned.startsWith('```json')) {
+              cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (cleaned.startsWith('```')) {
+              cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
 
-          try {
-            const parsed = JSON.parse(cleaned);
-            return res.status(200).json({
-              success: true,
-              ...parsed,
-            });
-          } catch (jsonErr) {
-            console.warn('[Groq JSON Parse Failed, using fallback parser]:', jsonErr.message);
+            try {
+              const parsed = JSON.parse(cleaned);
+              if (parsed && (parsed.assistant_message || parsed.next_question)) {
+                return res.status(200).json({
+                  success: true,
+                  ...parsed,
+                });
+              }
+            } catch (jsonErr) {
+              console.warn(`[Groq JSON Parse Failed for ${model}]:`, jsonErr.message);
+            }
+          } else {
+            const errBody = await groqRes.text().catch(() => '');
+            console.warn(`[Groq API ${model} failed]:`, groqRes.status, errBody);
           }
+        } catch (groqErr) {
+          console.warn(`[Groq Intake API Call Exception for ${model}]:`, groqErr.message);
         }
-      } catch (groqErr) {
-        console.warn('[Groq Intake API Call Exception]:', groqErr.message);
       }
     }
 
-    // 3. Fallback: Intelligent Heuristic Response
-    return res.status(200).json({
-      success: true,
-      assistant_message: `Understood. Could you tell me more about when this started and how severe it feels?`,
-      next_question: `When did this discomfort begin?`,
-      quick_chips: ['Since this morning', 'Yesterday', '2-3 days ago', 'More than a week'],
-      extracted_entities: {
-        chief_complaint: null,
-        symptoms: [],
-        duration: null,
-        severity: null,
-        associated_symptoms: [],
-        past_medical_history: [],
-      },
-      red_flag: {
-        detected: false,
-        priority: 'LOW',
-        category: '',
-        reason: '',
-      },
-      history_complete: false,
-      doctor_review_required: false,
-      session_status: 'IN_PROGRESS',
+    // 4. If remote AI is offline / unreachable, return 503 so client's Local CKB Engine can execute dynamic multilingual reasoning
+    return res.status(503).json({
+      success: false,
+      error: 'AI service temporarily unavailable. Fallback to local clinical engine.',
     });
   } catch (err) {
     console.error('[handleIntakeChat Error]:', err);
