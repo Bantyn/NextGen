@@ -1,0 +1,25 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Vite artifacts
+dist/
+build/
+.vite/
+
+# Uploads & temporary OCR models
+uploads/
+*.traineddata
+
+# Logs & debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

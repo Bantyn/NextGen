@@ -108,9 +108,7 @@
             }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"groq/compound-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are MediKiosk AI Universal Clinical Prescription Engine. Read and analyze the clinical text or prescription from ANY hospital, clinic, or doctor. Extract: clinic_name, doctor_names, date, patient_name, age, gender, vitals, complaints, investigations_recommended, prescribed_medicines (array with name, dosage, frequency, timing, duration), and doctor_advice. Output ONLY a clean valid JSON object without markdown code blocks or backticks.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Format Clinical Input Payload').item.json.input_text }}\"\n    }\n  ],\n  \"max_tokens\": 600\n}",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'llama-3.3-70b-versatile',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are MediKiosk AI Universal Clinical Prescription Engine. Read and analyze the clinical text or prescription from ANY hospital, clinic, or doctor. Extract: clinic_name, doctor_names, date, patient_name, age, gender, vitals, complaints, investigations_recommended, prescribed_medicines (array with name, dosage, frequency, timing, duration), and doctor_advice. Output ONLY a clean valid JSON object without markdown code blocks or backticks.'\n    },\n    {\n      role: 'user',\n      content: $('Format Clinical Input Payload').item.json.input_text\n    }\n  ],\n  max_tokens: 600\n}) }}",
         "options": {
           "timeout": 20000
         }

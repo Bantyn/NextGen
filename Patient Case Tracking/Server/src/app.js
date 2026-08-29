@@ -40,4 +40,13 @@ app.listen(PORT, HOST, () => {
   console.log(`Server listening on network: http://${HOST}:${PORT}`);
 });
 
+// Process crash protection
+process.on('uncaughtException', (err) => {
+  console.error('[Global Uncaught Exception]:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Global Unhandled Rejection]:', reason);
+});
+
 export default app;
