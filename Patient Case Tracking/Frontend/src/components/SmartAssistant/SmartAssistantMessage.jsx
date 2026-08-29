@@ -60,11 +60,6 @@ function renderFormattedContent(text, isTyping = false) {
           </p>
         );
       })}
-
-      {/* ChatGPT-style Pulsing Cursor */}
-      {isTyping && (
-        <span className="inline-block w-1.5 h-3.5 bg-sky-600 ml-0.5 rounded-xs animate-pulse align-middle" />
-      )}
     </>
   );
 }
@@ -85,14 +80,14 @@ function renderInlineFormatting(str) {
 
 /**
  * SmartAssistantMessage Component
- * Enhanced with realistic ChatGPT-style streaming typewriter animation for AI responses.
+ * Enhanced with realistic ChatGPT-style streaming text animation for AI responses.
  */
 export const SmartAssistantMessage = ({ message }) => {
   const isUser = message.role === 'user';
   const isUrgent = message.urgent;
   const data = message.data;
 
-  // ChatGPT-style Streaming Typewriter State
+  // ChatGPT-style Streaming State (Natural human-readable reading pace)
   const shouldAnimate = !isUser && message.animate !== false;
   const [displayedText, setDisplayedText] = useState(shouldAnimate ? '' : message.content || '');
   const [isTyping, setIsTyping] = useState(shouldAnimate);
@@ -110,20 +105,20 @@ export const SmartAssistantMessage = ({ message }) => {
     animIndexRef.current = 0;
 
     const fullText = message.content;
-    const totalLength = fullText.length;
+    const words = fullText.split(' ');
+    const totalWords = words.length;
 
-    // Word/Chunk streaming speed (faster for longer messages)
-    const stepSize = totalLength > 300 ? 3 : totalLength > 150 ? 2 : 1;
-    const intervalTime = 12; // 12ms per tick for smooth natural typewriter feel
+    // Smooth natural token stream: 1 word every 45ms (readable ChatGPT pace)
+    const intervalTime = 45;
 
     const timer = setInterval(() => {
-      animIndexRef.current += stepSize;
-      if (animIndexRef.current >= totalLength) {
+      animIndexRef.current += 1;
+      if (animIndexRef.current >= totalWords) {
         setDisplayedText(fullText);
         setIsTyping(false);
         clearInterval(timer);
       } else {
-        setDisplayedText(fullText.slice(0, animIndexRef.current));
+        setDisplayedText(words.slice(0, animIndexRef.current).join(' '));
       }
     }, intervalTime);
 
