@@ -1,13 +1,14 @@
 import { CLINICAL_DISEASE_FRAMEWORKS } from '../constants/clinicalFrameworks.js';
 
 /**
- * Initial empty clinical state object
+ * Initial empty clinical state object with contextual risk tracking
  */
 export const INITIAL_CLINICAL_STATE = {
   session_id: '',
   language: 'gu-IN',
   mode: 'general',
   session_status: 'IN_PROGRESS', // 'IN_PROGRESS' | 'URGENT_REVIEW_REQUIRED' | 'READY_FOR_SUMMARY'
+  risk_state: 'LOW_RISK_CONTEXT', // 'LOW_RISK_CONTEXT' | 'ASSESSING' | 'POSSIBLE_RED_FLAG' | 'URGENT_REVIEW_REQUIRED'
 
   chief_complaints: [],
   symptoms: [],
@@ -51,110 +52,219 @@ export const INITIAL_CLINICAL_STATE = {
 };
 
 /**
- * Deterministic Red Flag triggers across English, Hindi, Gujarati
+ * Contextual Emergency Red-Flag Evaluator
+ * Distinguishes between:
+ * 1. A symptom that deserves further assessment (e.g. "I have chest pain" -> ASSESSING)
+ * 2. A clearly urgent presentation (e.g. "Severe chest pain + cannot breathe / sweating / faintness" -> URGENT_REVIEW_REQUIRED)
  */
-export const RED_FLAG_TRIGGERS = [
-  {
-    category: 'CARDIOVASCULAR_EMERGENCY',
-    priority: 'HIGH',
-    triggers: [
-      'chest pain and sweating', 'chest pain radiating to arm', 'crushing chest pain',
-      'left arm pain', 'pressure in chest and cannot breathe',
-      'છાતીમાં ભારે દબાણ', 'છાતીનો દુખાવો ડાબા હાથમાં', 'છાતીમાં દુખાવો અને ખૂબ પરસેવો',
-      'સીને મેં ભારે દબાવ', 'સીને કા દર્દ હાથ મેં', 'સીને મેં દર્દ ઔર પસીના',
-      'सीने में भारी दबाव', 'सीने का दर्द बाएं हाथ में', 'सीने में दर्द और पसीना', 'सीने में तेज दर्द'
-    ],
-    reason: 'Possible acute coronary syndrome or myocardial ischemia. Immediate triage ECG and emergency review needed.',
-    patient_instruction: {
-      'en-IN': 'Some of the symptoms you described (chest pain/pressure) may require immediate medical attention. Please speak with a doctor or emergency staff right now.',
-      'hi-IN': 'सीने में तेज दर्द और भारीपन के लक्षण तुरंत डॉक्टरी जांच की मांग करते हैं। कृपया तुरंत इमरजेंसी डॉक्टर या मेडिकल स्टाफ से संपर्क करें।',
-      'gu-IN': 'તમારા જણાવેલા લક્ષણો (છાતીમાં દુખાવો/દબાણ) તાત્કાલિક તબીબી તપાસ માંગી લે છે. કૃપા કરીને અત્યારે જ ડૉક્ટર અથવા તબીબી સ્ટાફનો સંપર્ક કરો.'
-    }
-  },
-  {
-    category: 'RESPIRATORY_DISTRESS',
-    priority: 'HIGH',
-    triggers: [
-      'severe breathing difficulty', 'cannot breathe', 'gasping for air', 'stridor', 'severe breathlessness',
-      'શ્વાસ લેવામાં ખૂબ તકલીફ', 'શ્વાસ નથી લઈ શકાતો', 'દમ ઘૂંટાવો',
-      'સાંસ લેને મેં બહુત તકલીફ', 'સાંસ નહીં આ રહી',
-      'सांस लेने में बहुत तकलीफ', 'सांस नहीं आ रही', 'दम घुट रहा है'
-    ],
-    reason: 'Acute severe respiratory distress or airway compromise.',
-    patient_instruction: {
-      'en-IN': 'Severe difficulty in breathing requires immediate medical care. Please inform our clinical staff or emergency physician now.',
-      'hi-IN': 'सांस लेने में गंभीर कठिनाई के लिए तुरंत डॉक्टरी मदद चाहिए। कृपया तुरंत मेडिकल स्टाफ से संपर्क करें।',
-      'gu-IN': 'શ્વાસ લેવામાં ગંભીર તકલીફ માટે તાત્કાલિક તબીબી સહાય જરૂરી છે. કૃપા કરીને તરત જ મેડિકલ સ્ટાફને જણાવો.'
-    }
-  },
-  {
-    category: 'NEUROLOGICAL_EMERGENCY',
-    priority: 'HIGH',
-    triggers: [
-      'sudden weakness', 'facial droop', 'slurred speech', 'cannot speak', 'one side paralyzed', 'sudden numbness',
-      'અચાનક એક બાજુ નબળાઈ', 'મોઢું વાંકું થવું', 'બોલવામાં તકલીફ', 'અચાનક લકવો',
-      'अचानक एक तरफ कमजोरी', 'मुंह टेढ़ा होना', 'बोलने में लड़खड़ाहट', 'अचानक लकवा'
-    ],
-    reason: 'Potential acute stroke or focal neurological deficit.',
-    patient_instruction: {
-      'en-IN': 'Sudden weakness or speech difficulty requires immediate medical evaluation for stroke. Please notify medical staff immediately.',
-      'hi-IN': 'अचानक कमजोरी या बोलने में कठिनाई स्ट्रोक का संकेत हो सकती है। कृपया तुरंत डॉक्टर या स्टाफ से संपर्क करें।',
-      'gu-IN': 'અચાનક નબળાઈ અથવા બોલવામાં તકલીફ લકવાનો સંકેત હોઈ શકે છે. કૃપા કરીને તાત્કાલિક સ્ટાફને સંપર્ક કરો.'
-    }
-  },
-  {
-    category: 'SEVERE_BLEEDING',
-    priority: 'HIGH',
-    triggers: [
-      'vomiting blood', 'coughing blood', 'large blood', 'black stool', 'uncontrolled bleeding',
-      'ઉલ્ટીમાં લોહી', 'ખાંસીમાં લોહી', 'કાળા ઝાડા', 'લોહી બંધ ન થવું',
-      'उल्टी में खून', 'खांसी में खून', 'काला मल', 'खून बहना बंद न होना'
-    ],
-    reason: 'Active severe gastrointestinal or respiratory hemorrhage.',
-    patient_instruction: {
-      'en-IN': 'Active bleeding or coughing/vomiting blood requires immediate medical review. Please consult medical staff now.',
-      'hi-IN': 'उल्टी या खांसी में खून आना गंभीर हो सकता है। कृपया तुरंत डॉक्टर या मेडिकल स्टाफ को दिखाएं।',
-      'gu-IN': 'ઉલ્ટી કે ખાંસીમાં લોહી આવવું ગંભીર સ્થિતિ હોઈ શકે છે. કૃપા કરીને તરત જ ડૉક્ટરનો સંપર્ક કરો.'
-    }
-  },
-  {
-    category: 'LOSS_OF_CONSCIOUSNESS',
-    priority: 'HIGH',
-    triggers: [
-      'passed out', 'fainted', 'loss of consciousness', 'blackout', 'seizure', 'fits',
-      'બેહોશ થઈ જવું', 'ચક્કર આવીને પડી જવું', 'ખેંચ આવવી',
-      'बेहोश हो जाना', 'चक्कर खाकर गिरना', 'दौरा पड़ना'
-    ],
-    reason: 'Syncope, seizure, or altered level of consciousness.',
-    patient_instruction: {
-      'en-IN': 'Loss of consciousness or seizures require urgent medical assessment. Please alert the attending doctor immediately.',
-      'hi-IN': 'बेहोशी या दौरा पड़ने के लक्षण तुरंत डॉक्टरी जांच की मांग करते हैं। कृपया तुरंत डॉक्टर को सूचित करें।',
-      'gu-IN': 'બેહોશી અથવા ખેંચ આવવાના લક્ષણો માટે તાત્કાલિક ડૉક્ટરની તપાસ જરૂરી છે. કૃપા કરીને તરત જ સ્ટાફને જણાવો.'
-    }
-  }
-];
-
-/**
- * Check if patient statement contains any deterministic red flags
- */
-export function detectRedFlags(patientText) {
+export function evaluateContextualRedFlags(patientText, clinicalState = {}) {
   if (!patientText) return null;
-  const lower = patientText.toLowerCase();
+  const textLower = patientText.toLowerCase().trim();
 
-  for (const item of RED_FLAG_TRIGGERS) {
-    for (const trigger of item.triggers) {
-      if (lower.includes(trigger.toLowerCase()) || patientText.includes(trigger)) {
-        return {
-          detected: true,
-          priority: item.priority,
-          category: item.category,
-          reason: item.reason,
-          patient_instruction: item.patient_instruction,
-        };
+  const allText = `${clinicalState.symptoms?.join(' ') || ''} ${clinicalState.chief_complaints?.join(' ') || ''} ${clinicalState.associated_symptoms?.join(' ') || ''} ${textLower}`.toLowerCase();
+
+  // Helper checks
+  const hasChestPain =
+    textLower.includes('chest') ||
+    textLower.includes('heart attack') ||
+    patientText.includes('છાતી') ||
+    patientText.includes('सीना') ||
+    patientText.includes('સીના') ||
+    clinicalState.chief_complaints?.some((c) => c.toLowerCase().includes('chest') || c.includes('છાતી'));
+
+  const hasSevereBreathingDifficulty =
+    textLower.includes('cannot breathe') ||
+    textLower.includes("can't breathe") ||
+    textLower.includes('gasping') ||
+    textLower.includes('choking') ||
+    textLower.includes('stridor') ||
+    textLower.includes('severe difficulty breathing') ||
+    textLower.includes('severe breathlessness') ||
+    patientText.includes('શ્વાસ નથી લઈ શકાતો') ||
+    patientText.includes('શ્વાસ લેવામાં ખૂબ તકલીફ') ||
+    patientText.includes('દમ ઘૂંટાવો') ||
+    patientText.includes('સાંસ નહીં આ રહી') ||
+    patientText.includes('सांस नहीं आ रही') ||
+    patientText.includes('दम घुट रहा है');
+
+  const hasSweatingOrRadiationOrFaint =
+    textLower.includes('sweat') ||
+    textLower.includes('radiat') ||
+    textLower.includes('left arm') ||
+    textLower.includes('faint') ||
+    textLower.includes('dizzy') ||
+    textLower.includes('crushing') ||
+    patientText.includes('પરસેવો') ||
+    patientText.includes('ડાબા હાથ') ||
+    patientText.includes('ચક્કર') ||
+    patientText.includes('પસીના') ||
+    patientText.includes('बाएं हाथ') ||
+    patientText.includes('चक्कर');
+
+  const hasHighSeverity =
+    textLower.includes('9/10') ||
+    textLower.includes('10/10') ||
+    textLower.includes('unbearable') ||
+    textLower.includes('severe chest pain') ||
+    patientText.includes('અસહ્ય') ||
+    patientText.includes('ખૂબ તીવ્ર છાતી');
+
+  // =========================================================================
+  // 1. EXPLICIT IMMEDIATE EMERGENCY COMBINATIONS (URGENT_REVIEW_REQUIRED)
+  // =========================================================================
+
+  // A. Cardiovascular Emergency: Chest Pain + (Breathing Difficulty OR Sweating/Arm radiation OR High Severity 9-10/10 OR Faintness)
+  if (hasChestPain && (hasSevereBreathingDifficulty || hasSweatingOrRadiationOrFaint || hasHighSeverity || textLower.includes('heart attack'))) {
+    return {
+      detected: true,
+      priority: 'HIGH',
+      risk_state: 'URGENT_REVIEW_REQUIRED',
+      category: 'CARDIOVASCULAR_EMERGENCY',
+      reason: 'Patient reported chest pain combined with acute breathlessness, diaphoresis, radiation, or severe distress.',
+      patient_instruction: {
+        'en-IN': 'Some of the symptoms you described (chest discomfort with breathing difficulty/sweating) may require immediate medical attention. Please speak with a doctor or emergency staff right now.',
+        'hi-IN': 'सीने में दर्द के साथ सांस लेने में कठिनाई या पसीना आना तुरंत डॉक्टरी जांच की मांग करता है। कृपया तुरंत डॉक्टर या मेडिकल स्टाफ से संपर्क करें।',
+        'gu-IN': 'છાતીમાં દુખાવા સાથે શ્વાસ લેવામાં તકલીફ અથવા પરસેવો થવાના લક્ષણો તાત્કાલિક તબીબી તપાસ માંગી લે છે. કૃપા કરીને અત્યારે જ ડૉક્ટર અથવા તબીબી સ્ટાફનો સંપર્ક કરો.'
       }
-    }
+    };
   }
-  return null;
+
+  // B. Acute Respiratory Emergency (Airway compromise / Severe hypoxia)
+  if (hasSevereBreathingDifficulty) {
+    return {
+      detected: true,
+      priority: 'HIGH',
+      risk_state: 'URGENT_REVIEW_REQUIRED',
+      category: 'RESPIRATORY_DISTRESS',
+      reason: 'Acute severe respiratory distress or inability to breathe.',
+      patient_instruction: {
+        'en-IN': 'Severe difficulty in breathing requires immediate medical care. Please inform our clinical staff or emergency physician now.',
+        'hi-IN': 'सांस लेने में गंभीर कठिनाई के लिए तुरंत डॉक्टरी मदद चाहिए। कृपया तुरंत मेडिकल स्टाफ से संपर्क करें।',
+        'gu-IN': 'શ્વાસ લેવામાં ગંભીર તકલીફ માટે તાત્કાલિક તબીબી સહાય જરૂરી છે. કૃપા કરીને તરત જ મેડિકલ સ્ટાફને જણાવો.'
+      }
+    };
+  }
+
+  // C. Acute Neurological Deficit (Stroke / FAST criteria)
+  if (
+    textLower.includes('sudden weakness') ||
+    textLower.includes('facial droop') ||
+    textLower.includes('slurred speech') ||
+    textLower.includes('cannot speak') ||
+    textLower.includes('one side paralyzed') ||
+    patientText.includes('અચાનક એક બાજુ નબળાઈ') ||
+    patientText.includes('મોઢું વાંકું') ||
+    patientText.includes('બોલવામાં તકલીફ') ||
+    patientText.includes('અચાનક લકવો') ||
+    patientText.includes('अचानक लकवा') ||
+    patientText.includes('मुंह टेढ़ा')
+  ) {
+    return {
+      detected: true,
+      priority: 'HIGH',
+      risk_state: 'URGENT_REVIEW_REQUIRED',
+      category: 'NEUROLOGICAL_EMERGENCY',
+      reason: 'Potential acute stroke or focal neurological deficit.',
+      patient_instruction: {
+        'en-IN': 'Sudden weakness or speech difficulty requires immediate medical evaluation for stroke. Please notify medical staff immediately.',
+        'hi-IN': 'अचानक कमजोरी या बोलने में कठिनाई स्ट्रोक का संकेत हो सकती है। कृपया तुरंत डॉक्टर या स्टाफ से संपर्क करें।',
+        'gu-IN': 'અચાનક નબળાઈ અથવા બોલવામાં તકલીફ લકવાનો સંકેત હોઈ શકે છે. કૃપા કરીને તાત્કાલિક સ્ટાફને સંપર્ક કરો.'
+      }
+    };
+  }
+
+  // D. Acute Severe Hemorrhage
+  if (
+    textLower.includes('vomiting blood') ||
+    textLower.includes('coughing blood') ||
+    textLower.includes('large blood') ||
+    textLower.includes('black stool') ||
+    textLower.includes('uncontrolled bleeding') ||
+    patientText.includes('ઉલ્ટીમાં લોહી') ||
+    patientText.includes('ખાંસીમાં લોહી') ||
+    patientText.includes('કાળા ઝાડા') ||
+    patientText.includes('ઉલ્ટી મેં ખૂન') ||
+    patientText.includes('उल्टी में खून') ||
+    patientText.includes('खांसी में खून')
+  ) {
+    return {
+      detected: true,
+      priority: 'HIGH',
+      risk_state: 'URGENT_REVIEW_REQUIRED',
+      category: 'SEVERE_BLEEDING',
+      reason: 'Active severe gastrointestinal or respiratory hemorrhage.',
+      patient_instruction: {
+        'en-IN': 'Active bleeding or coughing/vomiting blood requires immediate medical review. Please consult medical staff now.',
+        'hi-IN': 'उल्टी या खांसी में खून आना गंभीर हो सकता है। कृपया तुरंत डॉक्टर या मेडिकल स्टाफ को दिखाएं।',
+        'gu-IN': 'ઉલ્ટી કે ખાંસીમાં લોહી આવવું ગંભીર સ્થિતિ હોઈ શકે છે. કૃપા કરીને તરત જ ડૉક્ટરનો સંપર્ક કરો.'
+      }
+    };
+  }
+
+  // E. Syncope / Loss of Consciousness / Seizure
+  if (
+    textLower.includes('passed out') ||
+    textLower.includes('loss of consciousness') ||
+    textLower.includes('blackout') ||
+    textLower.includes('seizure') ||
+    textLower.includes('fits') ||
+    patientText.includes('બેહોશ થઈ જવું') ||
+    patientText.includes('ખેંચ આવવી') ||
+    patientText.includes('बेहोश हो जाना') ||
+    patientText.includes('दौरा पड़ना')
+  ) {
+    return {
+      detected: true,
+      priority: 'HIGH',
+      risk_state: 'URGENT_REVIEW_REQUIRED',
+      category: 'LOSS_OF_CONSCIOUSNESS',
+      reason: 'Syncope, seizure, or altered level of consciousness.',
+      patient_instruction: {
+        'en-IN': 'Loss of consciousness or seizures require urgent medical assessment. Please alert the attending doctor immediately.',
+        'hi-IN': 'बेहोशी या दौरा पड़ने के लक्षण तुरंत डॉक्टरी जांच की मांग करते हैं। कृपया तुरंत डॉक्टर को सूचित करें।',
+        'gu-IN': 'બેહોશી અથવા ખેંચ આવવાના લક્ષણો માટે તાત્કાલિક ડૉક્ટરની તપાસ જરૂરી છે. કૃપા કરીને તરત જ સ્ટાફને જણાવો.'
+      }
+    };
+  }
+
+  // =========================================================================
+  // 2. CONCERNING SYMPTOMS NEEDING CONTEXT (risk_state: 'ASSESSING')
+  // =========================================================================
+  if (hasChestPain) {
+    return {
+      detected: false,
+      priority: 'MEDIUM',
+      risk_state: 'ASSESSING',
+      category: 'CHEST_PAIN_ASSESSMENT',
+      reason: 'Chest discomfort reported without explicit emergency criteria. Gathering onset, duration, severity, and associated symptoms.',
+    };
+  }
+
+  if (
+    textLower.includes('severe headache') ||
+    textLower.includes('worst headache') ||
+    patientText.includes('ખૂબ માથું દુખે') ||
+    patientText.includes('બહુ જ માથું દુખે')
+  ) {
+    return {
+      detected: false,
+      priority: 'MEDIUM',
+      risk_state: 'ASSESSING',
+      category: 'HEADACHE_ASSESSMENT',
+      reason: 'Severe headache reported. Gathering onset suddenness and neurological context.',
+    };
+  }
+
+  // =========================================================================
+  // 3. LOW RISK CONTEXT (Routine symptoms)
+  // =========================================================================
+  return {
+    detected: false,
+    priority: 'LOW',
+    risk_state: 'LOW_RISK_CONTEXT',
+    category: 'GENERAL',
+    reason: 'Standard non-urgent clinical presentation.',
+  };
 }
 
 /**
@@ -277,6 +387,15 @@ export function extractClinicalInformation(patientText, currentClinicalState = {
 
   // 2. Chief Complaints & Location
   if (
+    textLower.includes("chest") ||
+    patientText.includes("છાતી") ||
+    patientText.includes("સીને") ||
+    patientText.includes("सीने")
+  ) {
+    extracted.chief_complaint = "Chest Pain (છાતીમાં દુખાવો)";
+    extracted.symptoms.push("Chest Pain");
+    extracted.location = "Chest (છાતી)";
+  } else if (
     textLower.includes("knee") ||
     textLower.includes("joint") ||
     patientText.includes("સાંધા") ||
@@ -289,16 +408,6 @@ export function extractClinicalInformation(patientText, currentClinicalState = {
     extracted.chief_complaint = "Joint and Knee Pain (સાંધા અને ઘૂંટણમાં દુખાવો)";
     extracted.symptoms.push("Joint / Knee Pain");
     extracted.location = "Knee and Joints (સાંધા અને ઘૂંટણ)";
-  } else if (
-    textLower.includes("chest pain") ||
-    textLower.includes("chest pressure") ||
-    patientText.includes("છાતીમાં દુખાવો") ||
-    patientText.includes("સીને મેં દર્દ") ||
-    patientText.includes("सीने में दर्द")
-  ) {
-    extracted.chief_complaint = "Chest Pain (છાતીમાં દુખાવો)";
-    extracted.symptoms.push("Chest Pain");
-    extracted.location = "Chest (છાતી)";
   } else if (
     textLower.includes("fever") ||
     textLower.includes("temperature") ||
@@ -427,7 +536,7 @@ export function extractClinicalInformation(patientText, currentClinicalState = {
     extracted.severity = "Mild (હળવો)";
   }
 
-  // 6. Associated Symptoms (Stiffness, Swelling, Vomiting, Chills, Sweating)
+  // 6. Associated Symptoms
   if (
     textLower.includes("stiff") ||
     patientText.includes("કઠિનતા") ||
@@ -438,80 +547,33 @@ export function extractClinicalInformation(patientText, currentClinicalState = {
     patientText.includes("अकड़न")
   ) {
     if (!extracted.negated_symptoms.includes("Stiffness")) {
-      extracted.associated_symptoms.push("Stiffness / Rigidity (કઠિનતા / અકડાઈ જવું)");
+      extracted.associated_symptoms.push("Stiffness (કઠિનતા)");
     }
   }
   if (
-    textLower.includes("swell") ||
-    patientText.includes("સોજો") ||
-    patientText.includes("સુજન") ||
-    patientText.includes("सूजन")
+    textLower.includes("breathless") ||
+    textLower.includes("difficulty breathing") ||
+    textLower.includes("shortness of breath") ||
+    patientText.includes("શ્વાસ ચડે") ||
+    patientText.includes("સાંસ ફૂલના")
   ) {
-    extracted.associated_symptoms.push("Swelling / Edema (સોજો)");
-  }
-  if (
-    textLower.includes("vomit") ||
-    textLower.includes("nausea") ||
-    patientText.includes("ઉલ્ટી") ||
-    patientText.includes("ઉબકા") ||
-    patientText.includes("उल्टी") ||
-    patientText.includes("जी मिचलाना")
-  ) {
-    extracted.associated_symptoms.push("Nausea / Vomiting");
-  }
-  if (
-    textLower.includes("chills") ||
-    textLower.includes("shivering") ||
-    patientText.includes("ધ્રુજારી") ||
-    patientText.includes("કાંપવું") ||
-    patientText.includes("कम्पकंपी") ||
-    patientText.includes("ठंड लगना")
-  ) {
-    extracted.associated_symptoms.push("Chills (ધ્રુજારી)");
+    extracted.associated_symptoms.push("Shortness of breath (શ્વાસ ચડવો)");
   }
   if (
     textLower.includes("sweat") ||
     patientText.includes("પરસેવો") ||
+    patientText.includes("પસીના") ||
     patientText.includes("पसीना")
   ) {
-    extracted.associated_symptoms.push("Diaphoresis (પરસેવો)");
-  }
-
-  // 7. Past Medical History & Chronic conditions
-  if (
-    textLower.includes("diabetes") ||
-    textLower.includes("sugar") ||
-    patientText.includes("ડાયાબિટીસ") ||
-    patientText.includes("સુગર") ||
-    patientText.includes("डायबिटीज")
-  ) {
-    extracted.past_medical_history.push("Diabetes Mellitus");
+    extracted.associated_symptoms.push("Sweating (પરસેવો)");
   }
   if (
-    textLower.includes("hypertension") ||
-    textLower.includes("high bp") ||
-    textLower.includes("blood pressure") ||
-    patientText.includes("બીપી") ||
-    patientText.includes("બ્લડ પ્રેશર") ||
-    patientText.includes("बीपी")
+    textLower.includes("dizzy") ||
+    textLower.includes("faint") ||
+    patientText.includes("ચક્કર") ||
+    patientText.includes("ચક્કર આવવા")
   ) {
-    extracted.past_medical_history.push("Hypertension");
-  }
-  if (
-    textLower.includes("arthritis") ||
-    patientText.includes("સંધિવા") ||
-    patientText.includes("વા") ||
-    patientText.includes("गठिया")
-  ) {
-    extracted.past_medical_history.push("Arthritis / Joint Disease (સંધિવા)");
-  }
-
-  // 8. Medications
-  const medMatches = patientText.match(
-    /\b(metformin|paracetamol|crocin|aspirin|amlodipine|telmisartan|pantoprazole|thyronorm|inhaler)\b/gi
-  );
-  if (medMatches) {
-    extracted.medications = Array.from(new Set(medMatches.map((m) => m.trim())));
+    extracted.associated_symptoms.push("Dizziness / Faintness (ચક્કર)");
   }
 
   return extracted;
@@ -581,28 +643,12 @@ export function updateClinicalState(currentState, extracted) {
     updated.associated_symptoms = Array.from(existing);
   }
 
-  // 9. Update Past Medical History
-  if (extracted.past_medical_history && extracted.past_medical_history.length > 0) {
-    const existing = new Set(updated.past_medical_history || []);
-    extracted.past_medical_history.forEach((pmh) => existing.add(pmh));
-    updated.past_medical_history = Array.from(existing);
-  }
-
-  // 10. Update Medications
-  if (extracted.medications && extracted.medications.length > 0) {
-    const existing = new Set(updated.medications || []);
-    extracted.medications.forEach((med) => existing.add(med));
-    updated.medications = Array.from(existing);
-  }
-
   // Re-calculate Missing Information
   const missing = [];
   if (!updated.chief_complaints || updated.chief_complaints.length === 0) missing.push('chief_complaint');
   if (!updated.duration || updated.duration.length === 0) missing.push('onset_duration');
   if (!updated.severity || updated.severity.length === 0) missing.push('severity');
-  if (!updated.onset || updated.onset.length === 0) missing.push('onset');
   if (!updated.associated_symptoms || updated.associated_symptoms.length === 0) missing.push('associated_symptoms');
-  if (!updated.past_medical_history || updated.past_medical_history.length === 0) missing.push('past_medical_history');
 
   updated.missing_information = missing;
 
@@ -616,11 +662,10 @@ export function isHistoryComplete(clinicalState, turnCount = 0) {
   const hasChief = clinicalState.chief_complaints && clinicalState.chief_complaints.length > 0;
   const hasDuration = clinicalState.duration && clinicalState.duration.length > 0;
   const hasSeverity = clinicalState.severity && clinicalState.severity.length > 0;
-  const hasOnsetOrAssoc = (clinicalState.onset && clinicalState.onset.length > 0) ||
-                          (clinicalState.associated_symptoms && clinicalState.associated_symptoms.length > 0);
+  const hasAssoc = clinicalState.associated_symptoms && clinicalState.associated_symptoms.length > 0;
 
   // If 4 core domains are answered OR patient has completed 4-5 focused turns
-  if ((hasChief && hasDuration && hasSeverity && hasOnsetOrAssoc) || turnCount >= 5) {
+  if ((hasChief && hasDuration && hasSeverity && hasAssoc) || turnCount >= 5) {
     return true;
   }
   return false;
@@ -632,18 +677,19 @@ export function isHistoryComplete(clinicalState, turnCount = 0) {
 export function selectNextAdaptiveQuestion(clinicalState, language = 'gu-IN', opdMode = 'GENERAL') {
   const langKey = language.toLowerCase().startsWith('gu') ? 'gu-IN' : language.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
   const chief = (clinicalState.chief_complaints?.[0] || clinicalState.symptoms?.[0] || '').toLowerCase();
+  const isChest = chief.includes('chest') || chief.includes('છાતી') || chief.includes('सीने');
 
   // 1. Missing Chief Complaint
   if (!clinicalState.chief_complaints || clinicalState.chief_complaints.length === 0) {
     const questions = {
       'gu-IN': 'નમસ્તે, તમને હાલમાં કઈ મુખ્ય તકલીફ થઈ રહી છે?',
-      'hi-IN': 'नमस्ते, आपको इस समय मुख्य रूप से क्या परेशानी या तकलीफ हो रही है?',
-      'en-IN': 'Hello, what is the main health complaint or symptom you are experiencing today?'
+      'hi-IN': 'नमस्ते, आपको इस समय मुख्य रूप से क्या परेशानी हो रही है?',
+      'en-IN': 'Hello, what main symptom or health concern are you experiencing today?'
     };
     const chips = {
-      'gu-IN': ['સાંધા અને ઘૂંટણમાં દુખાવો', 'તાવ અને શરદી', 'પેટમાં દુખાવો', 'માથું દુખે છે', 'છાતીમાં દુખાવો'],
-      'hi-IN': ['जोड़ों और घुटनों में दर्द', 'बुखार और सर्दी', 'पेट में दर्द', 'सिर दर्द', 'सीने में दर्द'],
-      'en-IN': ['Joint & Knee Pain', 'Fever & Cold', 'Stomach Pain', 'Headache', 'Chest Discomfort']
+      'gu-IN': ['છાતીમાં દુખાવો થાય છે', 'સાંધા અને ઘૂંટણમાં દુખાવો', 'તાવ અને શરદી', 'પેટમાં દુખાવો', 'માથું દુખે છે'],
+      'hi-IN': ['सीने में दर्द हो रहा है', 'जोड़ों और घुटनों में दर्द', 'बुखार और सर्दी', 'पेट में दर्द', 'सिर दर्द'],
+      'en-IN': ['I have chest pain', 'Joint & Knee Pain', 'Fever & Cold', 'Stomach Pain', 'Headache']
     };
     return {
       topic: 'chief_complaint',
@@ -652,17 +698,17 @@ export function selectNextAdaptiveQuestion(clinicalState, language = 'gu-IN', op
     };
   }
 
-  // 2. Missing Duration
+  // 2. Missing Duration / Onset
   if (!clinicalState.duration || clinicalState.duration.length === 0) {
     const questions = {
-      'gu-IN': 'આ દુખાવો કે તકલીફ તમને કેટલા સમયથી છે?',
-      'hi-IN': 'यह दर्द या परेशानी आपको कितने समय से है?',
-      'en-IN': 'How long have you been having this pain or discomfort?'
+      'gu-IN': isChest ? 'છાતીમાં દુખાવો ક્યારે શરૂ થયો? કેટલી મિનિટ કે કલાકથી થાય છે?' : 'આ તકલીફ તમને ક્યારથી શરૂ થઈ છે? કેટલા દિવસ કે કલાક થયા?',
+      'hi-IN': isChest ? 'सीने में दर्द कब शुरू हुआ? कितने समय से हो रहा है?' : 'यह परेशानी आपको कब से शुरू हुई है?',
+      'en-IN': isChest ? 'When did the chest pain start? How long has it been present?' : 'When did this symptom start? How long has it been?'
     };
     const chips = {
-      'gu-IN': ['છેલ્લા ૨ વર્ષથી', '૨-૩ મહિનાથી', '૨-૩ દિવસથી', 'આજ સવારથી'],
-      'hi-IN': ['पिछले 2 साल से', '2-3 महीने से', '2-3 दिन से', 'आज सुबह से'],
-      'en-IN': ['Since 2 years', 'For 2-3 months', 'Since 2-3 days', 'Since this morning']
+      'gu-IN': isChest ? ['અડધા કલાક પહેલા', 'આજ સવારથી', 'ગઈકાલથી', 'ચાલતી વખતે શરૂ થયો'] : ['આજ સવારથી', 'ગઈકાલથી (૧ દિવસ)', '૨-૩ દિવસથી', 'છેલ્લા ૨ વર્ષથી'],
+      'hi-IN': isChest ? ['आधे घंटे पहले', 'आज सुबह से', 'कल से', 'चलते समय शुरू हुआ'] : ['आज सुबह से', 'कल से (1 दिन)', '2-3 दिन से', 'पिछले 2 साल से'],
+      'en-IN': isChest ? ['30 minutes ago', 'Since this morning', 'Since yesterday', 'Started while walking'] : ['Since this morning', 'Yesterday (1 day)', '2-3 days ago', 'Since 2 years']
     };
     return {
       topic: 'onset_duration',
@@ -675,13 +721,13 @@ export function selectNextAdaptiveQuestion(clinicalState, language = 'gu-IN', op
   if (!clinicalState.severity || clinicalState.severity.length === 0) {
     const questions = {
       'gu-IN': '૧ થી ૧૦ ના સ્કેલ પર આ દુખાવો કેટલો તીવ્ર છે?',
-      'hi-IN': '1 से 10 के पैमाने पर यह दर्द कितना तेज या गंभीर है?',
-      'en-IN': 'On a scale of 1 to 10, how severe is the pain?'
+      'hi-IN': '1 से 10 के पैमाने पर यह दर्द कितना तेज महसूस हो रहा है?',
+      'en-IN': 'On a scale of 1 to 10, how severe is the discomfort?'
     };
     const chips = {
-      'gu-IN': ['૫ (મધ્યમ)', '૩ (હળવો)', '૮ (ખૂબ વધારે)', '૧૦ (અસહ્ય)'],
-      'hi-IN': ['5 (मध्यम)', '3 (हल्का)', '8 (काफी तेज)', '10 (असहनीय)'],
-      'en-IN': ['5 (Moderate)', '3 (Mild)', '8 (Severe)', '10 (Unbearable)']
+      'gu-IN': ['૩ (હળવો)', '૫ (મધ્યમ)', '૮ (ખૂબ વધારે)', '૧૦ (અસહ્ય)'],
+      'hi-IN': ['3 (हल्का)', '5 (मध्यम)', '8 (काफी तेज)', '10 (असहनीय)'],
+      'en-IN': ['3 (Mild)', '5 (Moderate)', '8 (Severe)', '10 (Unbearable)']
     };
     return {
       topic: 'severity',
@@ -690,81 +736,51 @@ export function selectNextAdaptiveQuestion(clinicalState, language = 'gu-IN', op
     };
   }
 
-  // 4. Missing Onset (Sudden vs Gradual)
-  if (!clinicalState.onset || clinicalState.onset.length === 0) {
+  // 4. Missing Risk Context / Radiation & Breathlessness for Chest Pain
+  if (isChest && (!clinicalState.associated_symptoms || clinicalState.associated_symptoms.length === 0)) {
     const questions = {
-      'gu-IN': 'દુખાવો અચાનક શરૂ થયો હતો કે ધીમે-ધીમે વધ્યો છે?',
-      'hi-IN': 'दर्द अचानक शुरू हुआ था या धीरे-धीरे बढ़ा है?',
-      'en-IN': 'Did the pain start suddenly, or did it develop gradually?'
+      'gu-IN': 'શું દુખાવો ડાબા હાથ કે જડબા તરફ ફેલાય છે? શ્વાસ ચડવો કે પરસેવો થાય છે?',
+      'hi-IN': 'क्या दर्द बाएं हाथ या जबड़े की तरफ फैल रहा है? क्या सांस फूल रही है या पसीना आ रहा है?',
+      'en-IN': 'Does the pain spread to your left arm or jaw? Are you having difficulty breathing or sweating?'
     };
     const chips = {
-      'gu-IN': ['ધીમે ધીમે', 'અચાનક શરૂ થયો', 'વધતો-ઓછો થાય છે'],
-      'hi-IN': ['धीरे-धीरे', 'अचानक शुरू हुआ', 'कम-ज्यादा होता रहता है'],
-      'en-IN': ['Gradually', 'Suddenly started', 'Comes and goes']
+      'gu-IN': ['ડાબા હાથમાં ફેલાય છે', 'શ્વાસ લેવામાં તકલીફ થાય છે', 'ખૂબ પરસેવો વળે છે', 'ના, સામાન્ય બળતરા છે'],
+      'hi-IN': ['बाएं हाथ में फैल रहा है', 'सांस फूल रही है', 'पसीना आ रहा है', 'नहीं, सिर्फ हल्की जलन है'],
+      'en-IN': ['Spreading to left arm', 'Shortness of breath', 'Sweating present', 'No other symptoms']
     };
     return {
-      topic: 'onset',
+      topic: 'associated_symptoms',
       question: questions[langKey] || questions['en-IN'],
       chips: chips[langKey] || chips['en-IN'],
     };
   }
 
-  // 5. Missing Associated Symptoms
-  if (!clinicalState.associated_symptoms || clinicalState.associated_symptoms.length === 0) {
-    if (chief.includes('joint') || chief.includes('knee') || chief.includes('સાંધા') || chief.includes('ઘૂંટણ')) {
-      const questions = {
-        'gu-IN': 'શું તમને સાંધામાં કઠિનતા (અકડાઈ જવું), સોજો કે ચાલવામાં મુશ્કેલી અનુભવાય છે?',
-        'hi-IN': 'क्या आपको जोड़ों में अकड़न (जकड़न), सूजन या चलने में कठिनाई महसूस होती है?',
-        'en-IN': 'Do you experience joint stiffness, swelling, or difficulty while walking?'
-      };
-      const chips = {
-        'gu-IN': ['કઠિનતા (અકડાઈ જવું)', 'ઘૂંટણમાં સોજો છે', 'ચાલતી વખતે અવાજ આવે છે', 'ના, અન્ય કોઈ તકલીફ નથી'],
-        'hi-IN': ['अकड़न / जकड़न', 'घुटनों में सूजन है', 'चलने में तकलीफ', 'नहीं, कोई अन्य लक्षण नहीं'],
-        'en-IN': ['Stiffness in joints', 'Swelling present', 'Difficulty walking', 'No other symptoms']
-      };
-      return { topic: 'associated_symptoms', question: questions[langKey] || questions['en-IN'], chips: chips[langKey] || chips['en-IN'] };
-    }
-
-    if (chief.includes('stomach') || chief.includes('abdominal') || chief.includes('પેટ')) {
-      const questions = {
-        'gu-IN': 'શું તમને ઉલ્ટી, ઉબકા, ઝાડા કે ગેસ જેવી અન્ય કોઈ તકલીફ સાથે થઈ રહી છે?',
-        'hi-IN': 'क्या आपको उल्टी, जी मिचलाना, दस्त या गैस जैसी कोई अन्य तकलीफ भी हो रही है?',
-        'en-IN': 'Are you experiencing any vomiting, nausea, loose motions, or acidity along with it?'
-      };
-      const chips = {
-        'gu-IN': ['હા, ઉલ્ટી/ઉબકા છે', 'ઝાડા થઈ રહ્યા છે', 'ગેસ અને બળતરા', 'ના, અન્ય કોઈ તકલીફ નથી'],
-        'hi-IN': ['हाँ, उल्टी/जी मिचलाना', 'दस्त हो रहे हैं', 'गैस और जलन', 'नहीं, कोई अन्य लक्षण नहीं'],
-        'en-IN': ['Yes, Nausea/Vomiting', 'Loose motions', 'Acidity & gas', 'No other symptoms']
-      };
-      return { topic: 'associated_symptoms', question: questions[langKey] || questions['en-IN'], chips: chips[langKey] || chips['en-IN'] };
-    }
-
-    if (chief.includes('fever') || chief.includes('તાવ') || chief.includes('बुखार')) {
-      const questions = {
-        'gu-IN': 'શું તાવ સાથે ધ્રુજારી, ખાંસી કે ગળામાં દુખાવો થાય છે?',
-        'hi-IN': 'क्या बुखार के साथ ठंड/कंपकंपी, खांसी या गले में दर्द हो रहा है?',
-        'en-IN': 'Are you experiencing chills, cough, or sore throat along with the fever?'
-      };
-      const chips = {
-        'gu-IN': ['ધ્રુજારી સાથે તાવ', 'ખાંસી અને ગળામાં દુખાવો', 'આખા શરીરમાં કળતર', 'ના, ફક્ત તાવ'],
-        'hi-IN': ['कंपकंपी के साथ बुखार', 'खांसी और गले में दर्द', 'बदन में दर्द', 'नहीं, सिर्फ बुखार'],
-        'en-IN': ['Fever with chills', 'Cough & throat pain', 'Body aches', 'No other symptoms']
-      };
-      return { topic: 'associated_symptoms', question: questions[langKey] || questions['en-IN'], chips: chips[langKey] || chips['en-IN'] };
-    }
-  }
-
-  // 6. Missing Past Medical History & Medications
-  if (!clinicalState.past_medical_history || clinicalState.past_medical_history.length === 0) {
+  // 5. Missing Associated Symptoms for Joint Pain
+  if (chief.includes('joint') || chief.includes('knee') || chief.includes('સાંધા') || chief.includes('ઘૂંટણ')) {
     const questions = {
-      'gu-IN': 'શું તમને પહેલાથી ડાયાબિટીસ, બીપી કે સંધિવા જેવી કોઈ જૂની બીમારી છે?',
-      'hi-IN': 'क्या आपको पहले से डायबिटीज, बीपी या गठिया जैसी कोई पुरानी बीमारी है?',
-      'en-IN': 'Do you have any past medical history like Diabetes, BP, or Arthritis?'
+      'gu-IN': 'શું તમને સાંધામાં કઠિનતા (અકડાઈ જવું), સોજો કે ચાલવામાં મુશ્કેલી અનુભવાય છે?',
+      'hi-IN': 'क्या आपको जोड़ों में अकड़न (जकड़न), सूजन या चलने में कठिनाई महसूस होती है?',
+      'en-IN': 'Do you experience joint stiffness, swelling, or difficulty while walking?'
     };
     const chips = {
-      'gu-IN': ['સંધિવા (વા) છે', 'ડાયાબિટીસ છે', 'બ્લડ પ્રેશર (BP) છે', 'ના, કોઈ જૂની બીમારી નથી'],
-      'hi-IN': ['गठिया (आर्थराइटिस) है', 'डायबिटीज है', 'हाई बीपी है', 'नहीं, कोई बीमारी नहीं'],
-      'en-IN': ['Arthritis / Joint condition', 'Diabetes', 'Hypertension (BP)', 'None / Healthy']
+      'gu-IN': ['કઠિનતા (અકડાઈ જવું)', 'ઘૂંટણમાં સોજો છે', 'ચાલતી વખતે અવાજ આવે છે', 'ના, અન્ય કોઈ તકલીફ નથી'],
+      'hi-IN': ['अकड़न / जकड़न', 'घुटनों में सूजन है', 'चलने में तकलीफ', 'नहीं, कोई अन्य लक्षण नहीं'],
+      'en-IN': ['Stiffness in joints', 'Swelling present', 'Difficulty walking', 'No other symptoms']
+    };
+    return { topic: 'associated_symptoms', question: questions[langKey] || questions['en-IN'], chips: chips[langKey] || chips['en-IN'] };
+  }
+
+  // 6. Missing Past Medical History
+  if (!clinicalState.past_medical_history || clinicalState.past_medical_history.length === 0) {
+    const questions = {
+      'gu-IN': 'શું તમને પહેલાથી ડાયાબિટીસ, બીપી કે હૃદયની કોઈ બીમારી છે?',
+      'hi-IN': 'क्या आपको पहले से डायबिटीज, बीपी या दिल की कोई बीमारी है?',
+      'en-IN': 'Do you have any past medical history like Diabetes, BP, or Heart condition?'
+    };
+    const chips = {
+      'gu-IN': ['બ્લડ પ્રેશર (BP) છે', 'ડાયાબિટીસ છે', 'ના, કોઈ જૂની બીમારી નથી'],
+      'hi-IN': ['हाई बीपी है', 'डायबिटीज है', 'नहीं, कोई पुरानी बीमारी नहीं'],
+      'en-IN': ['Hypertension (BP)', 'Diabetes', 'None / Healthy']
     };
     return {
       topic: 'past_medical_history',
@@ -773,26 +789,7 @@ export function selectNextAdaptiveQuestion(clinicalState, language = 'gu-IN', op
     };
   }
 
-  // 7. AYUSH Specific Inquiry (if in AYUSH OPD Mode)
-  if (opdMode === 'AYUSH') {
-    const questions = {
-      'gu-IN': 'તમારી ભૂખ અને પાચનશક્તિ (અગ્નિ) કેવી છે? ઊંઘ બરાબર આવે છે?',
-      'hi-IN': 'आपकी भूख और पाचन शक्ति कैसी है? नींद ठीक से आती है?',
-      'en-IN': 'How is your appetite, digestive fire (Agni), and sleep pattern?'
-    };
-    const chips = {
-      'gu-IN': ['ભૂખ ઓછી લાગે છે', 'પાચન ધીમું છે (ગેસ/અપચો)', 'ઊંઘ અનિયમિત છે', 'ભૂખ અને ઊંઘ સારી છે'],
-      'hi-IN': ['भूख कम लगती है', 'पाचन कमजोर है', 'नींद अनियमित है', 'भूख और नींद सामान्य है'],
-      'en-IN': ['Low appetite', 'Slow digestion/Gas', 'Irregular sleep', 'Normal appetite & sleep']
-    };
-    return {
-      topic: 'ayush_history',
-      question: questions[langKey] || questions['en-IN'],
-      chips: chips[langKey] || chips['en-IN'],
-    };
-  }
-
-  // 8. Completed History
+  // 7. Completed History
   const completeQ = {
     'gu-IN': 'તમારો સંપૂર્ણ તબીબી ઈતિહાસ નોંધી લેવામાં આવ્યો છે. ડૉક્ટર સમક્ષ સારાંશ તૈયાર છે.',
     'hi-IN': 'आपका मेडिकल इतिहास सफलतापूर्वक दर्ज कर लिया गया है। डॉक्टर के लिए सारांश तैयार है।',
@@ -818,7 +815,6 @@ export function generatePatientGuidanceResponse({
   const chief = (clinicalState.chief_complaints?.[0] || clinicalState.symptoms?.[0] || 'તકલીફ').replace(/\(.*?\)/g, '').trim();
   const dur = (clinicalState.duration?.[0] || '').replace(/\(.*?\)/g, '').trim();
 
-  // If patient asks "Should I see a doctor?" or asks for doctor consultation
   if (intent === 'PATIENT_QUESTION' || intent === 'REQUEST_FOR_MEDICAL_GUIDANCE') {
     if (langKey === 'gu-IN') {
       const durText = dur ? `${dur}થી ચાલતા ` : '';
@@ -858,20 +854,27 @@ export async function processPatientClinicalResponse({
   // STEP 1: Detect Patient Intent
   const intent = detectPatientIntent(trimmed, clinicalState);
 
-  // STEP 2: Red Flag Detection (Deterministic First Line)
-  const redFlag = detectRedFlags(trimmed);
-  if (redFlag && redFlag.detected) {
-    const langKey = language.toLowerCase().startsWith('gu') ? 'gu-IN' : language.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
-    const warningMsg = redFlag.patient_instruction[langKey] || redFlag.patient_instruction['en-IN'];
+  // STEP 2: Extract Entities & Update Clinical State
+  const extracted = extractClinicalInformation(trimmed, clinicalState);
+  let updatedState = updateClinicalState(clinicalState, extracted);
+  updatedState.patient_intent = intent;
 
-    // TODO: Future: Send real-time alert to doctor/staff station and MongoDB
+  // STEP 3: Contextual Red-Flag Assessment (Evaluates context rather than bare keywords)
+  const redFlagAssessment = evaluateContextualRedFlags(trimmed, updatedState);
+  updatedState.risk_state = redFlagAssessment?.risk_state || 'LOW_RISK_CONTEXT';
+
+  // If explicit urgent emergency combination is present
+  if (redFlagAssessment && redFlagAssessment.detected) {
+    const langKey = language.toLowerCase().startsWith('gu') ? 'gu-IN' : language.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
+    const warningMsg = redFlagAssessment.patient_instruction[langKey] || redFlagAssessment.patient_instruction['en-IN'];
+
     const doctorAlert = {
       alert_id: `alert-${Date.now()}`,
       session_id: clinicalState.session_id || 'current-session',
       priority: 'HIGH',
       status: 'PENDING_REVIEW',
-      category: redFlag.category,
-      reason: redFlag.reason,
+      category: redFlagAssessment.category,
+      reason: redFlagAssessment.reason,
       created_at: new Date().toISOString(),
     };
 
@@ -882,16 +885,17 @@ export async function processPatientClinicalResponse({
       next_question: '',
       quick_chips: [],
       clinical_state_update: {
-        ...clinicalState,
+        ...updatedState,
         session_status: 'URGENT_REVIEW_REQUIRED',
-        red_flags: [...(clinicalState.red_flags || []), redFlag],
+        risk_state: 'URGENT_REVIEW_REQUIRED',
+        red_flags: [...(clinicalState.red_flags || []), redFlagAssessment],
         doctor_review_required: true,
       },
       red_flag: {
         detected: true,
         priority: 'HIGH',
-        category: redFlag.category,
-        reason: redFlag.reason,
+        category: redFlagAssessment.category,
+        reason: redFlagAssessment.reason,
       },
       doctor_alert: doctorAlert,
       doctor_review_required: true,
@@ -899,11 +903,6 @@ export async function processPatientClinicalResponse({
       session_status: 'URGENT_REVIEW_REQUIRED',
     };
   }
-
-  // STEP 3: Extract Entities & Update Clinical State
-  const extracted = extractClinicalInformation(trimmed, clinicalState);
-  const updatedState = updateClinicalState(clinicalState, extracted);
-  updatedState.patient_intent = intent;
 
   // STEP 4: Check if patient requested stop or history is already complete
   const isComplete = isHistoryComplete(updatedState, turnCount) || intent === 'STOP_REQUEST';
@@ -1000,7 +999,6 @@ export async function processPatientClinicalResponse({
   if (!aiResponse) {
     const nextSelection = selectNextAdaptiveQuestion(updatedState, language, opdMode);
     
-    // If patient asked a question, combine guidance answer with the next clinical question smoothly
     let composedMessage = nextSelection.question;
     if (directGuidanceAnswer) {
       composedMessage = `${directGuidanceAnswer} ${nextSelection.question}`;
