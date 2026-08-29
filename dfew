@@ -1,0 +1,98 @@
+[33mcommit 2277c8a37b24f942d315ce672605891900621a5c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtest[m[33m, [m[1;31morigin/test[m[33m)[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Sat Aug 29 18:34:05 2026 +0530
+
+    Git Folder pulled from banty
+
+[33mcommit f8f02b897b43d4d782e5a06638aa59981b59482f[m
+Author: 5Darshil <darshilrmali@gmail.com>
+Date:   Sat Aug 29 17:58:47 2026 +0530
+
+    Pulled Done To Darshi
+
+[33mcommit 91f6165b81e75dd7e99bacf10815e1c1103b9b51[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Sat Aug 29 17:18:47 2026 +0530
+
+    done
+
+[33mcommit d61f00bff00cedd11747a79ff94753302649ea33[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 17:28:04 2026 +0530
+
+    Voice and Text chat implemented
+
+[33mcommit abc23273fcfa890285424c849db9e22a3689cc7b[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 13:01:16 2026 +0530
+
+    flows.md removed
+
+[33mcommit c18f4ea9aeb0107681140d22782bc02d7438f136[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 13:00:18 2026 +0530
+
+    bug fix
+
+[33mcommit ec25a5e47845fc7950e1e48b8cf8cca8194ea6a1[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 12:58:07 2026 +0530
+
+    Add workflows and project updates
+
+[33mcommit 74c81ec4f60b7ed91bc87bf96aa103d76326f07b[m
+Merge: e60be4f be56b17
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 09:36:42 2026 +0530
+
+    Merge branch 'Master' of https://github.com/Bantyn/NextGen into banty
+
+[33mcommit e60be4f50e89af9dfd58fbe938f1740dd2076602[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 09:34:58 2026 +0530
+
+    Pull created
+
+[33mcommit be56b173f43ae020cd569c83448803a560e3759b[m[33m ([m[1;31morigin/vanshika[m[33m, [m[1;31morigin/kruti[m[33m, [m[1;31morigin/harshit[m[33m, [m[1;31morigin/Master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mMaster[m[33m)[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 09:27:20 2026 +0530
+
+    Apps has been added successfully !
+
+[33mcommit c5e04ca476d95a28c1f91a4d258ab41e4347ec44[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 01:53:07 2026 +0530
+
+    File Updated
+
+[33mcommit c6298bf3a98ebb638c556ae7617e8a0a41a85867[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 00:58:10 2026 +0530
+
+    File added !
+
+[33mcommit 705766c25cd3cb0e632a1ccdcb6095609ce63b5c[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 00:42:39 2026 +0530
+
+    Database added
+
+[33mcommit 99861d349d032e9e0016e1d54588273aac17f51c[m[33m ([m[1;31morigin/ayush[m[33m)[m
+Author: Bantyn <patelbanty1260@gmail.com>
+Date:   Wed Aug 26 00:16:47 2026 +0530
+
+    Basic Instruction Added
+
+[33mcommit d722de1ef939a145ae069b2253a84ac9ae8e82e8[m
+Author: Mr Patel <128612407+Bantyn@users.noreply.github.com>
+Date:   Tue Aug 25 16:50:46 2026 +0530
+
+    Revise README for Patient Case Tracking System
+    
+    Updated project details and philosophy for the Patient Case Tracking System, including key problems solved, core features, tech stack, and local setup instructions.
+
+[33mcommit 664a4f7526a8a201be53b7067aa0fd551b6f727f[m
+Author: Mr Patel <128612407+Bantyn@users.noreply.github.com>
+Date:   Sat Aug 22 19:59:20 2026 +0530
+
+    Initial commit
