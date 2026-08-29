@@ -4,12 +4,12 @@ import { Bot, User, AlertTriangle, ShieldCheck, Pill, Phone, Sparkles, CheckCirc
 /**
  * Helper to render clean markdown formatting matching HomeView editorial typography
  */
-function renderFormattedContent(text, isTyping = false) {
+function renderFormattedContent(text, isStreaming = false) {
   if (!text) return null;
 
   const lines = text.split('\n');
   return (
-    <>
+    <div className={isStreaming ? 'gpt-word-stream' : ''}>
       {lines.map((line, idx) => {
         let clean = line.trim();
 
@@ -60,7 +60,7 @@ function renderFormattedContent(text, isTyping = false) {
           </p>
         );
       })}
-    </>
+    </div>
   );
 }
 
@@ -89,7 +89,7 @@ const getMessageKey = (msg) => {
 
 /**
  * SmartAssistantMessage Component
- * Enhanced with realistic ChatGPT-style streaming text animation that plays strictly ONCE per message.
+ * Enhanced with smooth, soft-fade ChatGPT-style streaming animation.
  */
 export const SmartAssistantMessage = ({ message }) => {
   const isUser = message.role === 'user';
@@ -121,8 +121,8 @@ export const SmartAssistantMessage = ({ message }) => {
     const words = fullText.split(' ');
     const totalWords = words.length;
 
-    // Smooth natural token stream: 1 word every 45ms (readable ChatGPT pace)
-    const intervalTime = 45;
+    // Slower, calm, natural ChatGPT conversational streaming pace (65ms per word)
+    const intervalTime = 65;
 
     const timer = setInterval(() => {
       animIndexRef.current += 1;
@@ -170,7 +170,7 @@ export const SmartAssistantMessage = ({ message }) => {
       <div
         onClick={handleSkipAnimation}
         title={isTyping ? 'Click to show full message' : undefined}
-        className={`px-4 py-3.5 rounded-[22px] text-xs space-y-2.5 shadow-2xs transition-all ${
+        className={`px-4 py-3.5 rounded-[22px] text-xs space-y-2.5 shadow-2xs transition-all duration-300 ${
           isUser
             ? 'bg-white border border-slate-200/90 text-slate-900 rounded-tr-xs font-normal'
             : isUrgent
@@ -186,8 +186,8 @@ export const SmartAssistantMessage = ({ message }) => {
           </div>
         )}
 
-        {/* Message Content with Streaming Animation */}
-        <div className="space-y-1 text-left">
+        {/* Message Content with Soft-Fade Streaming */}
+        <div className="space-y-1 text-left transition-opacity duration-300 ease-out">
           {renderFormattedContent(displayedText, isTyping)}
         </div>
 
