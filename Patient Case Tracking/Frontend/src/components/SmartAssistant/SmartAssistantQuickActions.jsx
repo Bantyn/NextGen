@@ -3,7 +3,7 @@ import { HelpCircle, Pill, Thermometer, Phone, QrCode } from 'lucide-react';
 
 /**
  * SmartAssistantQuickActions Component
- * Pill chips for quick queries & contextual navigation.
+ * Styled in sync with HomeView.jsx's pill action badges.
  */
 export const SmartAssistantQuickActions = ({ onSelectAction, disabled }) => {
   const actions = [
@@ -15,7 +15,7 @@ export const SmartAssistantQuickActions = ({ onSelectAction, disabled }) => {
   ];
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto py-2 px-1 scrollbar-none">
+    <div className="flex items-center gap-2 overflow-x-auto py-2.5 px-1 scrollbar-none">
       {actions.map((act) => {
         const Icon = act.icon;
         return (
@@ -24,9 +24,9 @@ export const SmartAssistantQuickActions = ({ onSelectAction, disabled }) => {
             type="button"
             disabled={disabled}
             onClick={() => onSelectAction(act.text)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-normal text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all shrink-0 cursor-pointer disabled:opacity-50 active:scale-95"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-normal text-slate-700 bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 shadow-2xs hover:border-slate-300 transition-all shrink-0 cursor-pointer disabled:opacity-50"
           >
-            <Icon className="w-3 h-3 text-sky-600" />
+            <Icon className="w-3 h-3 text-sky-600 shrink-0" />
             <span>{act.label}</span>
           </button>
         );
