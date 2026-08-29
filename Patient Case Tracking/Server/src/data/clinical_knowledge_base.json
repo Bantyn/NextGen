@@ -1,0 +1,200 @@
+[
+  {
+    "complaint_id": "ckb_chest_pain",
+    "complaint": "chest pain",
+    "synonyms": ["chest discomfort", "chest pressure", "heart pain", "છાતીમાં દુખાવો", "सीने में दर्द"],
+    "assessment_dimensions": [
+      "onset", "duration", "severity", "location", "character", "radiation", "breathing", "sweating", "dizziness", "exertion", "past_cardiac_history"
+    ],
+    "completion_criteria": ["onset", "severity", "radiation", "breathing"],
+    "questions": [
+      { "dimension": "onset", "priority": 10, "question": "When did the chest pain start? Did it come on suddenly or develop gradually?" },
+      { "dimension": "severity", "priority": 10, "question": "On a scale of 1 to 10, how severe is the chest discomfort right now?" },
+      { "dimension": "radiation", "priority": 9, "question": "Does the pain radiate to your left arm, shoulder, neck, jaw, or back?" },
+      { "dimension": "breathing", "priority": 9, "question": "Are you having difficulty breathing or shortness of breath along with the pain?" },
+      { "dimension": "sweating", "priority": 8, "question": "Are you experiencing heavy cold sweating, nausea, or dizziness?" }
+    ],
+    "red_flag_indicators": [
+      "severe chest pain",
+      "chest pain with breathing difficulty",
+      "chest pain with fainting",
+      "chest pain with severe sweating",
+      "crushing chest pain radiating to left arm"
+    ]
+  },
+  {
+    "complaint_id": "ckb_joint_pain",
+    "complaint": "joint pain",
+    "synonyms": ["arthralgia", "body joint ache", "સાંધાનો દુખાવો", "जोड़ों में दर्द"],
+    "assessment_dimensions": [
+      "location", "duration", "severity", "onset", "swelling", "stiffness", "movement_difficulty", "previous_injury", "fever", "progression"
+    ],
+    "completion_criteria": ["location", "duration", "severity", "stiffness"],
+    "questions": [
+      { "dimension": "location", "priority": 10, "question": "Which specific joints are hurting (e.g. knees, hips, hands, shoulders)?" },
+      { "dimension": "duration", "priority": 10, "question": "How long have you had this joint pain?" },
+      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how severe is the joint pain?" },
+      { "dimension": "stiffness", "priority": 8, "question": "Do you experience stiffness in the joints, especially in the morning?" },
+      { "dimension": "swelling", "priority": 8, "question": "Is there any visible swelling, redness, or heat around the joints?" }
+    ],
+    "red_flag_indicators": [
+      "severe sudden joint pain",
+      "inability to move the joint",
+      "inability to bear weight",
+      "severe swelling",
+      "joint symptoms with high fever"
+    ]
+  },
+  {
+    "complaint_id": "ckb_knee_pain",
+    "complaint": "knee pain",
+    "synonyms": ["knee ache", "knee stiffness", "ઘૂંટણનો દુખાવો", "घुटने का दर्द"],
+    "assessment_dimensions": [
+      "location", "duration", "severity", "onset", "stiffness", "swelling", "walking_difficulty", "crepitus_sound"
+    ],
+    "completion_criteria": ["duration", "severity", "onset", "stiffness"],
+    "questions": [
+      { "dimension": "duration", "priority": 10, "question": "How long have you had this knee pain?" },
+      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the knee pain?" },
+      { "dimension": "onset", "priority": 8, "question": "Did the knee pain start gradually or suddenly after an injury?" },
+      { "dimension": "stiffness", "priority": 8, "question": "Do your knees feel stiff or make cracking sounds when bending or walking?" }
+    ],
+    "red_flag_indicators": [
+      "inability to bear any weight on knee",
+      "knee joint locked in one position",
+      "severe sudden knee swelling and hot red joint"
+    ]
+  },
+  {
+    "complaint_id": "ckb_fever",
+    "complaint": "fever",
+    "synonyms": ["high temperature", "pyrexia", "તાવ", "बुखार"],
+    "assessment_dimensions": [
+      "onset", "duration", "temperature_grade", "chills", "cough", "body_ache", "rash", "burning_urination"
+    ],
+    "completion_criteria": ["duration", "temperature_grade", "chills"],
+    "questions": [
+      { "dimension": "duration", "priority": 10, "question": "How many days have you had this fever?" },
+      { "dimension": "chills", "priority": 9, "question": "Does the fever come with shivering, chills, or heavy sweating?" },
+      { "dimension": "associated_symptoms", "priority": 8, "question": "Do you have any cough, sore throat, vomiting, rash, or burning urination?" }
+    ],
+    "red_flag_indicators": [
+      "fever with stiff neck and altered mental state",
+      "fever with persistent vomiting and extreme lethargy",
+      "fever with breathing difficulty or blue lips"
+    ]
+  },
+  {
+    "complaint_id": "ckb_cough",
+    "complaint": "cough",
+    "synonyms": ["cold and cough", "chest congestion", "ખાંસી", "ઉધરસ", "खांसी"],
+    "assessment_dimensions": [
+      "duration", "type_dry_wet", "sputum_color", "breathlessness", "fever", "chest_pain", "hemoptysis"
+    ],
+    "completion_criteria": ["duration", "type_dry_wet", "breathlessness"],
+    "questions": [
+      { "dimension": "duration", "priority": 10, "question": "How long have you had this cough?" },
+      { "dimension": "type_dry_wet", "priority": 9, "question": "Is it a dry cough or are you bringing up phlegm/mucus?" },
+      { "dimension": "breathlessness", "priority": 8, "question": "Are you having any wheezing, chest tightness, or trouble breathing?" }
+    ],
+    "red_flag_indicators": [
+      "coughing up blood (hemoptysis)",
+      "severe stridor or inability to speak full sentences",
+      "cough with high fever and sudden chest pain"
+    ]
+  },
+  {
+    "complaint_id": "ckb_headache",
+    "complaint": "headache",
+    "synonyms": ["head pain", "migraine", "માથાનો દુખાવો", "सिर दर्द"],
+    "assessment_dimensions": [
+      "onset", "duration", "severity", "location_one_both", "vision_blur", "nausea", "neck_stiffness", "fever"
+    ],
+    "completion_criteria": ["onset", "severity", "vision_blur"],
+    "questions": [
+      { "dimension": "onset", "priority": 10, "question": "Did the headache start suddenly like a thunderclap or build up slowly?" },
+      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the headache?" },
+      { "dimension": "associated_symptoms", "priority": 8, "question": "Are you experiencing any vomiting, blurred vision, light sensitivity, or neck stiffness?" }
+    ],
+    "red_flag_indicators": [
+      "thunderclap headache reaching max intensity in seconds",
+      "headache with neck stiffness and high fever",
+      "headache with sudden weakness or speech difficulty"
+    ]
+  },
+  {
+    "complaint_id": "ckb_abdominal_pain",
+    "complaint": "abdominal pain",
+    "synonyms": ["stomach pain", "belly ache", "gut pain", "પેટમાં દુખાવો", "पेट में दर्द"],
+    "assessment_dimensions": [
+      "location_quadrant", "duration", "severity", "onset", "vomiting", "bowel_habits", "fever"
+    ],
+    "completion_criteria": ["location_quadrant", "duration", "severity", "vomiting"],
+    "questions": [
+      { "dimension": "location_quadrant", "priority": 10, "question": "Where in the stomach is the pain located?" },
+      { "dimension": "duration", "priority": 10, "question": "When did the stomach pain start and is it continuous or cramping?" },
+      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how severe is the stomach pain?" },
+      { "dimension": "associated_symptoms", "priority": 8, "question": "Are you experiencing vomiting, loose motions, or fever?" }
+    ],
+    "red_flag_indicators": [
+      "severe rigid abdomen with extreme tenderness",
+      "vomiting blood or black coffee ground material",
+      "black tarry stools with abdominal pain"
+    ]
+  },
+  {
+    "complaint_id": "ckb_back_pain",
+    "complaint": "back pain",
+    "synonyms": ["lumbago", "lower back ache", "spine pain", "કમરનો દુખાવો", "कमर दर्द"],
+    "assessment_dimensions": [
+      "onset", "duration", "severity", "radiation_legs", "numbness_tingling", "bladder_bowel_control"
+    ],
+    "completion_criteria": ["duration", "severity", "radiation_legs", "bladder_bowel_control"],
+    "questions": [
+      { "dimension": "duration", "priority": 10, "question": "How long have you had this back pain?" },
+      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the back pain?" },
+      { "dimension": "radiation_legs", "priority": 8, "question": "Does the pain shoot down into your legs with tingling or numbness?" }
+    ],
+    "red_flag_indicators": [
+      "back pain with loss of bladder or bowel control (Cauda Equina)",
+      "back pain with sudden numbness around saddle/groin area",
+      "back pain with sudden leg paralysis"
+    ]
+  },
+  {
+    "complaint_id": "ckb_vomiting",
+    "complaint": "vomiting",
+    "synonyms": ["emesis", "throwing up", "ઉલ્ટી", "उल्टी"],
+    "assessment_dimensions": [
+      "duration", "frequency", "fluid_retention", "vomitus_content", "diarrhea", "abdominal_pain"
+    ],
+    "completion_criteria": ["duration", "frequency", "fluid_retention"],
+    "questions": [
+      { "dimension": "duration", "priority": 10, "question": "When did the vomiting start and how many times have you thrown up?" },
+      { "dimension": "fluid_retention", "priority": 9, "question": "Are you able to keep water or liquids down?" }
+    ],
+    "red_flag_indicators": [
+      "vomiting fresh red blood or black coffee ground material",
+      "vomiting with severe unremitting abdominal pain",
+      "inability to keep any fluids for >24h with severe dehydration"
+    ]
+  },
+  {
+    "complaint_id": "ckb_dizziness",
+    "complaint": "dizziness",
+    "synonyms": ["vertigo", "lightheadedness", "fainting feeling", "ચક્કર", "चक्कर आना"],
+    "assessment_dimensions": [
+      "onset", "room_spinning_vertigo", "duration", "syncope_fainting", "hearing_loss_tinnitus"
+    ],
+    "completion_criteria": ["onset", "room_spinning_vertigo", "syncope_fainting"],
+    "questions": [
+      { "dimension": "room_spinning_vertigo", "priority": 10, "question": "Does the room feel like it is spinning around you, or is it lightheadedness?" },
+      { "dimension": "syncope_fainting", "priority": 9, "question": "Did you black out, lose consciousness, or fall down?" }
+    ],
+    "red_flag_indicators": [
+      "dizziness with sudden loss of consciousness (syncope)",
+      "dizziness with sudden speech slurring or one-sided arm weakness",
+      "dizziness accompanied by severe chest pressure or palpitations"
+    ]
+  }
+]
