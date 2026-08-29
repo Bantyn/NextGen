@@ -1,0 +1,62 @@
+[
+  {
+    "_id": "AYUSH_COUGH_COLD",
+    "symptom_key": "cough_cold",
+    "category": "COUGH_COLD",
+    "dosha": "Kapha-Vata",
+    "remedy_title": "Tulsi, Sunthi & Steam Inhalation",
+    "remedy_gu": "હૂંફાળા પાણીમાં આદુ અને તુલસીનો ઉકાળો પીવો, નીલગીરી અથવા મીઠાવાળા પાણીની વરાળ લેવી અને ઠંડા પીણાં ટાળવા.",
+    "remedy_hi": "गुनगुने पानी में अदरक और तुलसी का काढ़ा पिएं, नमक वाले पानी की भाप लें और ठंडी चीजों से परहेज रखें।",
+    "remedy_en": "Drink warm water with ginger and tulsi decoction, take steam inhalation, and avoid cold food items.",
+    "ahara": "Light vegetable soups, warm khichdi with black pepper",
+    "vihara": "Adequate chest covering, avoiding direct cold AC breeze"
+  },
+  {
+    "_id": "AYUSH_STOMACH_ACIDITY",
+    "symptom_key": "stomach_acidity",
+    "category": "STOMACH_PAIN",
+    "dosha": "Pitta",
+    "remedy_title": "Saunf, Jeera & Coconut Water",
+    "remedy_gu": "વરિયાળી અને જીરુંનું નવશેકું પાણી પીવું, વધારે તીખું-તળેલું ટાળવું અને મગની દાળની ખીચડી જેવો હળવો આહાર લેવો.",
+    "remedy_hi": "सौंफ और जीरे का हल्का गुनगुना पानी पिएं, ज्यादा मिर्च-मसालेदार भोजन से बचें और मूंग दाल की खिचड़ी खाएं।",
+    "remedy_en": "Drink warm fennel and cumin seed water, avoid spicy oily foods, and consume light moong dal khichdi.",
+    "ahara": "Cold milk, coconut water, boiled vegetables",
+    "vihara": "Avoid late night sleeping and skipping meals"
+  },
+  {
+    "_id": "AYUSH_HEADACHE",
+    "symptom_key": "headache_stress",
+    "category": "HEADACHE",
+    "dosha": "Vata-Pitta",
+    "remedy_title": "Ginger Paste & Shiro-Abhyanga",
+    "remedy_gu": "શાંત અને ઓછા અજવાળાવાળા રૂમમાં આરામ કરવો, પૂરતું પાણી પીવું અને કપાળ પર હળવી માલિશ કરવી.",
+    "remedy_hi": "शांत और कम रोशनी वाले कमरे में विश्राम करें, पर्याप्त पानी पिएं और माथे पर हल्का तेल मालिश करें।",
+    "remedy_en": "Rest in a quiet dimly-lit room, stay well hydrated, and practice deep calming breathing.",
+    "ahara": "Warm herbal teas, sweet seasonal fruits",
+    "vihara": "Screen time reduction, timely sleep (Nidra)"
+  },
+  {
+    "_id": "AYUSH_JOINT_PAIN",
+    "symptom_key": "joint_pain_vata",
+    "category": "BODY_JOINT_PAIN",
+    "dosha": "Vata (Sandhigata Vata)",
+    "remedy_title": "Warm Sesame Oil & Dry Heat Fomentation",
+    "remedy_gu": "સાંધા પર તલના ગરમ તેલથી હળવી માલિશ કરવી, ગરમ પાણીનો શેક કરવો અને ઠંડી હવા સામે સાંધા ઢાંકી રાખવા.",
+    "remedy_hi": "जोड़ों पर तिल के गुनगुने तेल से मालिश करें, गर्म पानी की थैली से सिकाई करें और जोड़ों को ठंड से बचाएं।",
+    "remedy_en": "Apply warm sesame oil on affected joints, apply warm fomentation, and avoid cold air exposure.",
+    "ahara": "Warm cooked meals, garlic, turmeric milk",
+    "vihara": "Gentle mobilization exercises, avoiding standing for long hours"
+  },
+  {
+    "_id": "AYUSH_FEVER",
+    "symptom_key": "fever_pyrexia",
+    "category": "FEVER",
+    "dosha": "Pitta-Vata (Jwara)",
+    "remedy_title": "Shadanga Paniya & Hydration",
+    "remedy_gu": "ઉકાળેલું હૂંફાળું પાણી વારંવાર પીવું, હળવો મગનો સૂપ લેવો અને શરીર પર ભીના કપડાંથી પટ્ટી મૂકવી.",
+    "remedy_hi": "उबला हुआ गुनगुना पानी पिएं, हल्का मूंग दाल का पानी लें और माथे पर ठंडे पानी की पट्टी रखें।",
+    "remedy_en": "Drink boiled warm water frequently, have thin moong soup, and take complete physical rest.",
+    "ahara": "Light liquid diet, pomegranate, avoiding heavy foods",
+    "vihara": "Complete bed rest, well ventilated room"
+  }
+]
