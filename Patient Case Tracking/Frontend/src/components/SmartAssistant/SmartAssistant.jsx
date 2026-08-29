@@ -127,6 +127,7 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
       requires_doctor: Boolean(response.requires_doctor),
       data: response.data || null,
       intent: response.intent || 'GENERAL',
+      animate: true,
     };
 
     setMessages((prev) => [...prev, assistantMsg]);
