@@ -93,20 +93,20 @@ export const SmartAssistantMessage = ({ message }) => {
       <div
         className={`w-8 h-8 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 shadow-2xs border ${
           isUser
-            ? 'bg-slate-950 text-white border-slate-800'
+            ? 'bg-white text-slate-700 border-slate-200'
             : isUrgent
             ? 'bg-rose-50 text-rose-700 border-rose-200'
             : 'bg-sky-50 text-sky-700 border-sky-200'
         }`}
       >
-        {isUser ? <User className="w-4 h-4" /> : isUrgent ? <AlertTriangle className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+        {isUser ? <User className="w-4 h-4 text-slate-700" /> : isUrgent ? <AlertTriangle className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
       </div>
 
       {/* Message Bubble matching HomeView Card Glassmorphism */}
       <div
         className={`px-4 py-3.5 rounded-[22px] text-xs space-y-2.5 shadow-2xs ${
           isUser
-            ? 'bg-slate-950 text-white rounded-tr-xs font-normal'
+            ? 'bg-white border border-slate-200/90 text-slate-900 rounded-tr-xs font-normal'
             : isUrgent
             ? 'bg-rose-50/95 border border-rose-200 text-rose-950 rounded-tl-xs'
             : 'bg-white border border-slate-200/90 text-slate-800 rounded-tl-xs'
