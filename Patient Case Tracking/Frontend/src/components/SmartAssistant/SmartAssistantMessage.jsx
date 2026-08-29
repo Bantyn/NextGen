@@ -78,17 +78,28 @@ function renderInlineFormatting(str) {
   });
 }
 
+// Module-level registry to guarantee each message animates strictly ONCE in its entire lifecycle
+const animatedMessagesRegistry = new Set();
+
+const getMessageKey = (msg) => {
+  if (!msg) return '';
+  if (msg.id) return String(msg.id);
+  return `${msg.role}_${msg.timestamp || ''}_${(msg.content || '').slice(0, 40)}`;
+};
+
 /**
  * SmartAssistantMessage Component
- * Enhanced with realistic ChatGPT-style streaming text animation for AI responses.
+ * Enhanced with realistic ChatGPT-style streaming text animation that plays strictly ONCE per message.
  */
 export const SmartAssistantMessage = ({ message }) => {
   const isUser = message.role === 'user';
   const isUrgent = message.urgent;
   const data = message.data;
 
-  // ChatGPT-style Streaming State (Natural human-readable reading pace)
-  const shouldAnimate = !isUser && message.animate !== false;
+  const msgKey = getMessageKey(message);
+  const alreadyAnimated = animatedMessagesRegistry.has(msgKey);
+  const shouldAnimate = !isUser && message.animate === true && !alreadyAnimated;
+
   const [displayedText, setDisplayedText] = useState(shouldAnimate ? '' : message.content || '');
   const [isTyping, setIsTyping] = useState(shouldAnimate);
   const animIndexRef = useRef(0);
@@ -100,6 +111,8 @@ export const SmartAssistantMessage = ({ message }) => {
       return;
     }
 
+    // Mark as animated immediately so it never re-animates on re-renders or panel toggle
+    animatedMessagesRegistry.add(msgKey);
     setDisplayedText('');
     setIsTyping(true);
     animIndexRef.current = 0;
@@ -123,11 +136,12 @@ export const SmartAssistantMessage = ({ message }) => {
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [message.content, shouldAnimate]);
+  }, [message.content, shouldAnimate, msgKey]);
 
   // Click to instantly skip typing animation
   const handleSkipAnimation = () => {
     if (isTyping) {
+      animatedMessagesRegistry.add(msgKey);
       setDisplayedText(message.content || '');
       setIsTyping(false);
     }
