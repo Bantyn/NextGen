@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PageLayout, DoctorLayout } from '../components/layout';
+import { SmartAssistant } from '../components/SmartAssistant';
 import { HomeView } from '../modules/landing/HomeView';
 import {
   PatientCheckinView,
@@ -15,6 +16,7 @@ import {
 /**
  * AppRoutes Component
  * Central client-side routing provider with separate Layout wrappers for Public Kiosk & Doctor Portal.
+ * Includes global SmartAssistant floating throughout the entire application.
  */
 export const AppRoutes = () => {
   return (
@@ -79,6 +81,9 @@ export const AppRoutes = () => {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Global Site-Wide Smart AI Assistant */}
+      <SmartAssistant />
     </BrowserRouter>
   );
 };

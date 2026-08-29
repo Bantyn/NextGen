@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+@keyframes gptWordFade {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.gpt-word-stream {
+  display: inline;
+  animation: gptWordFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

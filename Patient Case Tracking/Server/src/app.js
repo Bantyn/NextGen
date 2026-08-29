@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 import path from 'path';
 import documentRoutes from './routes/documentRoutes.js';
+import intakeRoutes from './routes/intakeRoutes.js';
+import assistantRoutes from './routes/assistantRoutes.js';
 
 dotenv.config();
 
@@ -24,6 +26,8 @@ app.use('/uploads', express.static(path.resolve('uploads')));
 
 // Routes
 app.use('/api/v1/documents', documentRoutes);
+app.use('/api/v1/intake', intakeRoutes);
+app.use('/api/v1/assistant', assistantRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
@@ -38,6 +42,15 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
   console.log(`Server listening on network: http://${HOST}:${PORT}`);
+});
+
+// Process crash protection
+process.on('uncaughtException', (err) => {
+  console.error('[Global Uncaught Exception]:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Global Unhandled Rejection]:', reason);
 });
 
 export default app;

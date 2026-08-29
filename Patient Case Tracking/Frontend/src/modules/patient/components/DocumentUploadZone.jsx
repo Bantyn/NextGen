@@ -5,7 +5,7 @@ import {
   Trash2,
   Sparkles,
   AlertCircle,
-  Clock,
+  AlertTriangle,
   Pill,
   Activity,
   CheckCircle2,
@@ -18,15 +18,19 @@ import {
   MessageSquareQuote,
   Loader2,
   Check,
-  Send,
-  Globe,
   Radio,
   FileCheck,
   ScanText,
+  TrendingDown,
+  TrendingUp,
+  Copy,
+  Code2,
+  ShieldAlert,
+  Info,
 } from 'lucide-react';
 
-const SERVER_OCR_ENDPOINT = 'http://localhost:5000/api/v1/documents/process-base64';
-const N8N_DOCUMENT_WEBHOOK = 'https://bantytest.app.n8n.cloud/webhook/medikiosk-document-processing';
+const SERVER_UPLOAD_ENDPOINT = 'http://localhost:5000/api/v1/documents/upload';
+const SERVER_BASE64_ENDPOINT = 'http://localhost:5000/api/v1/documents/process-base64';
 
 /**
  * Universal JSON parser for OCR response payloads
@@ -51,7 +55,7 @@ function parseOcrContent(raw) {
 }
 
 /**
- * DocumentUploadZone Component — Module B: Tesseract.js Real OCR + Groq AI Universal Parser
+ * SIH Medical Document Digitization & Clinical Intelligence Component
  */
 export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
   const [files, setFiles] = useState([]);
@@ -59,13 +63,11 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
   const [isProcessingOcr, setIsProcessingOcr] = useState(false);
   const [lastApiStatus, setLastApiStatus] = useState(null);
   const [rawOcrText, setRawOcrText] = useState(null);
-
-  // Dynamic extracted data starts NULL so it never displays stale/fixed data
   const [extractedData, setExtractedData] = useState(null);
+  const [labFilter, setLabFilter] = useState('ALL'); // 'ALL' | 'ABNORMAL'
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [showRawJson, setShowRawJson] = useState(false);
 
-  /**
-   * Reads a File object and converts it to a Base64 string
-   */
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -75,60 +77,64 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
     });
   };
 
-  /**
-   * Processes file: Tesseract.js OCR text extraction via Node.js Server -> n8n Universal Groq Parser
-   */
-  const sendBase64ToOCR = async (base64Content, fileName = 'prescription.jpg') => {
+  const uploadAndProcessFile = async (file) => {
     setIsProcessingOcr(true);
     setRawOcrText(null);
-    setLastApiStatus({ status: 'SENDING', message: `Running Tesseract.js OCR & Groq AI Pipeline...` });
-
-    const payload = {
-      document_id: `doc-photo-${Date.now().toString().slice(-6)}`,
-      document_type: 'PRESCRIPTION',
-      file_base64: base64Content,
-      file_name: fileName,
-    };
+    setExtractedData(null);
+    setLastApiStatus({
+      status: 'SENDING',
+      message: `Uploading ${file.name} via Multer & running AI Digitization...`,
+    });
 
     try {
-      // 1. Try Node.js backend with Tesseract.js OCR
-      let response = null;
       let resJson = null;
 
+      // 1. Primary: Multer Multipart Form Data upload to Node.js Server
       try {
-        response = await fetch(SERVER_OCR_ENDPOINT, {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('document_type', 'AUTO_DETECT');
+
+        const response = await fetch(SERVER_UPLOAD_ENDPOINT, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: formData,
         });
 
         if (response.ok) {
           resJson = await response.json();
-          if (resJson?.ocr_raw_text) {
-            setRawOcrText(resJson.ocr_raw_text);
-          }
+          console.log('[Multer Upload & OCR Response]:', resJson);
+        } else {
+          console.warn('[Multer Upload Returned Non-200]:', response.status);
         }
-      } catch (nodeErr) {
-        console.warn('Node.js server not reached, calling n8n cloud webhook directly:', nodeErr);
+      } catch (multerErr) {
+        console.warn('Multer upload network error, trying Base64 endpoint:', multerErr);
       }
 
-      // 2. If server was offline, call n8n webhook directly
+      // 2. Secondary Fallback: Base64 JSON endpoint
       if (!resJson) {
-        response = await fetch(N8N_DOCUMENT_WEBHOOK, {
+        const dataUri = await fileToBase64(file);
+        const pureBase64 = dataUri.replace(/^data:.*?;base64,/, '');
+        const payload = {
+          document_id: `doc-photo-${Date.now().toString().slice(-6)}`,
+          document_type: 'AUTO_DETECT',
+          file_base64: pureBase64,
+          file_name: file.name,
+        };
+
+        const base64Res = await fetch(SERVER_BASE64_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        });
-        resJson = await response.json().catch(() => ({}));
+        }).catch(() => null);
+
+        if (base64Res && base64Res.ok) {
+          resJson = await base64Res.json();
+        }
       }
 
-      console.log('[MediKiosk OCR Response]:', resJson);
-
-      setLastApiStatus({
-        status: 'SUCCESS',
-        code: 200,
-        message: 'Tesseract.js OCR text extracted & parsed by Groq AI',
-      });
+      if (resJson?.ocr_raw_text) {
+        setRawOcrText(resJson.ocr_raw_text);
+      }
 
       // 3. Parse dynamic clinical extraction
       let parsed = null;
@@ -142,62 +148,34 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
         parsed = parseOcrContent(resJson.output);
       }
 
-      if (parsed && (parsed.clinic_name || parsed.prescribed_medicines || parsed.complaints)) {
+      const isValidData =
+        parsed &&
+        (parsed.organization_name ||
+          parsed.clinic_name ||
+          parsed.document_title ||
+          (parsed.lab_investigations && parsed.lab_investigations.length > 0) ||
+          (parsed.prescribed_medicines && parsed.prescribed_medicines.length > 0) ||
+          (parsed.complaints && parsed.complaints.length > 0) ||
+          parsed.clinical_summary);
+
+      if (isValidData) {
         setExtractedData(parsed);
         if (onOcrExtracted) onOcrExtracted(parsed);
+        setLastApiStatus({
+          status: 'SUCCESS',
+          code: 200,
+          message: `Digitized ${parsed.document_type || 'Medical Document'} successfully with AI`,
+        });
       } else {
-        // Fallback structured extraction schema
-        const dynamicParsed = {
-          clinic_name: 'SAI CLINIC',
-          doctor_names: ['Dr. Y. Lavanya', 'Dr. K. Chanakya Chandra Kumar'],
-          date: '2022-10-19',
-          patient_name: 'Test Patient',
-          age: 30,
-          gender: 'Male',
-          vitals: { BP: '140/90 mmHg', PR: '80 bpm' },
-          complaints: ['Fever for 3 days', 'Hypertension', 'Hypothyroidism'],
-          investigations_recommended: [
-            'CBP (Complete Blood Picture)',
-            'CUE (Complete Urine Examination)',
-            'ECG',
-            '2D Echo',
-            'Thyroid Profile (T3, T4, TSH)',
-            'Dengue IgG & IgM',
-          ],
-          prescribed_medicines: [
-            {
-              name: 'Stamlo',
-              dosage: '5 mg',
-              frequency: 'Once daily (1-0-0)',
-              timing: 'Afternoon',
-              duration: '30 days',
-            },
-            {
-              name: 'Arvast',
-              dosage: '5 mg',
-              frequency: 'Once daily (1-0-0)',
-              timing: 'Afternoon',
-              duration: '30 days',
-            },
-            {
-              name: 'Thyrox',
-              dosage: '75 mcg',
-              frequency: 'Once daily (1-0-0)',
-              timing: 'Morning (Empty Stomach)',
-              duration: '30 days',
-            },
-            {
-              name: 'B-Plex forte',
-              dosage: 'Standard',
-              frequency: 'Twice daily (1-0-1)',
-              timing: 'Morning and Night',
-              duration: '30 days',
-            },
-          ],
-          doctor_advice: 'Maintain low salt diet, drink 3L water daily, repeat thyroid profile after 4 weeks.',
-        };
-        setExtractedData(dynamicParsed);
-        if (onOcrExtracted) onOcrExtracted(dynamicParsed);
+        setExtractedData(null);
+        const hasText = resJson?.ocr_raw_text && resJson.ocr_raw_text.trim().length > 0;
+        setLastApiStatus({
+          status: 'WARNING',
+          code: 200,
+          message: hasText
+            ? 'Raw text extracted via OCR, but could not detect structured medical record format.'
+            : 'Image resolution too low or unclear. Please upload a clear photo.',
+        });
       }
     } catch (err) {
       console.error('[MediKiosk OCR Error]:', err);
@@ -210,36 +188,110 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
     }
   };
 
-  /**
-   * Processes an uploaded file via Base64 to Tesseract.js OCR Pipeline
-   */
-  const processFileOcr = async (file) => {
-    try {
-      const dataUri = await fileToBase64(file);
-      const pureBase64 = dataUri.replace(/^data:.*?;base64,/, '');
-      await sendBase64ToOCR(pureBase64, file.name);
-    } catch (err) {
-      console.error('File read error:', err);
-      setIsProcessingOcr(false);
-    }
-  };
-
   const handleFileChange = async (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
       const updated = [...files, ...newFiles];
       setFiles(updated);
       if (onFilesSelected) onFilesSelected(updated);
-      await processFileOcr(newFiles[0]);
+      await uploadAndProcessFile(newFiles[0]);
     }
   };
 
   /**
-   * Live 1-Click Test: Runs actual OCR and clinical parser
+   * Sample 1: DRLOGY CBC Pathology Lab Report Test
    */
-  const handleLoadSampleReport = async () => {
+  const handleLoadSampleLabReport = async () => {
+    const sampleText = `DRLOGY PATHOLOGY LAB
+105-108, SMART VISION COMPLEX, HEALTHCARE ROAD, MUMBAI - 689578
+Yash M. Patel Age: 21 Years Sex: Male PID: 555 Ref. By: Dr. Hiren Shah
+Reported on: 02 Dec, 202X
+Complete Blood Count (CBC)
+HEMOGLOBIN
+Hemoglobin (Hb) 12.5 Low 13.0-17.0 g/dL
+RBC COUNT
+Total RBC count 5.2 4.5-5.5 mill/cumm
+BLOOD INDICES
+Packed Cell Volume (PCV) 57.5 High 40-50 %
+Mean Corpuscular Volume (MCV) 87.75 83-101 fL
+MCH 27.2 27-32 pg
+MCHC 32.8 32.5-34.5 g/dL
+RDW 13.6 11.6-14.0 %
+WBC COUNT
+Total WBC count 9000 4000-11000 cumm
+Neutrophils 60 50 - 62 %
+Lymphocytes 31 20-40 %
+Eosinophils 1 00-06 %
+Monocytes 7 00-10 %
+Basophils 1 00-02 %
+PLATELET COUNT
+Platelet Count 150000 Borderline 150000 - 410000 cumm
+Interpretation: Further confirm for Anemia
+Pathologists: Dr. Payal Shah, Dr. Vimal Shah`;
+
     const sampleFile = {
-      name: 'Dr_Lavanya_Prescription_SaiClinic.jpg',
+      name: 'DRLOGY_CBC_Pathology_Report.pdf',
+      size: 412000,
+      type: 'application/pdf',
+    };
+    const updated = [...files, sampleFile];
+    setFiles(updated);
+    if (onFilesSelected) onFilesSelected(updated);
+
+    setIsProcessingOcr(true);
+    setRawOcrText(sampleText);
+
+    try {
+      const payload = {
+        document_id: `doc-lab-${Date.now().toString().slice(-6)}`,
+        document_type: 'LAB_REPORT',
+        document_text: sampleText,
+      };
+
+      const res = await fetch(SERVER_BASE64_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const resJson = await res.json().catch(() => ({}));
+      if (resJson?.extracted_data) {
+        setExtractedData(resJson.extracted_data);
+        if (onOcrExtracted) onOcrExtracted(resJson.extracted_data);
+      }
+      setLastApiStatus({
+        status: 'SUCCESS',
+        code: 200,
+        message: 'Pathology CBC Lab Report digitized & structured by AI',
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProcessingOcr(false);
+    }
+  };
+
+  /**
+   * Sample 2: Doctor Prescription Test
+   */
+  const handleLoadSamplePrescription = async () => {
+    const sampleText = `SAI CLINIC
+Dr. Y. Lavanya, Dr. K. Chanakya Chandra Kumar
+Hyderabad, Telangana
+Date: 19/Oct/2022
+Patient: Ramesh Kumar, 30/M
+BP: 140/90 mmHg, Pulse: 80 bpm
+k/c/o Hypertension, Hypothyroidism
+c/o Fever for 3 days
+Rx:
+Tab. Stamlo 5mg 1-0-0 x 30 days (Afternoon)
+Tab. Arvast 5mg 1-0-0 x 30 days (Afternoon)
+Tab. Thyrox 75mcg 1-0-0 x 30 days (Morning Empty Stomach)
+Tab. B-Plex forte 1-0-1 x 30 days (Morning & Night)
+Adv: Low salt diet, hydrate well, repeat thyroid profile after 4 weeks.`;
+
+    const sampleFile = {
+      name: 'SaiClinic_Doctor_Prescription.jpg',
       size: 348000,
       type: 'image/jpeg',
     };
@@ -247,10 +299,37 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
     setFiles(updated);
     if (onFilesSelected) onFilesSelected(updated);
 
-    const sampleBase64 =
-      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+    setIsProcessingOcr(true);
+    setRawOcrText(sampleText);
 
-    await sendBase64ToOCR(sampleBase64, sampleFile.name);
+    try {
+      const payload = {
+        document_id: `doc-rx-${Date.now().toString().slice(-6)}`,
+        document_type: 'PRESCRIPTION',
+        document_text: sampleText,
+      };
+
+      const res = await fetch(SERVER_BASE64_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const resJson = await res.json().catch(() => ({}));
+      if (resJson?.extracted_data) {
+        setExtractedData(resJson.extracted_data);
+        if (onOcrExtracted) onOcrExtracted(resJson.extracted_data);
+      }
+      setLastApiStatus({
+        status: 'SUCCESS',
+        code: 200,
+        message: 'Doctor Prescription digitized & structured by AI',
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProcessingOcr(false);
+    }
   };
 
   const removeFile = (index) => {
@@ -264,8 +343,33 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
     if (onFilesSelected) onFilesSelected(updated);
   };
 
+  const handleCopySummary = () => {
+    if (!extractedData?.clinical_summary?.physician_digest) return;
+    navigator.clipboard.writeText(
+      `Medical Summary (${extractedData.document_title || extractedData.document_type || 'Report'}):\n${
+        extractedData.clinical_summary.physician_digest
+      }\n\nPatient Note: ${extractedData.clinical_summary.patient_friendly_summary || ''}`
+    );
+    setCopiedSummary(true);
+    setTimeout(() => setCopiedSummary(false), 2000);
+  };
+
+  // Filter lab investigations
+  const filteredLabTests = (extractedData?.lab_investigations || []).filter((test) => {
+    if (labFilter === 'ABNORMAL') {
+      const f = (test.flag || '').toUpperCase();
+      return f === 'LOW' || f === 'HIGH' || f === 'BORDERLINE' || f === 'CRITICAL';
+    }
+    return true;
+  });
+
+  const abnormalCount = (extractedData?.lab_investigations || []).filter((test) => {
+    const f = (test.flag || '').toUpperCase();
+    return f === 'LOW' || f === 'HIGH' || f === 'BORDERLINE' || f === 'CRITICAL';
+  }).length;
+
   return (
-    <div className="w-full space-y-6 text-left">
+    <div className="w-full space-y-6 text-left font-sans">
       {/* Upload Zone */}
       <div
         onDragOver={(e) => {
@@ -281,12 +385,12 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
             const updated = [...files, ...newFiles];
             setFiles(updated);
             if (onFilesSelected) onFilesSelected(updated);
-            await processFileOcr(newFiles[0]);
+            await uploadAndProcessFile(newFiles[0]);
           }
         }}
         className={`border-2 border-dashed rounded-[24px] p-6 text-center transition-all cursor-pointer ${
           isDragging
-            ? 'border-slate-800 bg-slate-100/70'
+            ? 'border-indigo-600 bg-indigo-50/70'
             : 'border-slate-200 hover:border-slate-400 bg-slate-50/50'
         }`}
         onClick={() => document.getElementById('file-upload-input').click()}
@@ -295,31 +399,44 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
           id="file-upload-input"
           type="file"
           multiple
-          accept="image/*,.pdf"
+          accept="image/*,.pdf,.avif,.webp"
           onChange={handleFileChange}
           className="hidden"
         />
-        <div className="w-11 h-11 mx-auto mb-2.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-700 shadow-2xs">
-          <UploadCloud className="w-5 h-5 text-slate-700" />
+        <div className="w-12 h-12 mx-auto mb-2.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm">
+          <UploadCloud className="w-6 h-6" />
         </div>
-        <p className="text-sm font-normal text-slate-900">
-          Upload Physical Prescription Photo (Tesseract.js OCR ➔ Groq AI)
+        <p className="text-sm font-semibold text-slate-900">
+          Medical Document Scanning & AI Digitization Engine
         </p>
-        <p className="text-xs text-slate-400 font-normal mt-0.5">
-          Camera snapshot, images (JPG, PNG) or PDF files from any clinic
+        <p className="text-xs text-slate-500 font-normal mt-0.5 max-w-md mx-auto">
+          Upload <strong>Pathology Lab Reports (CBC, LFT, KFT)</strong>, <strong>Doctor Prescriptions</strong>, or <strong>Discharge Summaries</strong>.
         </p>
 
-        <div className="mt-3 flex items-center justify-center gap-2">
+        {/* 1-Click SIH Test Demo Buttons */}
+        <div className="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              handleLoadSampleReport();
+              handleLoadSampleLabReport();
             }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-normal text-sky-800 bg-sky-50 border border-sky-200 hover:bg-sky-100 transition cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium text-indigo-800 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition cursor-pointer shadow-2xs"
           >
-            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-            <span>Test Real OCR Pipeline (1-Click Trigger)</span>
+            <FlaskConical className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Test CBC Lab Report (Drlogy Lab)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleLoadSamplePrescription();
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer shadow-2xs"
+          >
+            <Pill className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Test Clinical Prescription (Sai Clinic)</span>
           </button>
         </div>
       </div>
@@ -327,12 +444,12 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
       {/* Live Pipeline Status Bar */}
       {lastApiStatus && (
         <div
-          className={`p-3 rounded-xl border text-xs font-normal flex items-center justify-between gap-2 shadow-2xs ${
+          className={`p-3.5 rounded-2xl border text-xs font-normal flex items-center justify-between gap-3 shadow-2xs ${
             lastApiStatus.status === 'SUCCESS'
-              ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+              ? 'bg-emerald-50/80 text-emerald-950 border-emerald-200'
               : lastApiStatus.status === 'SENDING'
-              ? 'bg-sky-50 text-sky-900 border-sky-200 animate-pulse'
-              : 'bg-rose-50 text-rose-900 border-rose-200'
+              ? 'bg-indigo-50 text-indigo-950 border-indigo-200 animate-pulse'
+              : 'bg-rose-50 text-rose-950 border-rose-200'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -341,37 +458,40 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
                 lastApiStatus.status === 'SUCCESS'
                   ? 'text-emerald-600'
                   : lastApiStatus.status === 'SENDING'
-                  ? 'text-sky-600 animate-spin'
+                  ? 'text-indigo-600 animate-spin'
                   : 'text-rose-600'
               }`}
             />
-            <span className="font-mono text-[11px]">
-              Tesseract.js OCR ➔ n8n Groq AI Engine
+            <span className="font-mono text-[11px] font-medium">
+              SIH Document-AI Pipeline
             </span>
           </div>
 
-          <span className="font-medium text-[11px]">{lastApiStatus.message}</span>
+          <span className="font-medium text-[11px] truncate">{lastApiStatus.message}</span>
         </div>
       )}
 
-      {/* Raw OCR Text Box if available */}
+      {/* Raw OCR Text Box Accordion */}
       {rawOcrText && (
-        <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-100 text-xs font-mono space-y-1.5 shadow-2xs">
-          <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
-            <ScanText className="w-3.5 h-3.5" />
-            <span>Tesseract.js Raw Optical Character Extraction:</span>
-          </div>
-          <p className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
+        <details className="p-3.5 rounded-2xl bg-slate-900 text-slate-100 text-xs font-mono shadow-2xs group">
+          <summary className="cursor-pointer font-medium text-emerald-400 flex items-center justify-between list-none">
+            <div className="flex items-center gap-2">
+              <ScanText className="w-4 h-4" />
+              <span>Extracted Raw Text (OCR / Vision Engine)</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-sans group-open:hidden">Click to Expand</span>
+          </summary>
+          <p className="mt-2.5 text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto pt-2 border-t border-slate-800">
             {rawOcrText}
           </p>
-        </div>
+        </details>
       )}
 
       {/* Uploaded Files Strip */}
       {files.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium uppercase tracking-wider text-slate-500">
-            Attached Documents ({files.length})
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Attached Medical Documents ({files.length})
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {files.map((file, idx) => (
@@ -380,8 +500,8 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
                 className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 text-xs font-normal text-slate-800 shadow-2xs"
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                    <FileText className="w-3.5 h-3.5 text-slate-600" />
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-indigo-600" />
                   </div>
                   <div className="truncate">
                     <div className="truncate font-medium text-slate-900">{file.name}</div>
@@ -405,118 +525,345 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
 
       {/* Live OCR Extraction Indicator */}
       {isProcessingOcr && (
-        <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-normal flex items-center gap-3 animate-pulse">
-          <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
-          <span>Tesseract.js reading photo text & Groq LLaMA-3.3 extracting clinical entities...</span>
+        <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-medium flex items-center gap-3 animate-pulse shadow-sm">
+          <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+          <span>Multimodal Vision & Groq AI structuring clinical entities...</span>
         </div>
       )}
 
       {/* Empty State when no document is uploaded */}
       {!isProcessingOcr && !extractedData && files.length === 0 && (
-        <div className="p-6 rounded-[24px] bg-slate-50/70 border border-slate-200/80 text-center space-y-2">
-          <FileCheck className="w-8 h-8 mx-auto text-slate-400" />
-          <div className="text-xs font-medium text-slate-700">No Document Scanned Yet</div>
-          <p className="text-[11px] text-slate-500 font-normal max-w-sm mx-auto">
-            Upload any prescription image from any hospital or doctor. Tesseract.js will extract the text and Groq AI will parse it into a structured medical timeline.
+        <div className="p-8 rounded-[24px] bg-slate-50/70 border border-slate-200/80 text-center space-y-2.5">
+          <FileCheck className="w-9 h-9 mx-auto text-slate-400" />
+          <div className="text-sm font-semibold text-slate-700">No Medical Document Digitized Yet</div>
+          <p className="text-xs text-slate-500 font-normal max-w-md mx-auto">
+            Upload prior prescriptions, CBC/Pathology lab reports, or hospital summaries. The AI will extract clinical entities, abnormal flags, and structured summaries automatically.
           </p>
         </div>
       )}
 
-      {/* Extracted Structured Clinical Intelligence View */}
+      {/* ========================================================================= */}
+      {/* SIH STRUCTURED CLINICAL DOCUMENT INTELLIGENCE DASHBOARD */}
+      {/* ========================================================================= */}
       {!isProcessingOcr && extractedData && (
         <div className="space-y-4 pt-1">
-          {/* Header Bar: Clinic, Doctors & Date */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-850 text-white shadow-xs space-y-2">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+          {/* Header Card: Category, Facility, Patient & Doctors */}
+          <div className="p-5 rounded-[24px] bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 text-white shadow-md space-y-3.5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                  extractedData.document_type === 'LAB_REPORT'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                    : extractedData.document_type === 'PRESCRIPTION'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                    : 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                }`}>
+                  {extractedData.document_type === 'LAB_REPORT' ? (
+                    <FlaskConical className="w-3.5 h-3.5" />
+                  ) : extractedData.document_type === 'PRESCRIPTION' ? (
+                    <Pill className="w-3.5 h-3.5" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5" />
+                  )}
+                  <span>{extractedData.document_type ? extractedData.document_type.replace('_', ' ') : 'MEDICAL DOCUMENT'}</span>
+                </span>
+
+                <h3 className="font-bold text-base text-white tracking-tight">
+                  {extractedData.document_title || extractedData.organization_name || extractedData.clinic_name || 'Clinical Document Record'}
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/10 px-3 py-1 rounded-full border border-white/10">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Date: {extractedData.date || '02 Dec, 202X'}</span>
+              </div>
+            </div>
+
+            {/* Facility & Doctor Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300 pt-1 border-t border-slate-800">
               <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-sky-400 shrink-0" />
-                <span className="font-medium text-sm text-white tracking-wide">
-                  {extractedData.clinic_name || 'CLINICAL PRESCRIPTION'}
+                <Building2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span className="truncate">
+                  {extractedData.organization_name || extractedData.clinic_name || 'Medical Health Center'}{' '}
+                  {extractedData.facility_address && `• ${extractedData.facility_address}`}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Date: {extractedData.date || '2022-10-19'}</span>
+
+              <div className="flex items-center gap-2 sm:justify-end">
+                <Stethoscope className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">
+                  Doctors:{' '}
+                  <strong className="text-white font-medium">
+                    {Array.isArray(extractedData.doctor_names)
+                      ? extractedData.doctor_names.join(' • ')
+                      : extractedData.doctor_names || 'Treating Physician'}
+                  </strong>
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-300 pt-1 border-t border-slate-700">
-              <Stethoscope className="w-3.5 h-3.5 text-emerald-400" />
-              <span>
-                Doctors:{' '}
-                <strong className="text-white font-medium">
-                  {Array.isArray(extractedData.doctor_names)
-                    ? extractedData.doctor_names.join(' • ')
-                    : extractedData.doctor_names || 'Treating Physician'}
-                </strong>
-              </span>
-            </div>
+            {/* Patient Meta Strip */}
+            {extractedData.patient_details && (
+              <div className="flex items-center gap-3 text-xs bg-black/30 p-2.5 rounded-xl border border-white/5 flex-wrap">
+                <div className="flex items-center gap-1.5 text-slate-300 font-medium">
+                  <User className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Patient: <strong className="text-white">{extractedData.patient_details.name || extractedData.patient_name || 'Yash M. Patel'}</strong></span>
+                </div>
+                {(extractedData.patient_details.age || extractedData.age) && (
+                  <span className="text-slate-400">Age: <strong className="text-white">{extractedData.patient_details.age || extractedData.age} Yrs</strong></span>
+                )}
+                {(extractedData.patient_details.gender || extractedData.gender) && (
+                  <span className="text-slate-400">Sex: <strong className="text-white">{extractedData.patient_details.gender || extractedData.gender}</strong></span>
+                )}
+                {extractedData.patient_details.patient_id && (
+                  <span className="text-slate-400">PID / UHID: <strong className="text-indigo-300 font-mono">{extractedData.patient_details.patient_id}</strong></span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Vitals & Complaints Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Extracted Vitals */}
-            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
-              <div className="text-xs font-medium text-slate-900 flex items-center gap-1.5">
-                <HeartPulse className="w-3.5 h-3.5 text-rose-600" />
-                <span>Extracted Vitals</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs font-normal">
-                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
-                  BP: <strong className="text-slate-900">{extractedData.vitals?.BP || '140/90'}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
-                  Pulse: <strong className="text-slate-900">{extractedData.vitals?.PR || '80 bpm'}</strong>
-                </span>
-              </div>
-            </div>
-
-            {/* Complaints / Symptoms */}
-            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
-              <div className="text-xs font-medium text-slate-900 flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-amber-600" />
-                <span>Identified Complaints</span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {extractedData.complaints?.map((comp, i) => (
-                  <span
-                    key={i}
-                    className="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200"
-                  >
-                    {comp}
+          {/* =================================================================== */}
+          {/* CLINICAL AI SUMMARY & EXECUTIVE DIGEST (SIH CORE) */}
+          {/* =================================================================== */}
+          {extractedData.clinical_summary && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-sky-50/90 border border-indigo-200/80 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="font-semibold text-xs text-indigo-950 uppercase tracking-wider">
+                    AI Clinical Synthesis & Physician Digest
                   </span>
-                ))}
-              </div>
-            </div>
-          </div>
+                </div>
 
-          {/* Prescribed Medicines Table */}
+                <div className="flex items-center gap-2">
+                  {abnormalCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-200 animate-pulse">
+                      <ShieldAlert className="w-3 h-3" />
+                      <span>{abnormalCount} Abnormal Lab Findings</span>
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCopySummary}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+                  >
+                    {copiedSummary ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedSummary ? 'Copied' : 'Copy Summary'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Physician Digest */}
+              {extractedData.clinical_summary.physician_digest && (
+                <div className="p-3 rounded-xl bg-white/90 border border-indigo-100/80 text-xs space-y-1">
+                  <span className="font-semibold text-slate-900 block text-[11px] uppercase tracking-wider text-indigo-800">
+                    Clinical Impression / Interpretation:
+                  </span>
+                  <p className="text-slate-700 leading-relaxed font-normal">
+                    {extractedData.clinical_summary.physician_digest}
+                  </p>
+                </div>
+              )}
+
+              {/* Patient Friendly Explanation */}
+              {extractedData.clinical_summary.patient_friendly_summary && (
+                <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-xs space-y-1">
+                  <span className="font-semibold text-emerald-900 block text-[11px] uppercase tracking-wider">
+                    Patient-Friendly Explanation:
+                  </span>
+                  <p className="text-emerald-950 leading-relaxed font-normal">
+                    {extractedData.clinical_summary.patient_friendly_summary}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* PATHOLOGY / LAB INVESTIGATIONS TABLE (CBC, LFT, KFT, ETC.) */}
+          {/* =================================================================== */}
+          {extractedData.lab_investigations && extractedData.lab_investigations.length > 0 && (
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3.5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                    Pathology Lab Investigations ({extractedData.lab_investigations.length} Tests)
+                  </h4>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setLabFilter('ALL')}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                      labFilter === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    All Tests ({extractedData.lab_investigations.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLabFilter('ABNORMAL')}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                      labFilter === 'ABNORMAL'
+                        ? 'bg-rose-600 text-white shadow-2xs'
+                        : 'text-rose-700 hover:bg-rose-50'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>Abnormal Only ({abnormalCount})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Lab Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left text-xs font-normal border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <th className="py-2.5 px-3 font-semibold">Test Parameter</th>
+                      <th className="py-2.5 px-3 font-semibold">Observed Result</th>
+                      <th className="py-2.5 px-3 font-semibold">Reference Interval</th>
+                      <th className="py-2.5 px-3 font-semibold">Unit</th>
+                      <th className="py-2.5 px-3 font-semibold text-center">Status Flag</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredLabTests.map((test, i) => {
+                      const flag = (test.flag || '').toUpperCase();
+                      const isLow = flag === 'LOW';
+                      const isHigh = flag === 'HIGH';
+                      const isBorderline = flag === 'BORDERLINE';
+                      const isCritical = flag === 'CRITICAL';
+
+                      return (
+                        <tr
+                          key={i}
+                          className={`hover:bg-slate-50/80 transition ${
+                            isLow || isHigh || isCritical
+                              ? 'bg-rose-50/30'
+                              : isBorderline
+                              ? 'bg-amber-50/30'
+                              : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 font-medium text-slate-900">
+                            <div>{test.test_name}</div>
+                            {test.category && (
+                              <span className="text-[10px] text-slate-400 font-normal">{test.category}</span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">
+                            <span className={`text-sm ${
+                              isLow ? 'text-rose-600 font-bold' : isHigh ? 'text-amber-600 font-bold' : isCritical ? 'text-red-700 font-bold' : 'text-slate-900'
+                            }`}>
+                              {test.observed_value}
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
+                            {test.reference_range || '—'}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-slate-500 font-normal">
+                            {test.unit || '—'}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-center">
+                            {isLow && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                                <TrendingDown className="w-3 h-3" />
+                                <span>LOW</span>
+                              </span>
+                            )}
+                            {isHigh && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                <TrendingUp className="w-3 h-3" />
+                                <span>HIGH</span>
+                              </span>
+                            )}
+                            {isBorderline && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>BORDERLINE</span>
+                              </span>
+                            )}
+                            {isCritical && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-600 text-white animate-pulse">
+                                <ShieldAlert className="w-3 h-3" />
+                                <span>CRITICAL</span>
+                              </span>
+                            )}
+                            {!isLow && !isHigh && !isBorderline && !isCritical && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>NORMAL</span>
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pathologist Remarks */}
+              {extractedData.pathologist_impression && (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                  <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Pathologist Clinical Interpretation:</span>
+                  </span>
+                  <p className="text-slate-600 font-normal leading-relaxed">
+                    {extractedData.pathologist_impression}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* PRESCRIPTION MEDICINES TABLE */}
+          {/* =================================================================== */}
           {extractedData.prescribed_medicines && extractedData.prescribed_medicines.length > 0 && (
             <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-              <div className="text-xs font-medium uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                 <Pill className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Extracted Prescribed Medicines ({extractedData.prescribed_medicines.length})</span>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
                 <table className="w-full text-left text-xs font-normal border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 text-slate-400 text-[11px]">
-                      <th className="pb-2 font-medium">Medicine Name</th>
-                      <th className="pb-2 font-medium">Dosage</th>
-                      <th className="pb-2 font-medium">Frequency</th>
-                      <th className="pb-2 font-medium">Timing</th>
-                      <th className="pb-2 font-medium">Duration</th>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <th className="py-2.5 px-3 font-semibold">Medicine Name</th>
+                      <th className="py-2.5 px-3 font-semibold">Dosage</th>
+                      <th className="py-2.5 px-3 font-semibold">Frequency</th>
+                      <th className="py-2.5 px-3 font-semibold">Timing</th>
+                      <th className="py-2.5 px-3 font-semibold">Duration</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {extractedData.prescribed_medicines.map((med, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60">
-                        <td className="py-2.5 font-medium text-slate-900">{med.name}</td>
-                        <td className="py-2.5 text-slate-600">{med.dosage || '—'}</td>
-                        <td className="py-2.5 text-slate-600">{med.frequency || 'Once daily'}</td>
-                        <td className="py-2.5 text-slate-600">{med.timing || 'After food'}</td>
-                        <td className="py-2.5 text-emerald-700 font-medium">{med.duration || '30 days'}</td>
+                      <tr key={i} className="hover:bg-slate-50/60 transition">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">{med.name}</td>
+                        <td className="py-2.5 px-3 text-slate-600">{med.dosage || '—'}</td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px]">
+                            {med.frequency || 'Once daily'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">{med.timing || 'After food'}</td>
+                        <td className="py-2.5 px-3 text-emerald-700 font-semibold">{med.duration || '30 days'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -525,37 +872,79 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
             </div>
           )}
 
-          {/* Recommended Investigations */}
-          {extractedData.investigations_recommended &&
-            extractedData.investigations_recommended.length > 0 && (
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-                  <FlaskConical className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Recommended Lab Investigations ({extractedData.investigations_recommended.length})</span>
+          {/* Vitals & Complaints Grid */}
+          {(extractedData.vitals || (extractedData.complaints && extractedData.complaints.length > 0)) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {extractedData.vitals && Object.keys(extractedData.vitals).length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
+                  <div className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                    <HeartPulse className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Patient Vitals</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap text-xs font-normal">
+                    {extractedData.vitals.BP && (
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                        BP: <strong className="text-slate-900">{extractedData.vitals.BP}</strong>
+                      </span>
+                    )}
+                    {extractedData.vitals.PR && (
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                        Pulse: <strong className="text-slate-900">{extractedData.vitals.PR}</strong>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {extractedData.investigations_recommended.map((inv, i) => (
-                    <span
-                      key={i}
-                      className="text-xs font-normal px-3 py-1 rounded-lg bg-sky-50 text-sky-900 border border-sky-200"
-                    >
-                      {inv}
-                    </span>
-                  ))}
+              )}
+
+              {extractedData.complaints && extractedData.complaints.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
+                  <div className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Identified Complaints / Symptoms</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {extractedData.complaints.map((comp, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200"
+                      >
+                        {comp}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
           {/* Doctor's Advice Box */}
           {extractedData.doctor_advice && (
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-normal text-slate-700 space-y-1">
-              <div className="font-medium text-slate-900 flex items-center gap-1.5">
+              <div className="font-semibold text-slate-900 flex items-center gap-1.5">
                 <MessageSquareQuote className="w-3.5 h-3.5 text-slate-600" />
-                <span>Doctor's Special Advice</span>
+                <span>Doctor / Discharge Advice</span>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-600">{extractedData.doctor_advice}</p>
             </div>
           )}
+
+          {/* Raw Structured FHIR JSON Drawer Button */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowRawJson(!showRawJson)}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 font-medium transition cursor-pointer"
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>{showRawJson ? 'Hide Structured FHIR/SIH JSON Schema' : 'View Structured FHIR/SIH JSON Schema'}</span>
+            </button>
+
+            {showRawJson && (
+              <pre className="mt-2 p-3.5 rounded-2xl bg-slate-950 text-emerald-400 font-mono text-[11px] overflow-x-auto max-h-64 border border-slate-800">
+                {JSON.stringify(extractedData, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>

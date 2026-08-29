@@ -1,0 +1,290 @@
+{
+  "name": "MediKiosk Workflow 4 - Smart AI Assistant (MongoDB Tools & Contextual Safety)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medikiosk-smart-assistant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w4-node-webhook",
+      "name": "Receive Smart Assistant Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "medikiosk-smart-assistant-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Boolean($json.body && ($json.body.message || $json.body.query)) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "w4-node-validate-req",
+      "name": "Validate Assistant Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 400
+        },
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"Message text is required.\",\n  \"intent\": \"INVALID_REQUEST\",\n  \"urgent\": false,\n  \"requires_doctor\": false\n}"
+      },
+      "id": "w4-node-bad-request",
+      "name": "Return Bad Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [420, 520]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "user_message",
+              "value": "={{ ($json.body.message || $json.body.query || '').trim() }}"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.body.language || 'English' }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_context?.user_id || $json.body.user_id || 'guest' }}"
+            },
+            {
+              "name": "role",
+              "value": "={{ $json.body.user_context?.role || $json.body.role || 'PATIENT' }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.user_context?.session_id || $json.body.session_id || 'assistant-session' }}"
+            },
+            {
+              "name": "injected_tool_data",
+              "value": "={{ JSON.stringify($json.body.tool_data || {}) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w4-node-prepare-context",
+      "name": "Normalize Context & Safe Auth",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User Question: {{ $json.user_message }}\nLanguage: {{ $json.language }}\nUser Role: {{ $json.role }}\nVerified Database Tool Data: {{ $json.injected_tool_data }}",
+        "options": {
+          "systemMessage": "=You are the Smart AI Assistant for MediKiosk (Team NextGen) conducting an intelligent, empathetic conversation in {{ $('Normalize Context & Safe Auth').item.json.language }}.\n\nCLINICAL & SAFETY MANDATES:\n1. ABSOLUTE MEDICAL SAFETY: You are an informational assistant, NOT a doctor. NEVER diagnose diseases (do NOT say 'You have X condition'). NEVER prescribe drug dosages independently.\n2. NO HALLUCINATION: Answer medicine questions ONLY using the verified MongoDB records provided. If no record is found, state: 'I do not have verified information for that in the current knowledge base. Please consult a qualified physician or pharmacist.'\n3. CONTEXTUAL EMERGENCY ESCALATION: If the user describes an acute emergency (crushing chest pain with breathlessness/sweating, sudden stroke signs, severe hemorrhage), advise immediate emergency care (108 / 102) and do not give routine home advice.\n4. WEBSITE & FEATURE HELP: Explain MediKiosk features (Kiosk Voice Intake, Document OCR, Live Queue Tracking, Doctor Portal) clearly based on role.\n5. CONCISE & SPOKEN-FRIENDLY: Keep responses warm, helpful, structured, and concise (40-60 words), strictly in {{ $('Normalize Context & Safe Auth').item.json.language }} script."
+        }
+      },
+      "id": "w4-node-ai-agent",
+      "name": "Smart Assistant AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 600,
+          "temperature": 0.3
+        }
+      },
+      "id": "w4-node-groq-model",
+      "name": "Groq LLM Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [720, 520],
+      "credentials": {
+        "groqApi": {
+          "id": "X30B0SlnyxdM9O0l",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalize Context & Safe Auth').item.json.session_id }}",
+        "contextWindowLength": 4
+      },
+      "id": "w4-node-memory",
+      "name": "Assistant Memory Window",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [880, 520]
+    },
+    {
+      "parameters": {
+        "collection": "assistant_medicines",
+        "options": {}
+      },
+      "id": "w4-node-tool-medicines",
+      "name": "MongoDB Medicine Tool",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.4,
+      "position": [1060, 520],
+      "credentials": {
+        "mongoDb": {
+          "id": "oddtTzjqoMZWhS13",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "assistant_faqs",
+        "options": {}
+      },
+      "id": "w4-node-tool-faqs",
+      "name": "MongoDB FAQs & Support Tool",
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.4,
+      "position": [1220, 520],
+      "credentials": {
+        "mongoDb": {
+          "id": "oddtTzjqoMZWhS13",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"{{ ($json.output || $json.text || '').replace(/\\n/g, '\\\\n').replace(/\"/g, '\\\\\"').trim() }}\",\n  \"intent\": \"SMART_ASSISTANT_RESPONSE\",\n  \"source\": \"n8n_agent_mongodb\",\n  \"urgent\": false,\n  \"requires_doctor\": false,\n  \"quick_actions\": [\"Website Help\", \"Medicine Helper\", \"Patient Intake\", \"Contact Support\"]\n}"
+      },
+      "id": "w4-node-respond-success",
+      "name": "Return Smart Assistant Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Smart Assistant Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Assistant Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Assistant Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Context & Safe Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Bad Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Context & Safe Auth": {
+      "main": [
+        [
+          {
+            "node": "Smart Assistant AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Assistant AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Return Smart Assistant Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Smart Assistant AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assistant Memory Window": {
+      "ai_memory": [
+        [
+          {
+            "node": "Smart Assistant AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Medicine Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Smart Assistant AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB FAQs & Support Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Smart Assistant AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "assistant-v1-production",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "medikiosk-assistant-instance"
+  },
+  "id": "MediKioskWorkflow4Assistant",
+  "tags": []
+}
