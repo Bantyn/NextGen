@@ -45,7 +45,7 @@ export const SmartAssistantPanel = ({
   return (
     <div
       id="smart-assistant-panel"
-      className="fixed bottom-24 right-4 sm:right-6 z-50 w-[94vw] sm:w-[440px] max-h-[82vh] h-[640px] flex flex-col rounded-[32px] bg-slate-50/95 border border-slate-200/90 shadow-2xl backdrop-blur-2xl overflow-hidden transition-all duration-300 animate-slide-up"
+      className="fixed bottom-24 right-4 sm:right-6 z-50 w-[94vw] sm:w-[440px] max-h-[82vh] h-[640px] flex flex-col rounded-[32px] bg-slate-50/95 border border-slate-200/90 shadow-lg backdrop-blur-2xl overflow-hidden transition-all duration-300 animate-slide-up"
     >
       {/* 1. HEADER (HomeView Navbar / Hero Badge Style) */}
       <div className="px-5 py-4 bg-white/95 border-b border-slate-200/80 backdrop-blur-md flex items-center justify-between">
@@ -58,11 +58,11 @@ export const SmartAssistantPanel = ({
           <div className="text-left">
             <div className="flex items-center gap-1.5">
               <h3 className="text-sm font-normal text-slate-950 tracking-tight">Smart AI Assistant</h3>
-              <Sparkles className="w-3 h-3 text-amber-400" />
+              {/* <Sparkles className="w-3 h-3 text-amber-400" /> */}
             </div>
             <div className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-normal mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>Verified MongoDB Knowledge</span>
+              <span>Verified Knowledge</span>
             </div>
           </div>
         </div>
