@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import path from 'path';
 import documentRoutes from './routes/documentRoutes.js';
+import intakeRoutes from './routes/intakeRoutes.js';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use('/uploads', express.static(path.resolve('uploads')));
 
 // Routes
 app.use('/api/v1/documents', documentRoutes);
+app.use('/api/v1/intake', intakeRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({

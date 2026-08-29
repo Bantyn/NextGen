@@ -171,6 +171,11 @@ export const PatientIntakeView = () => {
               sessionId={patientData.sessionId}
               patientId={patientData.phone}
               defaultLanguage={patientData.preferredLanguage}
+              opdMode={patientData.opdMode}
+              onClinicalStateUpdated={(state) => {
+                sessionStorage.setItem('medikiosk_clinical_state', JSON.stringify(state));
+              }}
+              onFinishIntake={handleFinishIntake}
             />
           </div>
         )}

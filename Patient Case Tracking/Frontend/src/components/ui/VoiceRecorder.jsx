@@ -20,24 +20,23 @@ import {
   Send,
   RefreshCw,
   Play,
+  ShieldAlert,
+  ArrowRight,
+  ClipboardList,
 } from "lucide-react";
 import { VoiceVisualizer3D } from "../3d/VoiceVisualizer3D";
-import { CLINICAL_DISEASE_FRAMEWORKS } from "../../constants/clinicalFrameworks";
-import { AYUSH_REMEDIES } from "../../constants/ayushRemedies";
+import {
+  INITIAL_CLINICAL_STATE,
+  processPatientClinicalResponse,
+} from "../../services/clinicalConversationEngine";
 
 // ============================================================================
 // MediKiosk TTS Configuration
 // ============================================================================
-const N8N_AI_WEBHOOK_URL =
-  "https://bantytest.app.n8n.cloud/webhook/medikiosk-case-taking";
 const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
 const FISH_AUDIO_MODEL = "fish-audio/s2.1-pro-free:free";
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 
-// Note: For hackathon development/prototype, read from env with fallback.
-// In production, proxy this call through a backend endpoint (e.g. /api/tts).
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-
-// Fixed Studio-Grade Voice Model ID for MediKiosk Assistant
 export const MEDIKIOSK_FISH_VOICE_ID =
   import.meta.env.VITE_MEDIKIOSK_FISH_VOICE_ID ||
   "7f92f8afb8ec43bf81429cc1c9199cb1";
@@ -59,12 +58,10 @@ function cleanAndTuneSpeech(raw) {
   if (!raw) return "";
   let text = String(raw);
 
-  // Strip <think> reasoning tags and code formatting
   text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
   text = text.replace(/```[\s\S]*?```/g, "");
   text = text.replace(/[*_#`]/g, "");
 
-  // Add natural pauses after sentences and commas for human-like breathing rhythm
   text = text.replace(/([.!?])\s*/g, "$1 ");
   text = text.replace(/([,;])\s*/g, "$1 ");
 
@@ -83,38 +80,37 @@ function pcmToWavBlob(pcmBuffer, sampleRate = 44100) {
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
-  // RIFF chunk
   view.setUint32(0, 0x52494646, false); // "RIFF"
   view.setUint32(4, 36 + dataSize, true);
   view.setUint32(8, 0x57415645, false); // "WAVE"
 
-  // fmt chunk
   view.setUint32(12, 0x666d7420, false); // "fmt "
-  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  view.setUint32(20, 1, true); // AudioFormat (1 for PCM)
+  view.setUint32(16, 16, true);
+  view.setUint32(20, 1, true); // PCM
   view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, byteRate, true);
   view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true); // BitsPerSample
+  view.setUint16(34, 16, true);
 
-  // data chunk
   view.setUint32(36, 0x64617461, false); // "data"
   view.setUint32(40, dataSize, true);
 
-  // Copy PCM data
   new Uint8Array(buffer, 44).set(new Uint8Array(pcmBuffer));
   return new Blob([buffer], { type: "audio/wav" });
 }
 
 /**
- * VoiceRecorder Component — Unified Clinical Voice Engine with Fish Audio & Web Speech Fallback
+ * VoiceRecorder Component — Unified Adaptive Clinical Voice & Touch Engine
  */
 export const VoiceRecorder = ({
   sessionId = "DEMO_GUJARATI_SPEECH_001",
   patientId = "DEMO_PATIENT_001",
   defaultLanguage = "gu-IN",
+  opdMode = "GENERAL",
   onMessageSent,
+  onClinicalStateUpdated,
+  onFinishIntake,
 }) => {
   const [selectedLanguage, setSelectedLanguage] = useState(defaultLanguage);
   const [isCallActive, setIsCallActive] = useState(false);
@@ -123,14 +119,15 @@ export const VoiceRecorder = ({
   const [apiError, setApiError] = useState(null);
   const [ttsSource, setTtsSource] = useState("OpenRouter Neural");
 
-  // Clinical state tracking
+  // Dynamic Clinical State Memory
+  const [clinicalState, setClinicalState] = useState(INITIAL_CLINICAL_STATE);
   const [redFlagAlert, setRedFlagAlert] = useState(null);
-  const [activeCategory, setActiveCategory] = useState(null);
-  const currentStepRef = useRef(0);
-  const categoryRef = useRef(null);
+  const [sessionStatus, setSessionStatus] = useState("IN_PROGRESS");
+  const [historyCompleted, setHistoryCompleted] = useState(false);
+
   const availableVoicesRef = useRef([]);
 
-  // Dynamic quick chips
+  // Initial multilingual dynamic chips
   const [dynamicChips, setDynamicChips] = useState([
     "છાતીમાં દુખાવો થાય છે",
     "તાવ અને ધ્રુજારી આવે છે",
@@ -143,7 +140,12 @@ export const VoiceRecorder = ({
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "I am your Ai Clinical Voice Assistant ! How can i help you today ?",
+      text:
+        defaultLanguage === "gu-IN"
+          ? "નમસ્તે! હું તમારી AI ક્લિનિકલ સહાયક છું. તમને આજે કઈ તકલીફ થઈ રહી છે?"
+          : defaultLanguage === "hi-IN"
+          ? "नमस्ते! मैं आपकी AI क्लिनिकल सहायक हूँ। आपको आज क्या परेशानी हो रही है?"
+          : "Hello! I am your AI Clinical Assistant. What symptoms are you experiencing today?",
       time: "Just now",
     },
   ]);
@@ -155,6 +157,7 @@ export const VoiceRecorder = ({
   const isSpeakingTTSRef = useRef(false);
   const apiLoadingRef = useRef(false);
   const selectedLanguageRef = useRef(selectedLanguage);
+  const clinicalStateRef = useRef(clinicalState);
   const currentAudioRef = useRef(null);
   const silenceTimerRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -164,6 +167,7 @@ export const VoiceRecorder = ({
   isSpeakingTTSRef.current = isSpeakingTTS;
   apiLoadingRef.current = apiLoading;
   selectedLanguageRef.current = selectedLanguage;
+  clinicalStateRef.current = clinicalState;
 
   const {
     transcript,
@@ -172,7 +176,7 @@ export const VoiceRecorder = ({
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
 
-  // Preload and cache browser female voices for fallback
+  // Preload and cache browser voices for fallback
   useEffect(() => {
     const loadVoices = () => {
       if ("speechSynthesis" in window) {
@@ -184,6 +188,61 @@ export const VoiceRecorder = ({
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
   }, []);
+
+  // Update initial chip language on change
+  useEffect(() => {
+    if (messages.length === 1) {
+      if (selectedLanguage === "hi-IN") {
+        setDynamicChips([
+          "सीने में दर्द हो रहा है",
+          "बुखार और कंपकंपी है",
+          "खांसी और कफ है",
+          "पेट में दर्द है",
+          "सिर में तेज दर्द है",
+          "जोड़ों और घुटनों में दर्द",
+        ]);
+        setMessages([
+          {
+            role: "assistant",
+            text: "नमस्ते! मैं आपकी AI क्लिनिकल सहायक हूँ। आपको आज क्या परेशानी हो रही है?",
+            time: "Just now",
+          },
+        ]);
+      } else if (selectedLanguage === "en-IN") {
+        setDynamicChips([
+          "I have chest pain",
+          "I have fever and chills",
+          "Cough and cold",
+          "Stomach pain",
+          "Severe headache",
+          "Joint and body aches",
+        ]);
+        setMessages([
+          {
+            role: "assistant",
+            text: "Hello! I am your AI Clinical Assistant. What symptoms are you experiencing today?",
+            time: "Just now",
+          },
+        ]);
+      } else {
+        setDynamicChips([
+          "છાતીમાં દુખાવો થાય છે",
+          "તાવ અને ધ્રુજારી આવે છે",
+          "ખાંસી અને કફ છે",
+          "પેટમાં દુખાવો થાય છે",
+          "માથું ખૂબ દુખે છે",
+          "સાંધા અને ઘૂંટણમાં દુખાવો",
+        ]);
+        setMessages([
+          {
+            role: "assistant",
+            text: "નમસ્તે! હું તમારી AI ક્લિનિકલ સહાયક છું. તમને આજે કઈ તકલીફ થઈ રહી છે?",
+            time: "Just now",
+          },
+        ]);
+      }
+    }
+  }, [selectedLanguage]);
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
@@ -205,7 +264,14 @@ export const VoiceRecorder = ({
 
   // 1. Keepalive Watchdog: If call is active, keep mic listening
   useEffect(() => {
-    if (!isCallActive || isSpeakingTTS || apiLoading) return;
+    if (
+      !isCallActive ||
+      isSpeakingTTS ||
+      apiLoading ||
+      sessionStatus === "URGENT_REVIEW_REQUIRED" ||
+      historyCompleted
+    )
+      return;
 
     if (!listening) {
       const keepAliveTimeout = setTimeout(() => {
@@ -227,11 +293,18 @@ export const VoiceRecorder = ({
 
       return () => clearTimeout(keepAliveTimeout);
     }
-  }, [listening, isCallActive, isSpeakingTTS, apiLoading]);
+  }, [listening, isCallActive, isSpeakingTTS, apiLoading, sessionStatus, historyCompleted]);
 
   // 2. Silence Detection: Patient speaks -> pauses 1.8s -> Auto submit
   useEffect(() => {
-    if (!isCallActive || isSpeakingTTS || apiLoading) return;
+    if (
+      !isCallActive ||
+      isSpeakingTTS ||
+      apiLoading ||
+      sessionStatus === "URGENT_REVIEW_REQUIRED" ||
+      historyCompleted
+    )
+      return;
 
     if (transcript.trim()) {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -247,7 +320,7 @@ export const VoiceRecorder = ({
         }
       }, 1800);
     }
-  }, [transcript, isCallActive, isSpeakingTTS, apiLoading]);
+  }, [transcript, isCallActive, isSpeakingTTS, apiLoading, sessionStatus, historyCompleted]);
 
   const stopAudio = useCallback(() => {
     if (currentAudioRef.current) {
@@ -269,7 +342,11 @@ export const VoiceRecorder = ({
   // Safe resume mic listening
   const resumeListeningSafe = useCallback(() => {
     stopAudio();
-    if (isCallActiveRef.current) {
+    if (
+      isCallActiveRef.current &&
+      sessionStatus !== "URGENT_REVIEW_REQUIRED" &&
+      !historyCompleted
+    ) {
       resetTranscript();
       setTimeout(() => {
         if (
@@ -288,9 +365,9 @@ export const VoiceRecorder = ({
         }
       }, 250);
     }
-  }, [resetTranscript, stopAudio]);
+  }, [resetTranscript, stopAudio, sessionStatus, historyCompleted]);
 
-  // Web Speech Synthesis Fallback with Consistent Female Tone
+  // Web Speech Synthesis Fallback
   const fallbackTTS = useCallback(
     (text) => {
       const cleanText = cleanAndTuneSpeech(text);
@@ -359,8 +436,7 @@ export const VoiceRecorder = ({
   );
 
   /**
-   * Play Neural Speech via OpenRouter Fish Audio TTS Engine
-   * Strictly uses fixed MEDIKIOSK_FISH_VOICE_ID and full streaming chunk accumulator.
+   * Play Neural Speech via OpenRouter Fish Audio TTS Engine with Web Speech Fallback
    */
   const speakAI = useCallback(
     async (text) => {
@@ -375,15 +451,19 @@ export const VoiceRecorder = ({
       setIsSpeakingTTS(true);
       isSpeakingTTSRef.current = true;
 
-      // Timeout safety watchdog
       if (fallbackSpeechTimerRef.current)
         clearTimeout(fallbackSpeechTimerRef.current);
       fallbackSpeechTimerRef.current = setTimeout(() => {
         if (isSpeakingTTSRef.current) {
-          console.warn("TTS safety timeout reached, resuming microphone");
+          console.warn("TTS safety watchdog timer reached, resuming microphone");
           resumeListeningSafe();
         }
       }, 16000);
+
+      if (!OPENROUTER_API_KEY) {
+        fallbackTTS(tunedText);
+        return;
+      }
 
       try {
         const payload = {
@@ -405,35 +485,20 @@ export const VoiceRecorder = ({
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error(
-            `[MediKiosk TTS Error] OpenRouter returned status ${response.status}:`,
-            errorText,
-          );
-          throw new Error(
-            `OpenRouter TTS failed (HTTP ${response.status}): ${errorText}`,
-          );
+          throw new Error(`OpenRouter TTS status ${response.status}`);
         }
 
         setTtsSource("OpenRouter Fish Audio");
-
-        if (!response.body) {
-          throw new Error("Response body is empty or stream unavailable");
-        }
 
         const reader = response.body.getReader();
         const chunks = [];
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (value && value.length > 0) {
-            chunks.push(value);
-          }
+          if (value && value.length > 0) chunks.push(value);
         }
 
-        if (chunks.length === 0) {
-          throw new Error("Empty audio chunks received from OpenRouter TTS");
-        }
+        if (chunks.length === 0) throw new Error("Empty audio chunks");
 
         const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
         const buffer = new Uint8Array(totalLength);
@@ -466,142 +531,21 @@ export const VoiceRecorder = ({
         };
 
         audio.onerror = (e) => {
-          console.warn(
-            "[MediKiosk TTS] Audio element playback error, triggering Web Speech fallback:",
-            e,
-          );
           URL.revokeObjectURL(audioUrl);
           fallbackTTS(tunedText);
         };
 
         await audio.play();
       } catch (err) {
-        console.warn(
-          "[MediKiosk TTS] OpenRouter speech generation failed, gracefully using Web Speech fallback:",
-          err,
-        );
         fallbackTTS(tunedText);
       }
     },
     [fallbackTTS, resumeListeningSafe, stopAudio],
   );
 
-  // Natural Adaptive Clinical Question Engine: Never repeats answered questions
-  const getNextAdaptiveQuestion = (patientAnswerText, turnNumber) => {
-    const textLower = patientAnswerText.toLowerCase();
-    let currentCat = categoryRef.current;
-
-    // Detect disease category on early turns
-    if (!currentCat) {
-      if (
-        textLower.includes("chest") ||
-        patientAnswerText.includes("છાતી") ||
-        patientAnswerText.includes("सीना")
-      ) {
-        currentCat = "CHEST_PAIN";
-      } else if (
-        textLower.includes("fever") ||
-        patientAnswerText.includes("તાવ") ||
-        patientAnswerText.includes("બુખાર")
-      ) {
-        currentCat = "FEVER";
-      } else if (
-        textLower.includes("cough") ||
-        textLower.includes("cold") ||
-        patientAnswerText.includes("ઉધરસ") ||
-        patientAnswerText.includes("ખાંસી") ||
-        patientAnswerText.includes("શરદી") ||
-        patientAnswerText.includes("કફ")
-      ) {
-        currentCat = "COUGH_COLD";
-      } else if (
-        textLower.includes("head") ||
-        patientAnswerText.includes("માથું") ||
-        patientAnswerText.includes("માથાનો") ||
-        patientAnswerText.includes("सिर")
-      ) {
-        currentCat = "HEADACHE";
-      } else if (
-        textLower.includes("stomach") ||
-        patientAnswerText.includes("પેટ") ||
-        patientAnswerText.includes("ઝાડા") ||
-        patientAnswerText.includes("દુખાવો")
-      ) {
-        currentCat = "STOMACH_PAIN";
-      } else if (
-        textLower.includes("joint") ||
-        textLower.includes("knee") ||
-        patientAnswerText.includes("સાંધા") ||
-        patientAnswerText.includes("ઘૂંટણ")
-      ) {
-        currentCat = "BODY_JOINT_PAIN";
-      } else if (
-        textLower.includes("skin") ||
-        patientAnswerText.includes("ચામડી") ||
-        patientAnswerText.includes("ખંજવાળ")
-      ) {
-        currentCat = "SKIN_PROBLEM";
-      } else {
-        currentCat = "OTHER";
-      }
-      categoryRef.current = currentCat;
-      setActiveCategory(currentCat);
-    }
-
-    const framework =
-      CLINICAL_DISEASE_FRAMEWORKS[currentCat] ||
-      CLINICAL_DISEASE_FRAMEWORKS["OTHER"];
-    const steps = framework.steps || [];
-    const stepIdx = currentStepRef.current;
-    const targetStep = steps[stepIdx % steps.length];
-    const langKey = selectedLanguageRef.current || "gu-IN";
-
-    let nextQ =
-      targetStep?.question?.[langKey] ||
-      targetStep?.question?.["gu-IN"] ||
-      "શું તમને આ સાથે અન્ય કોઈ તકલીફ છે?";
-    let chips =
-      targetStep?.quick_chips?.[langKey] ||
-      targetStep?.quick_chips?.["gu-IN"] ||
-      [];
-
-    // Progressive turn-taking with natural female conversational phrasing
-    if (turnNumber === 1) {
-      if (currentCat === "STOMACH_PAIN") {
-        nextQ = `હું સમજી શકું છું... વરિયાળીનું નવશેકું પાણી પીવો અને આરામ કરો. ${nextQ}`;
-      } else if (currentCat === "COUGH_COLD") {
-        nextQ = `ચિંતા કરશો નહીં... ગરમ પાણીમાં તુલસી-આદુનો ઉકાળો પીવો. ${nextQ}`;
-      } else if (currentCat === "HEADACHE") {
-        nextQ = `શાંત રૂમમાં થોડો આરામ કરો અને પાણી પીવો. ${nextQ}`;
-      }
-    } else {
-      if (currentCat === "STOMACH_PAIN") {
-        if (stepIdx === 1)
-          nextQ = `બરાબર. શું જમ્યા પછી દુખાવો વધે છે, કે ભૂખ્યા પેટે વધારે દુખે છે?`;
-        else if (stepIdx === 2)
-          nextQ = `સમજાયું. ઝાડા, કબજિયાત કે ઉલ્ટી જેવી કોઈ તકલીફ છે?`;
-        else
-          nextQ = `૧ થી ૧૦ ના સ્કેલ પર દુખાવો કેટલો તીવ્ર છે? આ તમામ વિગતો ડૉક્ટર સમક્ષ નોંધાઈ ગઈ છે.`;
-      } else if (currentCat === "CHEST_PAIN") {
-        if (stepIdx === 1)
-          nextQ = `દુખાવો કેવો લાગે છે? ભારે દબાણ જેવો, કે બળતરા જેવો?`;
-        else if (stepIdx === 2)
-          nextQ = `શું આ દુખાવો ડાબા હાથ કે પીઠ તરફ ફેલાય છે? શ્વાસ ચડે છે?`;
-        else nextQ = `૧ થી ૧૦ ના સ્કેલ પર દુખાવો કેટલો તીવ્ર છે?`;
-      } else if (currentCat === "COUGH_COLD") {
-        if (stepIdx === 1)
-          nextQ = `ઉધરસમાં ક્યારેય લોહી કે લાલ રંગનો કફ દેખાયો છે?`;
-        else if (stepIdx === 2)
-          nextQ = `શ્વાસ લેતી વખતે સીટી જેવો અવાજ આવે છે, કે શ્વાસ ચડે છે?`;
-        else nextQ = `તાવ પણ આવે છે, કે ગળામાં બળતરા થાય છે?`;
-      }
-    }
-
-    currentStepRef.current += 1;
-    return { question: nextQ, chips: chips };
-  };
-
-  // Hands-Free Auto-Submit when Patient pauses speech
+  /**
+   * Unified Hands-Free Auto-Submit (Voice, Text, and Touch Chips)
+   */
   const handleAutoSubmit = async (patientAnswerText) => {
     if (!patientAnswerText || apiLoadingRef.current) return;
 
@@ -609,7 +553,7 @@ export const VoiceRecorder = ({
     SpeechRecognition.stopListening();
     resetTranscript();
 
-    // 1. Add patient answer to conversation stream
+    // 1. Add patient answer to chat stream
     const userMsg = {
       role: "patient",
       text: patientAnswerText,
@@ -626,95 +570,102 @@ export const VoiceRecorder = ({
     apiLoadingRef.current = true;
     setApiError(null);
 
-    const langName =
-      LANGUAGE_MAP[selectedLanguageRef.current]?.name || "Gujarati";
-
-    // Compute next step locally
-    const turnCount = updatedMessages.filter(
-      (m) => m.role === "patient",
-    ).length;
-    const localAdaptive = getNextAdaptiveQuestion(patientAnswerText, turnCount);
-    if (localAdaptive.chips.length > 0) setDynamicChips(localAdaptive.chips);
-
-    let finalAiReply = localAdaptive.question;
-
-    // 2. Prepare payload with full conversation history for context-aware LLM reasoning
-    const payload = {
-      session_id: sessionId || "DEMO_SESSION_001",
-      patient_id: patientId || "DEMO_PATIENT_001",
-      patient_answer: patientAnswerText,
-      message: patientAnswerText,
-      message_type: "VOICE",
-      language: langName,
-      conversation_history: updatedMessages.map((m) => ({
-        role: m.role === "patient" ? "user" : "assistant",
-        content: m.text,
-      })),
-    };
+    const turnCount = updatedMessages.filter((m) => m.role === "patient").length;
 
     try {
-      const response = await fetch(N8N_AI_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      // 2. Process via ClinicalConversationEngine
+      const engineResult = await processPatientClinicalResponse({
+        patientText: patientAnswerText,
+        clinicalState: clinicalStateRef.current,
+        language: selectedLanguageRef.current,
+        opdMode,
+        conversationHistory: updatedMessages.map((m) => ({
+          role: m.role === "patient" ? "user" : "assistant",
+          content: m.text,
+        })),
+        turnCount,
       });
 
-      const data = await response.json();
+      console.log("[ClinicalConversationEngine Result]:", engineResult);
 
-      if (response.ok && data) {
-        const extracted =
-          data?.choices?.[0]?.message?.content ||
-          data?.output ||
-          data?.text ||
-          data?.next_question ||
-          data?.message?.content ||
-          data?.response;
+      if (engineResult.success) {
+        const nextState = engineResult.clinical_state_update || clinicalStateRef.current;
+        setClinicalState(nextState);
+        clinicalStateRef.current = nextState;
 
-        const cleaned = cleanAndTuneSpeech(extracted);
-        if (
-          cleaned &&
-          cleaned.length > 5 &&
-          !cleaned.includes("status code 429") &&
-          !cleaned.includes("Try spacing your requests")
-        ) {
-          finalAiReply = cleaned;
-        }
+        if (onClinicalStateUpdated) onClinicalStateUpdated(nextState);
 
-        if (data?.clinical_metadata) {
-          const meta = data.clinical_metadata;
-          if (meta.category) {
-            setActiveCategory(meta.category);
-            categoryRef.current = meta.category;
+        // A. RED FLAG DETECTED -> Immediate Emergency Stop
+        if (engineResult.red_flag?.detected) {
+          setIsCallActive(false);
+          isCallActiveRef.current = false;
+          setRedFlagAlert(engineResult.red_flag);
+          setSessionStatus("URGENT_REVIEW_REQUIRED");
+          setDynamicChips([]);
+
+          if (engineResult.doctor_alert) {
+            sessionStorage.setItem(
+              "medikiosk_doctor_alert",
+              JSON.stringify(engineResult.doctor_alert)
+            );
           }
-          if (meta.red_flag) setRedFlagAlert(meta.red_flag_severity || "HIGH");
-          if (meta.quick_chips && Array.isArray(meta.quick_chips))
-            setDynamicChips(meta.quick_chips);
+
+          const aiMsg = {
+            role: "assistant",
+            text: engineResult.assistant_message,
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            isRedFlag: true,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          speakAI(engineResult.assistant_message);
+          return;
         }
 
-        if (onMessageSent) onMessageSent(data);
+        // B. CLINICAL HISTORY COMPLETED
+        if (engineResult.history_complete) {
+          setHistoryCompleted(true);
+          setSessionStatus("READY_FOR_SUMMARY");
+          setDynamicChips([]);
+
+          const aiMsg = {
+            role: "assistant",
+            text: engineResult.assistant_message,
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            isComplete: true,
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          speakAI(engineResult.assistant_message);
+          return;
+        }
+
+        // C. NORMAL ADAPTIVE QUESTIONING
+        if (engineResult.quick_chips && engineResult.quick_chips.length > 0) {
+          setDynamicChips(engineResult.quick_chips);
+        }
+
+        const aiMsg = {
+          role: "assistant",
+          text: engineResult.assistant_message,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        speakAI(engineResult.assistant_message);
       }
     } catch (err) {
-      console.warn(
-        "n8n Webhook failed, seamlessly using local clinical engine:",
-        err,
-      );
+      console.error("[Clinical Engine Error]:", err);
+      setApiError("Connection glitch, please continue speaking or type.");
     } finally {
       setApiLoading(false);
       apiLoadingRef.current = false;
-
-      // 3. Add clean, progressing AI response
-      const aiMsg = {
-        role: "assistant",
-        text: finalAiReply,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-
-      // 4. AI speaks question with female voice
-      speakAI(finalAiReply);
     }
   };
 
@@ -722,11 +673,9 @@ export const VoiceRecorder = ({
   const handleStartCall = () => {
     setIsCallActive(true);
     isCallActiveRef.current = true;
-    currentStepRef.current = 0;
-    categoryRef.current = null;
-    const initialGreeting =
-      messages[0]?.text ||
-      "નમસ્તે! હું તમારી AI ક્લિનિકલ સહાયક છું. તમને શું તકલીફ થઈ રહી છે?";
+    setRedFlagAlert(null);
+    setSessionStatus("IN_PROGRESS");
+    const initialGreeting = messages[0]?.text || "Hello! What symptoms are you experiencing today?";
     speakAI(initialGreeting);
   };
 
@@ -743,7 +692,7 @@ export const VoiceRecorder = ({
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto flex flex-col items-center text-slate-800 transition-all">
+    <div className="w-full max-w-xl mx-auto flex flex-col items-center text-slate-800 transition-all font-sans">
       {/* 3D WebGL Holographic Voice Visualizer */}
       <div className="w-full mb-2 relative flex flex-col items-center">
         <VoiceVisualizer3D
@@ -754,110 +703,135 @@ export const VoiceRecorder = ({
         <div className="mt-1 flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-normal transition shadow-2xs ${
-              isSpeakingTTS
+              sessionStatus === "URGENT_REVIEW_REQUIRED"
+                ? "bg-rose-100 text-rose-900 border border-rose-300 font-semibold"
+                : historyCompleted
+                ? "bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold"
+                : isSpeakingTTS
                 ? "bg-sky-50 text-sky-700 ring-1 ring-sky-400/40 animate-pulse"
                 : listening
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-400/40 animate-pulse"
-                  : apiLoading
-                    ? "bg-amber-50 text-amber-700 ring-1 ring-amber-400/40 animate-pulse"
-                    : "bg-slate-100 text-slate-500"
+                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-400/40 animate-pulse"
+                : apiLoading
+                ? "bg-amber-50 text-amber-700 ring-1 ring-amber-400/40 animate-pulse"
+                : "bg-slate-100 text-slate-500"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isSpeakingTTS
+                sessionStatus === "URGENT_REVIEW_REQUIRED"
+                  ? "bg-rose-600 animate-ping"
+                  : historyCompleted
+                  ? "bg-emerald-600"
+                  : isSpeakingTTS
                   ? "bg-sky-500"
                   : listening
-                    ? "bg-emerald-500"
-                    : apiLoading
-                      ? "bg-amber-500"
-                      : "bg-slate-400"
+                  ? "bg-emerald-500"
+                  : apiLoading
+                  ? "bg-amber-500"
+                  : "bg-slate-400"
               }`}
             />
-            {isSpeakingTTS
-              ? `AI Doctor speaking (${ttsSource})...`
+            {sessionStatus === "URGENT_REVIEW_REQUIRED"
+              ? "🚨 Urgent Triage Review Flagged"
+              : historyCompleted
+              ? "✓ Clinical History Complete"
+              : isSpeakingTTS
+              ? `AI Clinical Assistant speaking (${ttsSource})...`
               : listening
-                ? "Listening to you (Speak freely)..."
-                : apiLoading
-                  ? "AI analyzing symptoms (SOCRATES)..."
-                  : "Adaptive Clinical Voice Chat Ready"}
+              ? "Listening to you (Speak freely)..."
+              : apiLoading
+              ? "AI reasoning clinical context & red flags..."
+              : "Adaptive Clinical Voice & Touch Ready"}
           </span>
 
-          {isCallActive && !listening && !isSpeakingTTS && !apiLoading && (
+          {isCallActive && !listening && !isSpeakingTTS && !apiLoading && !historyCompleted && (
             <button
               onClick={resumeListeningSafe}
               className="p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition cursor-pointer"
               title="Resume Microphone"
             >
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <RefreshCw className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Red Flag Priority Triage Banner */}
+      {/* ========================================================================= */}
+      {/* RED FLAG PRIORITY EMERGENCY TRIAGE BANNER */}
+      {/* ========================================================================= */}
       {redFlagAlert && (
-        <div className="w-full my-2.5 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-normal flex items-start gap-2.5 shadow-xs animate-bounce">
-          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-medium text-rose-900 block">
-              🚨 Priority Medical Attention Recommended
-            </span>
-            <span>
-              Possible urgent clinical concern detected. Staff and doctor triage
-              dashboard notified for immediate assessment.
-            </span>
+        <div className="w-full my-3 p-4 rounded-2xl bg-rose-50 border-2 border-rose-400 text-rose-950 text-xs shadow-md space-y-2 animate-pulse text-left">
+          <div className="flex items-center gap-2 font-bold text-sm text-rose-900">
+            <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>URGENT CLINICAL REVIEW REQUIRED</span>
+          </div>
+          <p className="text-xs text-rose-800 leading-relaxed font-medium">
+            {redFlagAlert.reason || "Patient reported symptoms requiring immediate physician assessment."}
+          </p>
+          <div className="text-[11px] text-rose-700 bg-rose-100/70 p-2 rounded-xl border border-rose-200">
+            <strong>Emergency Protocol Active:</strong> Routine intake stopped. Clinical case flagged for Doctor Triage Station.
           </div>
         </div>
       )}
 
-      {/* Active Category Indicator */}
-      {activeCategory && (
-        <div className="w-full flex items-center justify-between text-[11px] text-slate-400 font-normal px-2 mb-2">
-          <span>
-            Protocol:{" "}
-            <strong className="text-slate-700 font-medium">
-              {activeCategory} (SOCRATES)
-            </strong>
-          </span>
-          <span className="text-emerald-600 font-medium">
-            Turn {currentStepRef.current}
-          </span>
+      {/* ========================================================================= */}
+      {/* HISTORY COMPLETE SUCCESS BANNER */}
+      {/* ========================================================================= */}
+      {historyCompleted && (
+        <div className="w-full my-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs shadow-xs space-y-2.5 text-left">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>Clinical Pre-Consultation History Recorded</span>
+            </div>
+            <button
+              onClick={onFinishIntake}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition cursor-pointer shadow-xs"
+            >
+              <span>Proceed to Summary</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-xs text-emerald-800 font-normal">
+            All key symptoms, duration, severity, and medical history have been synthesized into your clinical draft for the doctor.
+          </p>
         </div>
       )}
 
       {/* Main Hands-Free Voice Call Controls */}
-      <div className="flex items-center justify-center gap-3 my-3 flex-wrap">
-        {!isCallActive ? (
-          <button
-            onClick={handleStartCall}
-            className="inline-flex items-center gap-2.5 px-8 py-3 rounded-full text-sm font-normal text-white bg-emerald-600 hover:bg-emerald-700 active:scale-98 transition shadow-sm cursor-pointer"
-          >
-            <PhoneCall className="w-4 h-4" />
-            <span>Start Hands-Free Voice Consultation</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-3">
+      {!historyCompleted && sessionStatus !== "URGENT_REVIEW_REQUIRED" && (
+        <div className="flex items-center justify-center gap-3 my-3 flex-wrap">
+          {!isCallActive ? (
             <button
-              onClick={handleEndCall}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-normal text-white bg-rose-600 hover:bg-rose-700 active:scale-98 transition shadow-sm cursor-pointer"
+              onClick={handleStartCall}
+              className="inline-flex items-center gap-2.5 px-8 py-3 rounded-full text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 active:scale-98 transition shadow-sm cursor-pointer"
             >
-              <PhoneOff className="w-4 h-4" />
-              <span>End Voice Call</span>
+              <PhoneCall className="w-4 h-4" />
+              <span>Start Hands-Free Voice Consultation</span>
             </button>
-
-            {isSpeakingTTS && (
+          ) : (
+            <div className="flex items-center gap-3">
               <button
-                onClick={stopAudio}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-normal text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+                onClick={handleEndCall}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 active:scale-98 transition shadow-sm cursor-pointer"
               >
-                <VolumeX className="w-3.5 h-3.5" />
-                <span>Interrupt AI</span>
+                <PhoneOff className="w-4 h-4" />
+                <span>End Voice Call</span>
               </button>
-            )}
-          </div>
-        )}
-      </div>
+
+              {isSpeakingTTS && (
+                <button
+                  onClick={stopAudio}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-normal text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+                >
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span>Interrupt AI</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Language Selector */}
       <div className="text-xs text-slate-400 font-normal mb-3 flex items-center gap-2">
@@ -870,7 +844,7 @@ export const VoiceRecorder = ({
           <option value="gu-IN">Gujarati (ગુજરાતી)</option>
           <option value="hi-IN">Hindi (हिंदी)</option>
           <option value="en-IN">English</option>
-          <option value="mr-IN">Marathi (મરાઠી)</option>
+          <option value="mr-IN">Marathi (मराठी)</option>
           <option value="ta-IN">Tamil (தமிழ்)</option>
         </select>
       </div>
@@ -878,7 +852,7 @@ export const VoiceRecorder = ({
       {/* Live Conversational Chat Stream */}
       <div
         ref={chatScrollRef}
-        className="w-full bg-slate-50/80 border border-slate-200/80 rounded-[24px] p-4 sm:p-5 max-h-[290px] overflow-y-auto space-y-3.5 shadow-inner text-left"
+        className="w-full bg-slate-50/80 border border-slate-200/80 rounded-[24px] p-4 sm:p-5 max-h-[300px] overflow-y-auto space-y-3.5 shadow-inner text-left"
       >
         {messages.map((msg, idx) => (
           <div
@@ -891,11 +865,15 @@ export const VoiceRecorder = ({
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 msg.role === "patient"
                   ? "bg-slate-900 text-white"
+                  : msg.isRedFlag
+                  ? "bg-rose-600 text-white"
                   : "bg-sky-100 text-sky-700 border border-sky-200"
               }`}
             >
               {msg.role === "patient" ? (
                 <User className="w-3.5 h-3.5" />
+              ) : msg.isRedFlag ? (
+                <ShieldAlert className="w-3.5 h-3.5" />
               ) : (
                 <Bot className="w-3.5 h-3.5" />
               )}
@@ -905,6 +883,8 @@ export const VoiceRecorder = ({
               className={`max-w-[82%] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-normal leading-relaxed shadow-2xs group relative ${
                 msg.role === "patient"
                   ? "bg-slate-900 text-white rounded-tr-none"
+                  : msg.isRedFlag
+                  ? "bg-rose-50 text-rose-950 border border-rose-300 rounded-tl-none font-medium"
                   : "bg-white text-slate-900 border border-slate-200/90 rounded-tl-none"
               }`}
             >
@@ -960,14 +940,14 @@ export const VoiceRecorder = ({
             </div>
             <div className="px-4 py-2.5 rounded-2xl text-xs font-normal bg-white border border-slate-200 text-slate-500 rounded-tl-none flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-              <span>AI Clinical Agent is reasoning next step...</span>
+              <span>AI Clinical Engine is reasoning next question...</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Adaptive Quick Answer Chips */}
-      {isCallActive && dynamicChips.length > 0 && (
+      {/* Adaptive Contextual Answer Chips */}
+      {!historyCompleted && sessionStatus !== "URGENT_REVIEW_REQUIRED" && dynamicChips.length > 0 && (
         <div className="w-full mt-3">
           <div className="text-[11px] text-slate-400 font-normal mb-1.5 text-left">
             Or tap quick answer:
@@ -978,7 +958,7 @@ export const VoiceRecorder = ({
                 key={i}
                 onClick={() => handleAutoSubmit(chip)}
                 disabled={apiLoading || isSpeakingTTS}
-                className="px-3 py-1 rounded-full text-xs font-normal bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 {chip}
               </button>
@@ -988,31 +968,33 @@ export const VoiceRecorder = ({
       )}
 
       {/* Manual text input fallback */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (textInput.trim()) {
-            handleAutoSubmit(textInput.trim());
-            setTextInput("");
-          }
-        }}
-        className="w-full mt-4 flex items-center gap-2"
-      >
-        <input
-          type="text"
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          placeholder="Type or speak symptoms in your language..."
-          className="flex-1 px-4 py-2.5 rounded-full border border-slate-200 bg-white text-slate-900 text-xs sm:text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400 shadow-2xs"
-        />
-        <button
-          type="submit"
-          disabled={!textInput.trim() || apiLoading}
-          className="w-9 h-9 rounded-full bg-slate-950 text-white flex items-center justify-center disabled:opacity-40 transition cursor-pointer shadow-xs shrink-0"
+      {!historyCompleted && sessionStatus !== "URGENT_REVIEW_REQUIRED" && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (textInput.trim()) {
+              handleAutoSubmit(textInput.trim());
+              setTextInput("");
+            }
+          }}
+          className="w-full mt-4 flex items-center gap-2"
         >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            placeholder="Type or speak symptoms in your language..."
+            className="flex-1 px-4 py-2.5 rounded-full border border-slate-200 bg-white text-slate-900 text-xs sm:text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400 shadow-2xs"
+          />
+          <button
+            type="submit"
+            disabled={!textInput.trim() || apiLoading}
+            className="w-9 h-9 rounded-full bg-slate-950 text-white flex items-center justify-center disabled:opacity-40 transition cursor-pointer shadow-xs shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      )}
 
       {/* Error Feedback */}
       {apiError && (
