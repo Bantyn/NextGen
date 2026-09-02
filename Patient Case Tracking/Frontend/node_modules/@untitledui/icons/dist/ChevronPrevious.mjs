@@ -1,0 +1,1 @@
+import*as o from"react";const i=({size:r=24,color:e="currentColor",...t})=>o.createElement("svg",{viewBox:"0 0 24 24",width:r,height:r,stroke:e,strokeWidth:"2",fill:"none",strokeLinecap:"round",strokeLinejoin:"round","aria-hidden":"true","data-rtl-flip":"",...t},o.createElement("path",{d:"m15 18-6-6 6-6"}));i.displayName="ChevronPrevious";export{i as ChevronPrevious};
