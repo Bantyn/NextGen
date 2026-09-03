@@ -1,4 +1,21 @@
 @import "tailwindcss";
+@import "./core/theme/tokens.css";
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: var(--primary);
+    color: #ffffff;
+  }
+}
 
 @keyframes gptWordFade {
   0% {
@@ -17,3 +34,4 @@
   display: inline;
   animation: gptWordFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
