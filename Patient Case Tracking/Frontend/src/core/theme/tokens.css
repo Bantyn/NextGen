@@ -1,0 +1,141 @@
+/* ==========================================================================
+   MediKiosk Design System Tokens
+   Editorial Glassmorphism & High-End Clinical Theme Specification
+   ========================================================================== */
+
+:root {
+  /* -----------------------------------------------------------------
+   * 1. BRAND COLORS (Medical Teal / Ocean Indigo Accent)
+   * ----------------------------------------------------------------- */
+  --primary: #0ea5e9;                   /* Medical Ocean Blue Accent */
+  --primary-hover: #0284c7;             /* Darker primary hover */
+  --primary-active: #0369a1;            /* Active pressed state */
+  --primary-light: rgba(14, 165, 233, 0.12); /* Soft primary tint */
+  --primary-border: rgba(14, 165, 233, 0.25);/* Translucent primary border */
+  --primary-glow: rgba(14, 165, 233, 0.35);  /* Subtle halo glow */
+  --primary-gradient: linear-gradient(135deg, #0ea5e9, #38bdf8);
+
+  /* -----------------------------------------------------------------
+   * 2. CLINICAL LIFECYCLE STATUS TOKENS
+   * ----------------------------------------------------------------- */
+  --status-registered-bg: rgba(59, 130, 246, 0.12);   /* Soft Blue */
+  --status-registered-text: #3b82f6;
+  --status-registered-border: rgba(59, 130, 246, 0.3);
+
+  --status-waiting-bg: rgba(245, 158, 11, 0.12);      /* Soft Amber/Yellow */
+  --status-waiting-text: #f59e0b;
+  --status-waiting-border: rgba(245, 158, 11, 0.3);
+
+  --status-consultation-bg: rgba(168, 85, 247, 0.12); /* Soft Purple */
+  --status-consultation-text: #a855f7;
+  --status-consultation-border: rgba(168, 85, 247, 0.3);
+
+  --status-lab-bg: rgba(236, 72, 153, 0.12);          /* Soft Pink/Magenta */
+  --status-lab-text: #ec4899;
+  --status-lab-border: rgba(236, 72, 153, 0.3);
+
+  --status-completed-bg: rgba(16, 185, 129, 0.12);     /* Soft Emerald */
+  --status-completed-text: #10b981;
+  --status-completed-border: rgba(16, 185, 129, 0.3);
+
+  --status-critical-bg: rgba(239, 68, 68, 0.15);       /* Soft Red Glow */
+  --status-critical-text: #ef4444;
+  --status-critical-border: rgba(239, 68, 68, 0.4);
+
+  /* -----------------------------------------------------------------
+   * 3. TYPOGRAPHY TOKENS
+   * ----------------------------------------------------------------- */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.875rem;   /* 30px */
+
+  /* -----------------------------------------------------------------
+   * 4. BORDER RADIUS & ELEVATION SHADOWS
+   * ----------------------------------------------------------------- */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-2xl: 28px;
+  --r-full: 9999px;
+
+  /* -----------------------------------------------------------------
+   * 5. ANIMATIONS & TRANSITIONS
+   * ----------------------------------------------------------------- */
+  --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* -----------------------------------------------------------------
+ * 6. DARK THEME MATRIX (Default Clinical Dark Mode)
+ * ----------------------------------------------------------------- */
+[data-theme="dark"],
+:root {
+  --bg-app: #090d16;                   /* Deep Slate Navy Canvas */
+  --bg-sidebar: #0d1322;               /* Slightly lighter sidebar surface */
+  --bg-header: rgba(13, 19, 34, 0.75); /* Translucent blurred header */
+  
+  --surface-card: rgba(18, 26, 43, 0.70);
+  --surface-card-hover: rgba(24, 35, 58, 0.85);
+  --surface-elevated: #162035;
+  --surface-input: rgba(15, 23, 42, 0.60);
+
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-focus: var(--primary);
+
+  --glass-bg: rgba(13, 19, 34, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(20px);
+
+  --text-main: #f8fafc;                /* Highest contrast white */
+  --text-secondary: #94a3b8;           /* Muted secondary gray */
+  --text-muted: #64748b;               /* Subtle tertiary gray */
+  --text-inverse: #0f172a;
+
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px var(--primary-glow);
+}
+
+/* -----------------------------------------------------------------
+ * 7. LIGHT THEME MATRIX
+ * ----------------------------------------------------------------- */
+[data-theme="light"] {
+  --bg-app: #f8fafc;                   /* Soft Slate White Canvas */
+  --bg-sidebar: #ffffff;               /* Clean white sidebar surface */
+  --bg-header: rgba(255, 255, 255, 0.80);/* Translucent blurred header */
+  
+  --surface-card: rgba(255, 255, 255, 0.90);
+  --surface-card-hover: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-input: #f1f5f9;
+
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-medium: rgba(0, 0, 0, 0.12);
+  --border-focus: var(--primary);
+
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-blur: blur(20px);
+
+  --text-main: #0f172a;                /* Deep slate black */
+  --text-secondary: #475569;           /* Medium contrast gray */
+  --text-muted: #94a3b8;               /* Light tertiary gray */
+  --text-inverse: #ffffff;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 16px rgba(14, 165, 233, 0.2);
+}
