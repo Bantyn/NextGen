@@ -1,5 +1,86 @@
+import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
+
+// Load clinical knowledge base data for server-side deterministic fallback
+let ckbDatabase = [];
+try {
+  const ckbPath = path.resolve('src/data/clinical_knowledge_base.json');
+  if (fs.existsSync(ckbPath)) {
+    ckbDatabase = JSON.parse(fs.readFileSync(ckbPath, 'utf8'));
+  }
+} catch (err) {
+  console.warn('[IntakeController] Could not load clinical_knowledge_base.json:', err.message);
+}
+
+function getCkbEntry(text = '', currentClinicalState = {}) {
+  const searchStr = `${text} ${(currentClinicalState.chief_complaints || []).join(' ')} ${(currentClinicalState.symptoms || []).join(' ')}`.toLowerCase();
+
+  for (const entry of ckbDatabase) {
+    if (searchStr.includes(entry.complaint.toLowerCase())) return entry;
+    if (entry.synonyms && entry.synonyms.some((s) => searchStr.includes(s.toLowerCase()))) return entry;
+  }
+
+  // Fallback generic clinical entry
+  return (
+    ckbDatabase[0] || {
+      complaint_id: 'ckb_general',
+      complaint: 'general symptom',
+      questions: [
+        {
+          dimension: 'duration',
+          priority: 10,
+          question: {
+            'en-IN': 'When did this symptom begin and how long have you had it?',
+            'hi-IN': 'यह परेशानी कब शुरू हुई और आपको कितने समय से है?',
+            'gu-IN': 'આ તકલીફ ક્યારે શરૂ થઈ અને તમને કેટલા સમયથી છે?',
+          },
+          quick_chips: {
+            'en-IN': ['Since morning', '2-3 days', 'More than 1 week'],
+            'hi-IN': ['आज सुबह से', '2-3 दिन से', 'एक हफ्ते से ज्यादा'],
+            'gu-IN': ['આજ સવારથી', '૨-૩ દિવસથી', '૧ અઠવાડિયાથી વધુ'],
+          },
+        },
+      ],
+    }
+  );
+}
+
+function selectNextCkbQuestion(ckbEntry, currentClinicalState = {}, langKey = 'en-IN') {
+  const answered = new Set(currentClinicalState.answered_questions || []);
+
+  if (currentClinicalState.duration && currentClinicalState.duration.length > 0) answered.add('duration');
+  if (currentClinicalState.severity && currentClinicalState.severity.length > 0) answered.add('severity');
+  if (currentClinicalState.onset && currentClinicalState.onset.length > 0) answered.add('onset');
+  if (currentClinicalState.location && currentClinicalState.location.length > 0) {
+    answered.add('location');
+    answered.add('location_quadrant');
+  }
+
+  const remaining = (ckbEntry.questions || []).filter((q) => !answered.has(q.dimension));
+  remaining.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  if (remaining.length > 0) {
+    const q = remaining[0];
+    const qText = q.question?.[langKey] || q.question?.['en-IN'] || 'Please tell us more about this symptom.';
+    const chips = q.quick_chips?.[langKey] || q.quick_chips?.['en-IN'] || [];
+    return { question: qText, quick_chips: chips, is_complete: false };
+  }
+
+  const completed = {
+    'gu-IN': 'તમારો સંપૂર્ણ તબીબી ઈતિહાસ સફળતાપૂર્વક નોંધી લેવામાં આવ્યો છે. અમે તેને ડૉક્ટરની સમીક્ષા માટે તૈયાર કર્યો છે.',
+    'hi-IN': 'आपका संपूर्ण मेडिकल इतिहास सफलतापूर्वक दर्ज कर लिया गया है। हमने इसे डॉक्टर की समीक्षा के लिए तैयार कर दिया है।',
+    'en-IN': 'Your medical history has been successfully recorded. We have prepared it for the doctor review.',
+  };
+
+  return {
+    question: completed[langKey] || completed['en-IN'],
+    quick_chips: [],
+    is_complete: true,
+  };
+}
+
 
 /**
  * Contextual Emergency Red Flag Checker
@@ -397,10 +478,30 @@ Recent Conversation Turns: ${JSON.stringify(conversation_history.slice(-6))}`,
       }
     }
 
-    // 4. If remote AI is offline / unreachable, return 503 so client's Local CKB Engine can execute dynamic multilingual reasoning
-    return res.status(503).json({
-      success: false,
-      error: 'AI service temporarily unavailable. Fallback to local clinical engine.',
+    // 4. Deterministic CKB Fallback Engine (Zero-Downtime Local Clinical Intelligence)
+    const langKey = language.toLowerCase().startsWith('gu') ? 'gu-IN' : language.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
+    const ckb = getCkbEntry(patientText, current_clinical_state);
+    const selected = selectNextCkbQuestion(ckb, current_clinical_state, langKey);
+
+    return res.status(200).json({
+      success: true,
+      assistant_message: selected.question,
+      intent: 'SYMPTOM_INFORMATION',
+      risk_state: 'ASSESSING',
+      next_question: selected.question,
+      quick_chips: selected.quick_chips,
+      extracted_entities: {
+        chief_complaint: ckb.complaint,
+        symptoms: [ckb.complaint],
+      },
+      red_flag: {
+        detected: false,
+        priority: 'LOW',
+      },
+      history_complete: selected.is_complete || false,
+      doctor_review_required: false,
+      session_status: selected.is_complete ? 'READY_FOR_SUMMARY' : 'IN_PROGRESS',
+      source: 'local_clinical_knowledge_base',
     });
   } catch (err) {
     console.error('[handleIntakeChat Error]:', err);
@@ -410,3 +511,4 @@ Recent Conversation Turns: ${JSON.stringify(conversation_history.slice(-6))}`,
     });
   }
 };
+
