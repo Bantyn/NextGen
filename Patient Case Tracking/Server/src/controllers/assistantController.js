@@ -649,6 +649,13 @@ export async function handleAssistantChat(req, res) {
       fallbackMsg = `**${toolResult.title}**\n\n${toolResult.description}\n\n**Allowed Home Care:**\n${toolResult.allowed_nominal_advice?.map((a) => `• ${a}`).join('\n')}\n\n**AYUSH Tips:**\n${toolResult.ayush_care_tips?.map((t) => `• ${t}`).join('\n')}\n\n*Caution: If symptoms worsen, visit the OPD consultation room.*`;
     } else if (detectedIntent === 'CONTACT' && Array.isArray(toolResult)) {
       fallbackMsg = `**Hospital Support Contacts:**\n\n${toolResult.map((c) => `• **${c.department}**: ${c.phone} (${c.hours}) - ${c.location}`).join('\n')}`;
+    } else if (detectedIntent === 'WEBSITE_HELP' && toolResult && (toolResult.title || toolResult.summary)) {
+      fallbackMsg = `**${toolResult.title || 'Platform Guide'}**\n\n${toolResult.summary}\n\n👉 **Direct Route:** \`${toolResult.route || '/patient/register'}\`\n\nTo begin your intake session, click **"Start Patient Intake"** on the home screen or navigate to the registration kiosk desk.`;
+    } else if (detectedIntent === 'FAQ' && Array.isArray(toolResult) && toolResult.length > 0) {
+      const f = toolResult[0];
+      fallbackMsg = `**${f.question}**\n\n${f.answer}`;
+    } else if (toolResult && toolResult.title && toolResult.summary) {
+      fallbackMsg = `**${toolResult.title}**\n\n${toolResult.summary}\n\n👉 **Direct Route:** \`${toolResult.route || '/'}\``;
     } else {
       fallbackMsg = `I am your MediKiosk Smart Assistant. I can help you with website navigation, medicine details from our verified database, nominal symptom guidance, and hospital support. How may I assist you today?`;
     }
@@ -661,8 +668,9 @@ export async function handleAssistantChat(req, res) {
       urgent: false,
       requires_doctor: false,
       data: toolResult,
-      quick_actions: ['Website Guide', 'Medicine Helper', 'Cold & Cough Care', 'Hospital Contacts'],
+      quick_actions: ['Start Patient Intake', 'Medicine Helper', 'Cold & Cough Care', 'Hospital Contacts'],
     });
+
   } catch (err) {
     console.error('[handleAssistantChat Critical Error]:', err);
     return res.status(500).json({

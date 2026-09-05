@@ -129,9 +129,12 @@ export async function getSymptomGuidance(symptomKeyOrQuery) {
         if (q.includes(keyL) || q.includes(titleL) || titleL.includes(q)) return true;
         if (words.some((w) => w.length > 3 && q.includes(w))) return true;
 
-        if ((q.includes('cold') || q.includes('cough') || q.includes('खांसी')) && keyL.includes('cold')) return true;
-        if ((q.includes('headache') || q.includes('head') || q.includes('सिरदर्द')) && keyL.includes('headache')) return true;
-        if ((q.includes('acidity') || q.includes('heartburn') || q.includes('gas') || q.includes('एसिडिटी')) && keyL.includes('acidity')) return true;
+        if ((q.includes('cold') || q.includes('cough') || q.includes('खांसी') || q.includes('ખાંસી') || q.includes('સળેખમ')) && keyL.includes('cold')) return true;
+        if ((q.includes('headache') || q.includes('head') || q.includes('सिरदर्द') || q.includes('માથાનો')) && keyL.includes('headache')) return true;
+        if ((q.includes('acidity') || q.includes('heartburn') || q.includes('gas') || q.includes('एसिडिटी') || q.includes('ગેસ')) && keyL.includes('acidity')) return true;
+        if ((q.includes('fever') || q.includes('pyrexia') || q.includes('temperature') || q.includes('बुखार') || q.includes('તાવ')) && keyL.includes('fever')) return true;
+        if ((q.includes('diarrhea') || q.includes('vomit') || q.includes('loose motion') || q.includes('दस्त') || q.includes('ઝાડા') || q.includes('ઉલ્ટી')) && (keyL.includes('diarrhea') || keyL.includes('vomit'))) return true;
+        if ((q.includes('joint') || q.includes('muscle') || q.includes('arthritis') || q.includes('back pain') || q.includes('घुटने') || q.includes('जोड़ों') || q.includes('સાંધા')) && keyL.includes('joint')) return true;
 
         return false;
       }) || null
@@ -145,21 +148,23 @@ export async function getSymptomGuidance(symptomKeyOrQuery) {
  * Controlled Read-Only Tool: Get Website & Feature Navigation Help
  */
 export async function getWebsiteHelp(topic, userRole = 'PATIENT') {
-  if (!topic) {
-    // Return all general public topics
-    if (staticKnowledge?.website_help) return staticKnowledge.website_help;
-    return [];
-  }
+  const items = staticKnowledge?.website_help || [];
+  if (!topic) return items;
 
   const q = String(topic).trim().toLowerCase();
+  const words = q.split(/[\s,?.!]+/).filter((w) => w.length > 2);
 
   try {
     const doc = await AssistantWebsiteHelp.findOne({
-      $or: [{ topic: q }, { title: { $regex: q, $options: 'i' } }],
+      $or: [
+        { topic: q },
+        { topic: { $regex: q, $options: 'i' } },
+        { title: { $regex: q, $options: 'i' } },
+        { summary: { $regex: q, $options: 'i' } },
+      ],
     }).lean();
 
     if (doc) {
-      // Authorization filter: Restrict doctor portal details to authorized roles if applicable
       if (doc.route.startsWith('/doctor') && userRole.toUpperCase() === 'PATIENT') {
         return {
           ...doc,
@@ -170,15 +175,47 @@ export async function getWebsiteHelp(topic, userRole = 'PATIENT') {
     }
   } catch (dbErr) {}
 
-  if (staticKnowledge?.website_help) {
-    const match = staticKnowledge.website_help.find(
-      (w) => w.topic.toLowerCase().includes(q) || w.title.toLowerCase().includes(q)
+  if (items.length > 0) {
+    // Specific clinical intake or registration queries
+    if (q.includes('intake') || q.includes('session') || q.includes('start') || q.includes('history') || q.includes('તપાસ') || q.includes('शुरू')) {
+      const intakeMatch = items.find((w) => w.topic === 'clinical_intake' || w.topic === 'patient_checkin');
+      if (intakeMatch) return intakeMatch;
+    }
+
+    if (q.includes('register') || q.includes('checkin') || q.includes('check-in') || q.includes('નોંધણી')) {
+      const regMatch = items.find((w) => w.topic === 'patient_checkin');
+      if (regMatch) return regMatch;
+    }
+
+    if (q.includes('document') || q.includes('ocr') || q.includes('prescription') || q.includes('upload') || q.includes('રિપોર્ટ')) {
+      const docMatch = items.find((w) => w.topic === 'document_upload');
+      if (docMatch) return docMatch;
+    }
+
+    if (q.includes('doctor') || q.includes('opd') || q.includes('physician') || q.includes('ડૉક્ટર')) {
+      const docMatch = items.find((w) => w.topic === 'doctor_portal');
+      if (docMatch) return docMatch;
+    }
+
+    if (q.includes('track') || q.includes('queue') || q.includes('token') || q.includes('ટોકન') || q.includes('નંબર')) {
+      const trackMatch = items.find((w) => w.topic === 'patient_tracking');
+      if (trackMatch) return trackMatch;
+    }
+
+    // Direct substring or word score matching
+    const match = items.find(
+      (w) =>
+        w.topic.toLowerCase().includes(q) ||
+        w.title.toLowerCase().includes(q) ||
+        w.summary.toLowerCase().includes(q) ||
+        words.some((wd) => w.title.toLowerCase().includes(wd) || w.topic.toLowerCase().includes(wd))
     );
     if (match) return match;
   }
 
-  return staticKnowledge?.website_help || [];
+  return items[0] || null;
 }
+
 
 /**
  * Controlled Read-Only Tool: Get FAQs

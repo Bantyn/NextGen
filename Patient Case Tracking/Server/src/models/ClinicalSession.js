@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const ClinicalSessionSchema = new mongoose.Schema(
   {
@@ -25,16 +25,19 @@ const ClinicalSessionSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
+        'STARTED',
         'IDENTIFIED',
         'CONSENT_PENDING',
+        'IN_PROGRESS',
         'HISTORY_IN_PROGRESS',
         'DOCUMENT_PROCESSING',
         'PRIORITY_TRIAGE',
         'READY_FOR_DOCTOR',
         'DOCTOR_REVIEW',
+        'COMPLETED',
         'CONSULTATION_COMPLETE',
       ],
-      default: 'IDENTIFIED',
+      default: 'STARTED',
     },
     chief_complaint_category: {
       type: String,
@@ -85,8 +88,18 @@ const ClinicalSessionSchema = new mongoose.Schema(
       allergies: [String],
       requires_doctor_review: { type: Boolean, default: true },
     },
+    started_at: {
+      type: Date,
+      default: Date.now,
+    },
+    completed_at: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model('ClinicalSession', ClinicalSessionSchema);
+export const ClinicalSession = mongoose.models.ClinicalSession || mongoose.model('ClinicalSession', ClinicalSessionSchema);
+
+export default ClinicalSession;
