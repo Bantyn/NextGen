@@ -1,13 +1,12 @@
 import mongoose from 'mongoose';
 import { logger } from './logger.js';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/medikiosk_patient_tracking';
-
 /**
  * Initialize MongoDB connection pool with auto-reconnect and lifecycle event handlers
  */
 export const connectDB = async () => {
   try {
+    const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/medikiosk_patient_tracking';
     const conn = await mongoose.connect(MONGO_URI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
