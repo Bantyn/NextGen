@@ -130,7 +130,7 @@ export const SmartAssistantInput = ({ onSendMessage, disabled, language = 'Engli
 
       <div className="flex items-center justify-between px-3 pt-1.5 text-[10px] text-slate-400 font-normal">
         <span>Press Enter to send</span>
-        <span>MediKiosk Verified Knowledge Base</span>
+        <span>Sehat Verified Knowledge Base</span>
       </div>
     </div>
   );

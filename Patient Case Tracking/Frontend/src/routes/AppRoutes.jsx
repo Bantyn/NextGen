@@ -105,7 +105,7 @@ export const AppRoutes = () => {
           <Route
             path="/doctor"
             element={
-              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN', 'NURSE']}>
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
                 <DoctorLayout>
                   <DoctorDashboardView />
                 </DoctorLayout>
@@ -115,7 +115,7 @@ export const AppRoutes = () => {
           <Route
             path="/doctor/cases/:sessionId"
             element={
-              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN', 'NURSE']}>
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
                 <DoctorLayout>
                   <DoctorCaseDetailView />
                 </DoctorLayout>

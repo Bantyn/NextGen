@@ -2,7 +2,7 @@ import { useContext } from 'react';
 import { AuthContext } from './AuthContext';
 
 /**
- * Custom Hook to access MediKiosk Authentication Context
+ * Custom Hook to access Sehat Authentication Context
  */
 export const useAuth = () => {
   const context = useContext(AuthContext);

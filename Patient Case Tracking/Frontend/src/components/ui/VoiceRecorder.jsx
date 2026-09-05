@@ -31,15 +31,17 @@ import {
 } from "../../services/clinicalConversationEngine";
 
 // ============================================================================
-// MediKiosk TTS Configuration
+// Sehat TTS Configuration
 // ============================================================================
 const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
 const FISH_AUDIO_MODEL = "fish-audio/s2.1-pro-free:free";
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 
-export const MEDIKIOSK_FISH_VOICE_ID =
+export const SEHAT_FISH_VOICE_ID =
+  import.meta.env.VITE_SEHAT_FISH_VOICE_ID ||
   import.meta.env.VITE_MEDIKIOSK_FISH_VOICE_ID ||
   "7f92f8afb8ec43bf81429cc1c9199cb1";
+export const MEDIKIOSK_FISH_VOICE_ID = SEHAT_FISH_VOICE_ID;
 
 const LANGUAGE_MAP = {
   "gu-IN": { name: "Gujarati", bcp47: "gu-IN" },
@@ -479,7 +481,7 @@ export const VoiceRecorder = ({
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
             "HTTP-Referer": window.location.origin || "http://localhost:5173",
-            "X-Title": "MediKiosk Voice Assistant",
+            "X-Title": "Sehat Voice Assistant",
           },
           body: JSON.stringify(payload),
         });
@@ -604,6 +606,10 @@ export const VoiceRecorder = ({
           setDynamicChips([]);
 
           if (engineResult.doctor_alert) {
+            sessionStorage.setItem(
+              "sehat_doctor_alert",
+              JSON.stringify(engineResult.doctor_alert)
+            );
             sessionStorage.setItem(
               "medikiosk_doctor_alert",
               JSON.stringify(engineResult.doctor_alert)

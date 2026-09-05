@@ -1,5 +1,5 @@
 /**
- * MediKiosk Clinical Knowledge Base (CKB)
+ * Sehat Clinical Knowledge Base (CKB)
  * 
  * Safety & Architecture Guarantee:
  * - This knowledge base does NOT diagnose diseases.

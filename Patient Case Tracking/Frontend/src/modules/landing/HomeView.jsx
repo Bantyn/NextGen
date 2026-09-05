@@ -20,7 +20,7 @@ import {
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 
 /**
- * HomeView Component — MediKiosk Platform Overview & Interactive Launchpad
+ * HomeView Component — Sehat Platform Overview & Interactive Launchpad
  * Comprehensive showcase of Module A, B, C, D and the 5-Step Patient/Physician Journey.
  */
 export const HomeView = () => {
@@ -45,7 +45,7 @@ export const HomeView = () => {
 
         {/* Subtitle */}
         <p className="text-sm sm:text-base md:text-lg font-normal text-slate-500 max-w-2xl mx-auto leading-relaxed mt-3 mb-8">
-          <strong>MediKiosk</strong> empowers patients to record comprehensive
+          <strong>Sehat</strong> empowers patients to record comprehensive
           medical histories via natural voice conversation, scan past
           prescriptions, and generate structured, physician-ready summaries
           linked to their <strong>ABHA record</strong> before entering the

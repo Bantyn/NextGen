@@ -17,7 +17,7 @@ export const RegisterView = () => {
 
       <AuthCard
         title="Register Hospital Staff"
-        subtitle="Create an authorized clinical or administrative profile for MediKiosk OPD integration."
+        subtitle="Create an authorized clinical or administrative profile for Sehat OPD integration."
         maxWidth="max-w-2xl"
       >
         <RegisterForm />

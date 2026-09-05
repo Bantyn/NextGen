@@ -11,7 +11,7 @@ export const SmartAssistantQuickActions = ({ onSelectAction, disabled }) => {
     { id: 'medicine_help', label: 'Medicine Helper', icon: Pill, text: 'What is Paracetamol used for?' },
     { id: 'symptom_help', label: 'Cold & Cough Care', icon: Thermometer, text: 'What nominal home care is allowed for a mild cold?' },
     { id: 'contact_help', label: 'Hospital Contacts', icon: Phone, text: 'What are the hospital emergency and helpline contacts?' },
-    { id: 'abha_help', label: 'What is ABHA?', icon: QrCode, text: 'What is ABHA and why should I link it at MediKiosk?' },
+    { id: 'abha_help', label: 'What is ABHA?', icon: QrCode, text: 'What is ABHA and why should I link it at Sehat?' },
   ];
 
   return (

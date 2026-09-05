@@ -5,8 +5,8 @@ import { API_ENDPOINTS } from '../api/apiEndpoints';
 
 export const AuthContext = createContext(null);
 
-const STORAGE_TOKEN_KEY = 'medikiosk_token';
-const STORAGE_USER_KEY = 'medikiosk_user';
+const STORAGE_TOKEN_KEY = 'sehat_token';
+const STORAGE_USER_KEY = 'sehat_user';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -17,8 +17,8 @@ export const AuthProvider = ({ children }) => {
   // Initialize Auth State from LocalStorage
   useEffect(() => {
     try {
-      const savedToken = localStorage.getItem(STORAGE_TOKEN_KEY);
-      const savedUserStr = localStorage.getItem(STORAGE_USER_KEY);
+      const savedToken = localStorage.getItem(STORAGE_TOKEN_KEY) || localStorage.getItem('medikiosk_token');
+      const savedUserStr = localStorage.getItem(STORAGE_USER_KEY) || localStorage.getItem('medikiosk_user');
 
       if (savedToken && savedUserStr) {
         const parsedUser = JSON.parse(savedUserStr);
@@ -183,6 +183,8 @@ export const AuthProvider = ({ children }) => {
     try {
       localStorage.removeItem(STORAGE_TOKEN_KEY);
       localStorage.removeItem(STORAGE_USER_KEY);
+      localStorage.removeItem('medikiosk_token');
+      localStorage.removeItem('medikiosk_user');
     } catch (err) {
       console.error('Failed to clear storage:', err);
     }

@@ -18,15 +18,11 @@ export const AuthCard = ({
       {/* Institutional Header Banner */}
       <div className="flex flex-col items-center text-center mb-6">
         <Link to="/" className="inline-flex items-center gap-2.5 mb-3 group select-none">
-          <div className="flex items-center gap-1">
-            <div className="w-2.5 h-6 rounded-full bg-sky-400 group-hover:scale-110 transition" />
-            <div className="w-2.5 h-7 rounded-full bg-amber-400 group-hover:scale-110 transition" />
-            <div className="w-2.5 h-6 rounded-full bg-rose-400 group-hover:scale-110 transition" />
-            <div className="w-2.5 h-5 rounded-full bg-emerald-400 group-hover:scale-110 transition" />
-          </div>
-          <span className="text-2xl font-normal tracking-tight text-[var(--text-main)]">
-            MediKiosk
-          </span>
+          <img
+            src="/logo.png"
+            alt="Sehat"
+            className="h-10 w-auto object-contain dark:invert dark:brightness-0"
+          />
         </Link>
 
         {/* Institution Badge */}

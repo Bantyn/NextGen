@@ -178,7 +178,7 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
         });
       }
     } catch (err) {
-      console.error('[MediKiosk OCR Error]:', err);
+      console.error('[Sehat OCR Error]:', err);
       setLastApiStatus({
         status: 'ERROR',
         message: `OCR Pipeline Error: ${err.message}`,

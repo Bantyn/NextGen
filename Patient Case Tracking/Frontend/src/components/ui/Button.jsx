@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react';
 
 /**
  * Button Component — Reusable Base UI Control
- * Compliant with MediKiosk Theme & Design Tokens
+ * Compliant with Sehat Theme & Design Tokens
  */
 export const Button = ({
   children,

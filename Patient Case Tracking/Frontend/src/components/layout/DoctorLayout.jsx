@@ -58,20 +58,14 @@ export const DoctorLayout = ({ children }) => {
           {/* Brand Header */}
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2.5 select-none">
-              <div className="flex items-center gap-1">
-                <div className="w-2.5 h-6 rounded-full bg-sky-400" />
-                <div className="w-2.5 h-7 rounded-full bg-amber-400" />
-                <div className="w-2.5 h-6 rounded-full bg-rose-400" />
-                <div className="w-2.5 h-5 rounded-full bg-emerald-400" />
-              </div>
-              <div>
-                <span className="text-base font-normal tracking-tight text-slate-900 block leading-tight">
-                  MediKiosk
-                </span>
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-                  Doctor Portal
-                </span>
-              </div>
+              <img
+                src="/logo.png"
+                alt="Sehat"
+                className="h-8 w-auto object-contain"
+              />
+              <span className="text-[10px] text-sky-600 font-medium px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 uppercase tracking-wider">
+                Doctor Portal
+              </span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}

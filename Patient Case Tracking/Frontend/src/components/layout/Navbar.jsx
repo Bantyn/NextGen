@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LogIn, LogOut, ChevronDown, Stethoscope, HeartPulse, UserCheck, ShieldCheck, User } from 'lucide-react';
+import { LogIn, LogOut, ChevronDown, Stethoscope, ShieldCheck, User } from 'lucide-react';
 import { useAuth } from '../../core/auth/useAuth';
 import { ROLES, ROLE_CONFIGS, DEMO_USERS } from '../../core/config/roles';
 
@@ -45,15 +45,11 @@ export const Navbar = () => {
     <header className="w-full max-w-7xl mx-auto px-6 sm:px-12 pt-7 pb-4 flex items-center justify-between relative z-30">
       {/* Brand Logo */}
       <Link to="/" className="flex items-center gap-2.5 cursor-pointer select-none group">
-        <div className="flex items-center gap-1">
-          <div className="w-2.5 h-6 rounded-full bg-sky-400 group-hover:scale-105 transition" />
-          <div className="w-2.5 h-7 rounded-full bg-amber-400 group-hover:scale-105 transition" />
-          <div className="w-2.5 h-6 rounded-full bg-rose-400 group-hover:scale-105 transition" />
-          <div className="w-2.5 h-5 rounded-full bg-emerald-400 group-hover:scale-105 transition" />
-        </div>
-        <span className="text-xl font-normal tracking-tight text-[var(--text-main)] ml-1">
-          MediKiosk
-        </span>
+        <img
+          src="/logo.png"
+          alt="Sehat"
+          className="h-8 w-auto object-contain dark:invert dark:brightness-0"
+        />
       </Link>
 
       {/* Navigation Links */}
@@ -130,10 +126,7 @@ export const Navbar = () => {
                   </div>
                   <div className="space-y-1 mt-1">
                     {DEMO_USERS.map((demo) => {
-                      let Icon = Stethoscope;
-                      if (demo.role === ROLES.NURSE) Icon = HeartPulse;
-                      if (demo.role === ROLES.RECEPTIONIST) Icon = UserCheck;
-                      if (demo.role === ROLES.ADMIN) Icon = ShieldCheck;
+                      const Icon = demo.role === ROLES.ADMIN ? ShieldCheck : Stethoscope;
 
                       return (
                         <button

@@ -102,7 +102,7 @@ export const ForgotPasswordForm = () => {
             type="email"
             required
             autoComplete="email"
-            placeholder="e.g. doctor@medikiosk.ai"
+            placeholder="e.g. doctor@sehat.org"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);

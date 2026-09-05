@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Sparkles, Stethoscope, HeartPulse, UserCheck, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Sparkles, Stethoscope, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../core/auth/useAuth';
 import { DEMO_USERS, ROLES, ROLE_CONFIGS } from '../../../core/config/roles';
 import { Button } from '../../../components/ui/Button';
@@ -64,26 +64,23 @@ export const LoginForm = () => {
           <span className="text-[10px] text-[var(--text-muted)]">1-Click Fast Track</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
           {DEMO_USERS.map((demo) => {
             const isSelected = selectedDemoRole === demo.role || email === demo.email;
-            let DemoIcon = Stethoscope;
-            if (demo.role === ROLES.NURSE) DemoIcon = HeartPulse;
-            if (demo.role === ROLES.RECEPTIONIST) DemoIcon = UserCheck;
-            if (demo.role === ROLES.ADMIN) DemoIcon = ShieldCheck;
+            const DemoIcon = demo.role === ROLES.ADMIN ? ShieldCheck : Stethoscope;
 
             return (
               <button
                 key={demo.role}
                 type="button"
                 onClick={() => handleSelectDemo(demo)}
-                className={`px-2 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer border ${
                   isSelected
                     ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-xs'
                     : 'bg-[var(--surface-card)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-main)] hover:border-[var(--border-medium)]'
                 }`}
               >
-                <DemoIcon className="w-3.5 h-3.5 shrink-0" />
+                <DemoIcon className="w-4 h-4 shrink-0" />
                 <span>{demo.role.charAt(0) + demo.role.slice(1).toLowerCase()}</span>
               </button>
             );
@@ -108,7 +105,7 @@ export const LoginForm = () => {
           type="email"
           required
           autoComplete="email"
-          placeholder="e.g. doctor@medikiosk.ai"
+          placeholder="e.g. doctor@sehat.org"
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);

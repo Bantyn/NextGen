@@ -144,7 +144,7 @@ export const RegisterForm = () => {
             label="Hospital Email Address"
             type="email"
             required
-            placeholder="e.g. doctor@medikiosk.ai"
+            placeholder="e.g. doctor@sehat.org"
             value={formData.email}
             onChange={(e) => handleChange('email', e.target.value)}
             icon={Mail}

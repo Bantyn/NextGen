@@ -16,7 +16,7 @@ class ApiClient {
    */
   getToken() {
     try {
-      return localStorage.getItem('medikiosk_token') || null;
+      return localStorage.getItem('sehat_token') || localStorage.getItem('medikiosk_token') || null;
     } catch {
       return null;
     }

@@ -1,13 +1,13 @@
 import React from 'react';
-import { Stethoscope, HeartPulse, UserCheck, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Stethoscope, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { ROLES, ROLE_CONFIGS } from '../../../core/config/roles';
 
 const ROLE_ICONS = {
   [ROLES.DOCTOR]: Stethoscope,
-  [ROLES.NURSE]: HeartPulse,
-  [ROLES.RECEPTIONIST]: UserCheck,
   [ROLES.ADMIN]: ShieldCheck,
 };
+
+const ALLOWED_REGISTRATION_ROLES = [ROLES.DOCTOR, ROLES.ADMIN];
 
 /**
  * RoleCardSelector Component
@@ -16,7 +16,7 @@ const ROLE_ICONS = {
 export const RoleCardSelector = ({ selectedRole, onSelectRole, className = '' }) => {
   return (
     <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${className}`}>
-      {Object.values(ROLES).map((roleKey) => {
+      {ALLOWED_REGISTRATION_ROLES.map((roleKey) => {
         const config = ROLE_CONFIGS[roleKey] || {};
         const Icon = ROLE_ICONS[roleKey] || Stethoscope;
         const isSelected = selectedRole === roleKey;
