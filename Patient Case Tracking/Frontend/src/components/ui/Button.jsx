@@ -20,27 +20,27 @@ export const Button = ({
   ...props
 }) => {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 cursor-pointer select-none active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100';
+    'inline-flex items-center justify-center font-normal rounded-2xl transition-all duration-200 cursor-pointer select-none active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100';
 
   const sizeStyles = {
-    sm: 'px-3 py-1.5 text-xs gap-1.5',
-    md: 'px-4 py-2.5 text-sm gap-2',
-    lg: 'px-6 py-3.5 text-base gap-2.5',
+    sm: 'px-3.5 py-2 text-xs gap-1.5 rounded-xl',
+    md: 'px-5 py-2.5 text-sm gap-2 rounded-xl',
+    lg: 'px-6 py-3.5 text-sm sm:text-base gap-2.5 rounded-2xl',
   };
 
   const variantStyles = {
     primary:
-      'bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] shadow-sm hover:shadow-[var(--shadow-glow)] border border-transparent',
+      'bg-slate-950 hover:bg-slate-800 text-white shadow-xs border border-transparent',
     secondary:
-      'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700/50 shadow-xs',
+      'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-2xs',
     outline:
-      'bg-transparent border border-[var(--border-medium)] text-[var(--text-main)] hover:bg-[var(--primary-light)] hover:border-[var(--primary-border)] hover:text-[var(--primary)]',
+      'bg-transparent border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900',
     ghost:
-      'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--border-subtle)] border border-transparent',
+      'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent',
     danger:
-      'bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 border border-rose-500/30 hover:border-rose-500/50',
+      'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200',
     glass:
-      'bg-[var(--glass-bg)] backdrop-blur-md text-[var(--text-main)] border border-[var(--glass-border)] hover:border-[var(--primary-border)] hover:bg-[var(--surface-card-hover)] shadow-xs',
+      'bg-white/90 backdrop-blur-md text-slate-800 border border-slate-200 hover:bg-slate-50 shadow-2xs',
   };
 
   const widthStyle = fullWidth ? 'w-full' : '';
