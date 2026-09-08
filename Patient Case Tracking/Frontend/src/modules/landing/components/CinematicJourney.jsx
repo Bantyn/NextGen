@@ -127,8 +127,10 @@ const MagneticItem = ({ children, className = "", strength = 14 }) => {
       const distanceX = e.clientX - centerX;
       const distanceY = e.clientY - centerY;
 
-      const pullX = (distanceX / (rect.width / 2)) * strength;
-      const pullY = (distanceY / (rect.height / 2)) * strength;
+      const halfW = rect.width / 2;
+      const halfH = rect.height / 2;
+      const pullX = halfW > 0 ? (distanceX / halfW) * strength : 0;
+      const pullY = halfH > 0 ? (distanceY / halfH) * strength : 0;
 
       xTo(pullX);
       yTo(pullY);
@@ -145,6 +147,7 @@ const MagneticItem = ({ children, className = "", strength = 14 }) => {
     return () => {
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
+      gsap.killTweensOf(el);
     };
   }, [strength]);
 
@@ -225,30 +228,39 @@ export const CinematicJourney = () => {
   const cardsRef = useRef([]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      gsap.registerPlugin(ScrollTrigger);
+    }
+
+    if (!containerRef.current) return;
+
     const ctx = gsap.context(() => {
       // 1. Staggered ScrollTrigger Entry Animation for cards
-      gsap.fromTo(
-        cardsRef.current,
-        {
-          opacity: 0,
-          y: 35,
-          scale: 0.96,
-        },
-        {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 0.75,
-          stagger: 0.1,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top 85%",
-            end: "bottom 20%",
-            toggleActions: "play none none reverse",
+      const validCards = cardsRef.current.filter(Boolean);
+      if (validCards.length > 0) {
+        gsap.fromTo(
+          validCards,
+          {
+            opacity: 0,
+            y: 35,
+            scale: 0.96,
           },
-        }
-      );
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.75,
+            stagger: 0.1,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: containerRef.current,
+              start: "top 85%",
+              end: "bottom 20%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      }
 
       // 2. Parallax drift for Giant Background Watermark Text
       if (marqueeRef.current) {
@@ -269,8 +281,8 @@ export const CinematicJourney = () => {
   }, []);
 
   // Card Mouse Move Glow Effect
-  const handleCardMouseMove = (e, idx) => {
-    const card = cardsRef.current[idx];
+  const handleCardMouseMove = (e) => {
+    const card = e.currentTarget;
     if (!card) return;
     const rect = card.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -321,8 +333,10 @@ export const CinematicJourney = () => {
               className="h-full flex flex-col"
             >
               <div
-                ref={(el) => (cardsRef.current[idx] = el)}
-                onMouseMove={(e) => handleCardMouseMove(e, idx)}
+                ref={(el) => {
+                  cardsRef.current[idx] = el;
+                }}
+                onMouseMove={handleCardMouseMove}
                 className="journey-light-card flex-1 p-5 flex flex-col justify-between text-left group cursor-default"
               >
                 <div className="journey-light-glow" />
