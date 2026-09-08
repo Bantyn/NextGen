@@ -1,0 +1,277 @@
+{
+  "name": "MediKiosk Workflow 3 - AI Clinical Summary Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medikiosk-clinical-summary",
+        "options": {}
+      },
+      "id": "b037ca4d-e40c-4891-b9a8-36a83475dace",
+      "name": "Receive Case Completion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "86d2f02c-8c20-47e2-8a46-22be91340ce2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Boolean($json.body && ($json.body.session_id || $json.body.case_completed)) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "150bcbdc-0475-4f6f-a022-60c364ac9012",
+      "name": "Validate Completion Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "error_code",
+              "value": "INVALID_COMPLETION_REQUEST"
+            },
+            {
+              "name": "error_message",
+              "value": "Missing session_id or case_completed flag."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bae4e958-3130-4288-ba4e-8eda673ac8ba",
+      "name": "Prepare Summary Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "4680bd70-6b8d-4f5a-8b6e-9cfd3f883d5d",
+      "name": "Return Summary Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        400,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Future: Replace with 'MongoDB Get Patient Answers'\nconst body = $json.body || {};\nconst sessionId = body.session_id || 'demo-session-001';\nconst patientId = body.patient_id || 'demo-patient-001';\n\nconst mockPatientAnswers = [\n  {\n    \"question\": \"What is your main problem?\",\n    \"answer\": \"I have fever and cough.\"\n  },\n  {\n    \"question\": \"How long have you had these symptoms?\",\n    \"answer\": \"Three days.\"\n  }\n];\n\nreturn [{\n  json: {\n    session_id: sessionId,\n    patient_id: patientId,\n    patient_answers: mockPatientAnswers\n  }\n}];"
+      },
+      "id": "97e2fe80-efbe-42d0-adb8-cc2aa288478a",
+      "name": "Load Mock Patient Answers (Future: MongoDB Query)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Future: Replace with 'MongoDB Get Document Data'\nconst inputData = $input.first().json;\n\nconst mockDocumentData = {\n  \"medicines\": [\n    {\n      \"name\": \"Paracetamol\",\n      \"frequency\": \"1-0-1\"\n    }\n  ],\n  \"test_results\": []\n};\n\nreturn [{\n  json: {\n    ...inputData,\n    document_data: mockDocumentData\n  }\n}];"
+      },
+      "id": "c56e7e8e-2a3a-4c79-b0a6-b415bcf1812e",
+      "name": "Load Mock Document Data (Future: MongoDB Query)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.first().json;\n\nconst summaryPrompt = `You are MediKiosk AI Clinical Digest Generator.\nSynthesize patient Q&A history and uploaded document data into a physician-ready draft clinical summary.\n\nRules:\n1. Do NOT diagnose, prescribe, or recommend treatment.\n2. Rely ONLY on provided facts. Never invent missing facts.\n3. Mark requires_doctor_review = true.\n\nPatient Answers: ${JSON.stringify(inputData.patient_answers)}\nDocument Data: ${JSON.stringify(inputData.document_data)}\n\nReturn strictly a JSON object matching:\n{\n  \"patient_summary\": \"Concise SOAP draft summary\",\n  \"chief_complaints\": [\"Fever\", \"Cough\"],\n  \"symptoms\": [\"Fever\", \"Cough\"],\n  \"symptom_duration\": \"3 days\",\n  \"existing_conditions\": [],\n  \"current_medications\": [\"Paracetamol 1-0-1\"],\n  \"document_information\": [\"Prescription provided for Paracetamol\"],\n  \"important_observations\": [],\n  \"possible_red_flags\": [],\n  \"missing_information\": [\"Vital signs\", \"Physical examination\"],\n  \"requires_doctor_review\": true\n}`;\n\nreturn [{\n  json: {\n    ...inputData,\n    summary_prompt: summaryPrompt\n  }\n}];"
+      },
+      "id": "58643c5d-2a88-4279-a987-f370e04d2daf",
+      "name": "Combine Clinical Context & Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_API_BASE || 'http://localhost:11434' }}/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama3\",\n  \"prompt\": {{ JSON.stringify($json.summary_prompt) }},\n  \"stream\": false,\n  \"format\": \"json\"\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "1c173943-063e-4a98-a396-7526494e5011",
+      "name": "Generate Clinical Summary (Configurable Local LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1008,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.first().json;\nconst bodyData = inputData.body || inputData;\n\nlet clinicalSummary = {\n  patient_summary: \"Patient presented with fever and cough for 3 days. Uploaded prescription shows Paracetamol 500mg.\",\n  chief_complaints: [\"Fever\", \"Cough\"],\n  symptoms: [\"Fever\", \"Cough\"],\n  symptom_duration: \"3 days\",\n  existing_conditions: [],\n  current_medications: [\"Paracetamol 500mg\"],\n  document_information: [\"Prescription verified\"],\n  important_observations: [],\n  possible_red_flags: [],\n  missing_information: [\"Temperature reading\", \"Oxygen saturation\"],\n  requires_doctor_review: true\n};\n\ntry {\n  if (bodyData && bodyData.response) {\n    const parsed = typeof bodyData.response === 'string' ? JSON.parse(bodyData.response) : bodyData.response;\n    if (parsed.patient_summary) clinicalSummary = parsed;\n  }\n} catch(e) {\n  // Fallback to structured summary on JSON parse exception\n}\n\nreturn [{\n  json: {\n    success: true,\n    session_id: inputData.session_id || 'demo-session-001',\n    clinical_summary: clinicalSummary,\n    requires_doctor_review: true\n  }\n}];"
+      },
+      "id": "e39a02b0-2fbe-41cb-a798-d6739d031334",
+      "name": "Validate & Format Clinical Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "437284ac-ad0e-4631-87fb-1009c06c8282",
+      "name": "Return Clinical Summary",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Case Completion": {
+      "main": [
+        [
+          {
+            "node": "Validate Completion Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Completion Request": {
+      "main": [
+        [
+          {
+            "node": "Load Mock Patient Answers (Future: MongoDB Query)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Summary Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return Summary Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Mock Patient Answers (Future: MongoDB Query)": {
+      "main": [
+        [
+          {
+            "node": "Load Mock Document Data (Future: MongoDB Query)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Mock Document Data (Future: MongoDB Query)": {
+      "main": [
+        [
+          {
+            "node": "Combine Clinical Context & Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Clinical Context & Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Clinical Summary (Configurable Local LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Clinical Summary (Configurable Local LLM)": {
+      "main": [
+        [
+          {
+            "node": "Validate & Format Clinical Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Format Clinical Summary": {
+      "main": [
+        [
+          {
+            "node": "Return Clinical Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "23960ed1-9522-4c92-9371-fad014dc6369",
+  "meta": {
+    "instanceId": "4a7cab7a4d5181435d122419e3e935439c97b068b197f9ca74829ab870f6f0eb"
+  },
+  "nodeGroups": [],
+  "id": "3zXRoZSs83tDY7rO",
+  "tags": []
+}

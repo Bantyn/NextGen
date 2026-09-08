@@ -8,11 +8,14 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "w4-node-webhook",
+      "id": "1b22b2f0-4955-4ffb-9b62-aadf7edce58d",
       "name": "Receive Smart Assistant Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [200, 300],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "medikiosk-smart-assistant-webhook"
     },
     {
@@ -26,24 +29,29 @@
           ]
         }
       },
-      "id": "w4-node-validate-req",
+      "id": "786186c2-63c5-44c0-9c02-0bccf6a0a277",
       "name": "Validate Assistant Input",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [420, 300]
+      "position": [
+        224,
+        0
+      ]
     },
     {
       "parameters": {
         "options": {
           "responseCode": 400
-        },
-        "responseBody": "={\n  \"success\": false,\n  \"message\": \"Message text is required.\",\n  \"intent\": \"INVALID_REQUEST\",\n  \"urgent\": false,\n  \"requires_doctor\": false\n}"
+        }
       },
-      "id": "w4-node-bad-request",
+      "id": "4ad4aae2-4e99-4785-bc6d-101e4d8643a9",
       "name": "Return Bad Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [420, 520]
+      "position": [
+        224,
+        224
+      ]
     },
     {
       "parameters": {
@@ -77,11 +85,14 @@
         },
         "options": {}
       },
-      "id": "w4-node-prepare-context",
+      "id": "ce86ad41-0e71-4b1a-9cad-1500760da307",
       "name": "Normalize Context & Safe Auth",
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
-      "position": [640, 300]
+      "position": [
+        448,
+        0
+      ]
     },
     {
       "parameters": {
@@ -91,11 +102,14 @@
           "systemMessage": "=You are the Smart AI Assistant for MediKiosk (Team NextGen) conducting an intelligent, empathetic conversation in {{ $('Normalize Context & Safe Auth').item.json.language }}.\n\nCLINICAL & SAFETY MANDATES:\n1. ABSOLUTE MEDICAL SAFETY: You are an informational assistant, NOT a doctor. NEVER diagnose diseases (do NOT say 'You have X condition'). NEVER prescribe drug dosages independently.\n2. NO HALLUCINATION: Answer medicine questions ONLY using the verified MongoDB records provided. If no record is found, state: 'I do not have verified information for that in the current knowledge base. Please consult a qualified physician or pharmacist.'\n3. CONTEXTUAL EMERGENCY ESCALATION: If the user describes an acute emergency (crushing chest pain with breathlessness/sweating, sudden stroke signs, severe hemorrhage), advise immediate emergency care (108 / 102) and do not give routine home advice.\n4. WEBSITE & FEATURE HELP: Explain MediKiosk features (Kiosk Voice Intake, Document OCR, Live Queue Tracking, Doctor Portal) clearly based on role.\n5. CONCISE & SPOKEN-FRIENDLY: Keep responses warm, helpful, structured, and concise (40-60 words), strictly in {{ $('Normalize Context & Safe Auth').item.json.language }} script."
         }
       },
-      "id": "w4-node-ai-agent",
+      "id": "6d007325-37ca-4aa4-8cd6-e9f6f29ec4b4",
       "name": "Smart Assistant AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [880, 300]
+      "position": [
+        688,
+        0
+      ]
     },
     {
       "parameters": {
@@ -105,11 +119,14 @@
           "temperature": 0.3
         }
       },
-      "id": "w4-node-groq-model",
+      "id": "07918b25-137b-4aff-99d8-b70a6374f923",
       "name": "Groq LLM Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
-      "position": [720, 520],
+      "position": [
+        528,
+        224
+      ],
       "credentials": {
         "groqApi": {
           "id": "X30B0SlnyxdM9O0l",
@@ -123,22 +140,28 @@
         "sessionKey": "={{ $('Normalize Context & Safe Auth').item.json.session_id }}",
         "contextWindowLength": 4
       },
-      "id": "w4-node-memory",
+      "id": "29c3bcbb-2f8b-4d1e-88e6-f83a3a8a3d4e",
       "name": "Assistant Memory Window",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [880, 520]
+      "position": [
+        688,
+        224
+      ]
     },
     {
       "parameters": {
         "collection": "assistant_medicines",
         "options": {}
       },
-      "id": "w4-node-tool-medicines",
+      "id": "b4a6ad17-1015-494f-8b27-1eb653f12e97",
       "name": "MongoDB Medicine Tool",
       "type": "n8n-nodes-base.mongoDbTool",
       "typeVersion": 1.4,
-      "position": [1060, 520],
+      "position": [
+        864,
+        224
+      ],
       "credentials": {
         "mongoDb": {
           "id": "oddtTzjqoMZWhS13",
@@ -151,11 +174,14 @@
         "collection": "assistant_faqs",
         "options": {}
       },
-      "id": "w4-node-tool-faqs",
+      "id": "de0ca26e-2ecb-47cd-8995-f2628b3d8c1c",
       "name": "MongoDB FAQs & Support Tool",
       "type": "n8n-nodes-base.mongoDbTool",
       "typeVersion": 1.4,
-      "position": [1220, 520],
+      "position": [
+        1024,
+        224
+      ],
       "credentials": {
         "mongoDb": {
           "id": "oddtTzjqoMZWhS13",
@@ -167,14 +193,16 @@
       "parameters": {
         "options": {
           "responseCode": 200
-        },
-        "responseBody": "={\n  \"success\": true,\n  \"message\": \"{{ ($json.output || $json.text || '').replace(/\\n/g, '\\\\n').replace(/\"/g, '\\\\\"').trim() }}\",\n  \"intent\": \"SMART_ASSISTANT_RESPONSE\",\n  \"source\": \"n8n_agent_mongodb\",\n  \"urgent\": false,\n  \"requires_doctor\": false,\n  \"quick_actions\": [\"Website Help\", \"Medicine Helper\", \"Patient Intake\", \"Contact Support\"]\n}"
+        }
       },
-      "id": "w4-node-respond-success",
+      "id": "667416f9-8dee-446b-a615-95223664f6e8",
       "name": "Return Smart Assistant Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1200, 300]
+      "position": [
+        1008,
+        0
+      ]
     }
   ],
   "pinData": {},
@@ -280,11 +308,11 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "assistant-v1-production",
+  "versionId": "0fc3b2f3-d76e-43ec-86d9-42bdc3681a47",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "medikiosk-assistant-instance"
+    "instanceId": "4a7cab7a4d5181435d122419e3e935439c97b068b197f9ca74829ab870f6f0eb"
   },
-  "id": "MediKioskWorkflow4Assistant",
+  "nodeGroups": [],
+  "id": "khRmqcOUETXftQNu",
   "tags": []
 }
