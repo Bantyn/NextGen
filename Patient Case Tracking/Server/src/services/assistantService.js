@@ -7,6 +7,7 @@ import {
   AssistantWebsiteHelp,
   AssistantContact,
 } from '../models/AssistantKnowledge.js';
+import { openfdaService } from './openfdaService.js';
 
 // Load static fallback knowledge base
 let staticKnowledge = null;
@@ -83,19 +84,36 @@ export async function getMedicineInfo(medicineIdOrName) {
   } catch (dbErr) {}
 
   if (staticKnowledge?.medicines) {
-    return (
-      staticKnowledge.medicines.find((m) => {
-        const nameL = m.name.toLowerCase();
-        const genL = m.generic_name.toLowerCase();
-        return (
-          m.medicine_id.toLowerCase() === cleanId ||
-          cleanId.includes(nameL) ||
-          cleanId.includes(genL) ||
-          m.brand_names.some((b) => cleanId.includes(b.toLowerCase()))
-        );
-      }) || null
-    );
+    const found = staticKnowledge.medicines.find((m) => {
+      const nameL = m.name.toLowerCase();
+      const genL = m.generic_name.toLowerCase();
+      return (
+        m.medicine_id.toLowerCase() === cleanId ||
+        cleanId.includes(nameL) ||
+        cleanId.includes(genL) ||
+        m.brand_names.some((b) => cleanId.includes(b.toLowerCase()))
+      );
+    });
+    if (found) return found;
   }
+
+  // 3. Fallback to openFDA reference lookup
+  try {
+    const fdaData = await openfdaService.getDrugInformation(cleanId);
+    if (fdaData) {
+      return {
+        medicine_id: `FDA-${cleanId.toUpperCase()}`,
+        name: fdaData.brand_name || cleanId,
+        generic_name: fdaData.generic_name || cleanId,
+        purpose: fdaData.purpose_or_indications || 'Reference medicine data',
+        brand_names: [fdaData.brand_name].filter(Boolean),
+        precautions_and_warnings: [fdaData.warnings, fdaData.precautions].filter(Boolean),
+        contraindications: [fdaData.contraindications].filter(Boolean),
+        general_usage_info: fdaData.disclaimer,
+        source: 'openFDA',
+      };
+    }
+  } catch (err) {}
 
   return null;
 }

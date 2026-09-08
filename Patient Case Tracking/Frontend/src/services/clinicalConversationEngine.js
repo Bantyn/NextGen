@@ -587,6 +587,16 @@ export function extractClinicalInformation(patientText, currentClinicalState = {
   ) {
     extracted.associated_symptoms.push("Dizziness / Faintness (ચક્કર)");
   }
+  if (
+    textLower.includes("difficulty walking") ||
+    textLower.includes("trouble moving") ||
+    textLower.includes("walking") ||
+    patientText.includes("ચાલવામાં તકલીફ") ||
+    patientText.includes("ચાલવા") ||
+    patientText.includes("चलने में")
+  ) {
+    extracted.associated_symptoms.push("Difficulty walking (ચાલવામાં તકલીફ)");
+  }
 
   return extracted;
 }
@@ -918,6 +928,12 @@ export async function processPatientClinicalResponse({
       const data = await response.json();
       if (data && data.assistant_message) {
         aiResponse = data;
+        
+        // Sync backend state tracking to prevent repeated questions
+        if (data.clinical_state && data.clinical_state.answered_dimensions) {
+          updatedState.answered_dimensions = data.clinical_state.answered_dimensions;
+        }
+
         if (data.extracted_entities) {
           if (data.extracted_entities.chief_complaint && !updatedState.chief_complaints.includes(data.extracted_entities.chief_complaint)) {
             updatedState.chief_complaints.push(data.extracted_entities.chief_complaint);

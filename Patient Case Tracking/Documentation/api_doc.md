@@ -439,16 +439,111 @@ All responses conform to the enterprise JSON envelope contract:
 
 ---
 
-## 12. 📋 Clinical Intake Engine
-
 ### `POST /api/v1/intake/chat`
-- **Description**: Multi-turn adaptive conversational clinical intake with red-flag detection.
+- **Description**: Multi-turn adaptive conversational clinical history intake with contextual red-flag detection, patient intent understanding, and structured clinical state tracking.
+- **Access Control**: Public / Kiosk / Attending Staff
 - **Request Body**:
 ```json
 {
+  "session_id": "SES-3DB65058",
   "patient_id": "PAT-AD16808B",
-  "message": "Mane chhati ma dukhavo thay chhe.",
-  "language": "gu-IN",
-  "session_id": "SES-3DB65058"
+  "patient_answer": "My right knee has been hurting for 2 years.",
+  "language": "English",
+  "opd_mode": "GENERAL",
+  "current_clinical_state": {}
 }
 ```
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "assistant_message": "Did this discomfort begin suddenly or did it develop gradually over time?",
+  "intent": "medical-history response",
+  "risk_state": "ASSESSING",
+  "next_question": "Did this discomfort begin suddenly or did it develop gradually over time?",
+  "quick_chips": [
+    "Started suddenly",
+    "Developed gradually",
+    "After physical strain"
+  ],
+  "extracted_entities": {
+    "chief_complaint": "Right Knee Pain",
+    "symptoms": ["Right Knee Pain"],
+    "duration": "2 years",
+    "severity": null,
+    "onset": null,
+    "location": "Right Knee",
+    "associated_symptoms": [],
+    "negated_symptoms": []
+  },
+  "clinical_state": {
+    "chief_complaint": "Right Knee Pain",
+    "symptoms": ["Right Knee Pain"],
+    "body_site": "Right Knee",
+    "onset": "",
+    "duration": "2 years",
+    "severity": null,
+    "course": "",
+    "associated_symptoms": [],
+    "negative_findings": [],
+    "relevant_history": [],
+    "medications": [],
+    "allergies": [],
+    "family_history": [],
+    "lifestyle": {},
+    "red_flags": [],
+    "risk_level": "LOW",
+    "patient_intent": "medical-history response",
+    "confidence": 0.85,
+    "missing_high_priority_information": ["onset", "severity", "associated_symptoms"],
+    "next_question": "Did this discomfort begin suddenly or did it develop gradually over time?"
+  },
+  "red_flag": {
+    "detected": false,
+    "priority": "LOW",
+    "triage_level": "LOW",
+    "category": "ROUTINE_OUTPATIENT",
+    "reason": "Routine outpatient presentation."
+  },
+  "infermedica_assessment": {
+    "source": "local_clinical_knowledge_base",
+    "assessment": {
+      "possible_conditions": [
+        {
+          "id": "ckb_cond_primary",
+          "name": "Right Knee Pain Assessment",
+          "common_name": "Right Knee Pain Assessment",
+          "probability": 0.5,
+          "requires_doctor_confirmation": true
+        }
+      ],
+      "triage": {
+        "level": "LOW",
+        "reason": "Evaluated deterministically via local clinical knowledge base."
+      }
+    }
+  },
+  "history_complete": false,
+  "doctor_review_required": false,
+  "session_status": "IN_PROGRESS"
+}
+```
+
+---
+
+## 13. 🛡️ Clinical Intelligence & Triage Specifications
+
+### Triage Levels:
+| Triage Level | Criteria | Kiosk Behavior |
+| :--- | :--- | :--- |
+| `LOW` / `ROUTINE` | Chronic pain, mild symptoms, long-standing joint aches (> 1 month) | Standard adaptive intake, no alarms. |
+| `MODERATE` | Uncomplicated chest discomfort, persistent symptoms (1-2 weeks), subacute pain | Targeted risk assessment questions (pressure, radiation, dyspnea). |
+| `HIGH PRIORITY` | Significant respiratory distress, severe acute pain (8-9/10), acute high fever | Prioritized in OPD queue; rapid summary synthesis. |
+| `EMERGENCY` | Crushing chest pain + diaphoresis/dyspnea, acute stroke signs, hematemesis, syncope | Immediate intake halt, audible kiosk guidance, immediate emergency physician alert. |
+
+### Patient Intent Recognition:
+- `doctor-consult question`: Answers the patient's advice concern empathetically first, then resumes intake.
+- `medicine information question`: Clarifies factual medicine details via MongoDB/openFDA, advises physician confirmation.
+- `emergency concern`: Provides immediate clinical reassurance and risk triage.
+- `general help` / `repeat/rephrase` / `language change`: Responds naturally.
+
