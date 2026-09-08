@@ -27,6 +27,7 @@ export const SmartAssistantPanel = ({
   messages,
   isLoading,
   onSendMessage,
+  onActionClick,
   onClearChat,
   language,
   onLanguageChange,
@@ -139,7 +140,7 @@ export const SmartAssistantPanel = ({
 
         {/* Message Stream */}
         {messages.map((msg, index) => (
-          <SmartAssistantMessage key={index} message={msg} />
+          <SmartAssistantMessage key={index} message={msg} onActionClick={onActionClick} />
         ))}
 
         {/* Loading Indicator */}

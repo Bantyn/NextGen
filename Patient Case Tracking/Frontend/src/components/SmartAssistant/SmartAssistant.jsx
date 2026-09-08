@@ -123,10 +123,16 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
       role: 'assistant',
       content: response.message || "I'm sorry, I could not process your query. Please try again.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      urgent: Boolean(response.urgent),
+      urgent: Boolean(response.urgent || response.risk?.level === 'EMERGENCY'),
       requires_doctor: Boolean(response.requires_doctor),
       data: response.data || null,
       intent: response.intent || 'GENERAL',
+      specialty: response.specialty || null,
+      risk: response.risk || null,
+      doctors: response.doctors || response.data?.doctors || [],
+      availability: response.availability || response.data?.availability || [],
+      actions: response.actions || [],
+      sources: response.sources || [],
       animate: true,
     };
 
@@ -134,6 +140,19 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
 
     if (!isOpen) {
       setUnreadCount((c) => c + 1);
+    }
+  };
+
+  const handleActionClick = (action) => {
+    if (!action) return;
+    if (action.type === 'CALL_HOSPITAL') {
+      window.location.href = `tel:${action.phone || '108'}`;
+    } else if (action.type === 'NAVIGATE') {
+      if (action.route) window.location.href = action.route;
+    } else if (action.type === 'VIEW_OPD_QUEUE') {
+      window.location.href = '/opd-queue';
+    } else if (action.label) {
+      handleSendMessage(action.label);
     }
   };
 
@@ -147,6 +166,7 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
         messages={messages}
         isLoading={isLoading}
         onSendMessage={handleSendMessage}
+        onActionClick={handleActionClick}
         onClearChat={handleClearChat}
         language={language}
         onLanguageChange={handleLanguageChange}

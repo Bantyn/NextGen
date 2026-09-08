@@ -34,7 +34,7 @@ const ClinicalObservationSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['AI_DIALOGUE', 'OCR_DOCUMENT', 'PHYSICIAN_ENTRY'],
+      enum: ['AI_DIALOGUE', 'OCR_DOCUMENT', 'PHYSICIAN_ENTRY', 'PATIENT_REPORTED'],
       default: 'AI_DIALOGUE',
     },
   },
