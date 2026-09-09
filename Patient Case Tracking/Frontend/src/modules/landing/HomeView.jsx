@@ -1,23 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Mic,
-  Stethoscope,
-  ArrowRight,
-  ShieldCheck,
-  FileText,
-  Activity,
-  Leaf,
-  Sparkles,
-  QrCode,
-  CheckCircle2,
-  Clock,
-  HeartPulse,
-  AlertTriangle,
-  Lock,
-  Layers,
-} from "lucide-react";
+import { Mic, ShieldCheck, FileText, Activity } from "lucide-react";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
+import { ClinicalTestimonial } from "./components/ClinicalTestimonial";
+import { CinematicJourney } from "./components/CinematicJourney";
+import { Hero } from "@/components/ui/hero-with-group-of-images-text-and-two-buttons";
 
 /**
  * HomeView Component — Sehat Platform Overview & Interactive Launchpad
@@ -27,53 +14,18 @@ export const HomeView = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="w-full max-w-5xl px-4 sm:px-6 pt-8 sm:pt-14 pb-16 flex flex-col items-center text-center mx-auto space-y-16">
-      {/* 1. HERO SECTION */}
-      <section className="w-full flex flex-col items-center text-center">
-        {/* Compliance Badges */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-normal bg-sky-50 text-sky-800 border border-sky-200/80 mb-4 shadow-2xs">
-          <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-          <span>
-            ABDM FHIR Compliant • DPDP Act 2023 • Multilingual Voice AI
-          </span>
-        </div>
+    <div className="w-full max-w-7xl px-4 sm:px-8 pt-4 sm:pt-8 pb-16 flex flex-col items-center text-center mx-auto space-y-16">
+      {/* 1. HERO SECTION WITH IMAGE GROUP */}
+      <section className="w-full">
+        <Hero
+          onStartCheckIn={() => navigate("/patient/register")}
+          onDoctorPortal={() => navigate("/doctor")}
+        />
 
-        {/* Main Headline */}
-        <h1 className="text-4xl sm:text-6xl md:text-7xl font-normal text-slate-950 tracking-tight leading-[1.08] max-w-3xl my-2">
-          Autonomous Clinical History Intake for Next-Gen OPDs
-        </h1>
-
-        {/* Subtitle */}
-        <p className="text-sm sm:text-base md:text-lg font-normal text-slate-500 max-w-2xl mx-auto leading-relaxed mt-3 mb-8">
-          <strong>Sehat</strong> empowers patients to record comprehensive
-          medical histories via natural voice conversation, scan past
-          prescriptions, and generate structured, physician-ready summaries
-          linked to their <strong>ABHA record</strong> before entering the
-          consultation room.
-        </p>
-
-        {/* Hero CTAs */}
-        <div className="flex items-center justify-center gap-3 mb-10 flex-wrap">
-          <button
-            onClick={() => navigate("/patient/register")}
-            className="inline-flex items-center gap-2 px-8 py-3 rounded-full text-sm font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-sm"
-          >
-            <span>Start Patient Check-In</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => navigate("/doctor")}
-            className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-normal text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 transition cursor-pointer shadow-2xs"
-          >
-            <Stethoscope className="w-4 h-4 text-slate-600" />
-            <span>Doctor OPD Consultation Portal</span>
-          </button>
-        </div>
 
         {/* Platform Stat Highlights */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-3xl pt-4 border-t border-slate-200/70 text-left">
-          <div className="p-3 rounded-2xl bg-white/70 border border-slate-200/80">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full pt-4 border-t border-slate-200/70 text-left">
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80">
             <div className="text-xl sm:text-2xl font-normal text-slate-950">
               7+
             </div>
@@ -255,86 +207,10 @@ export const HomeView = () => {
       </section>
 
       {/* 3. 5-STEP END-TO-END PATIENT & DOCTOR JOURNEY */}
-      <section className="w-full text-left space-y-6">
-        <div className="text-center max-w-xl mx-auto">
-          <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
-            Clinical Workflow
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight mt-1">
-            End-to-End 5-Step Journey
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1.5">
-            From kiosk arrival to physician sign-off in minutes.
-          </p>
-        </div>
+      <CinematicJourney />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium">
-              1
-            </div>
-            <div className="font-medium text-xs text-slate-950">
-              Identify & Consent
-            </div>
-            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-              Patient enters/scans ABHA ID, selects language, and gives
-              audio-guided DPDP consent.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium">
-              2
-            </div>
-            <div className="font-medium text-xs text-slate-950">
-              Converse & Intake
-            </div>
-            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-              AI conducts adaptive voice + touch SOCRATES interview; red flags
-              trigger emergency triage.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium">
-              3
-            </div>
-            <div className="font-medium text-xs text-slate-950">
-              Scan & Digitize
-            </div>
-            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-              Upload prior prescriptions and reports; OCR digitizes medications
-              and abnormal lab ranges.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-medium">
-              4
-            </div>
-            <div className="font-medium text-xs text-slate-950">
-              Summarize & Route
-            </div>
-            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-              FHIR history summary generated, linked to ABHA, and pushed live to
-              doctor's OPD screen.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-medium">
-              5
-            </div>
-            <div className="font-medium text-xs text-slate-950">
-              Consult & Sign-Off
-            </div>
-            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-              Physician reviews complete history in seconds, edits/confirms, and
-              prescribes treatment.
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* 4. CLINICAL ENDORSEMENTS & TESTIMONIALS (FRAMER MOTION ASYMMETRIC) */}
+      <ClinicalTestimonial />
 
       {/* 4. INTERACTIVE LIVE VOICE INTAKE DEMO */}
       <section

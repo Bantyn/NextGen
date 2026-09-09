@@ -3,214 +3,423 @@
     {
       "medicine_id": "MED-001",
       "name": "Paracetamol",
-      "brand_names": ["Crocin", "Dolo 650", "Calpol", "Pacimol"],
+      "brand_names": ["Crocin", "Dolo 650", "Calpol", "Pacimol", "Pyrigesic", "Metacin"],
       "generic_name": "Acetaminophen / Paracetamol",
       "category": "Antipyretic & Analgesic (Fever & Pain Reliever)",
-      "purpose": "Used for temporary relief of mild-to-moderate pain (headache, toothache, muscle aches) and reduction of fever.",
-      "dosage_forms": ["Tablets (500mg, 650mg)", "Syrup (120mg/5ml, 250mg/5ml)", "Drops", "Suppositories"],
-      "general_usage_info": "Typically taken with or without food as advised by a physician. Avoid exceeding recommended daily limits to protect liver health.",
+      "purpose": "Temporary relief of mild-to-moderate pain (headache, toothache, body ache) and reduction of fever in infectious conditions.",
+      "dosage_forms": ["Tablets (500mg, 650mg)", "Syrup (120mg/5ml, 250mg/5ml)", "Paediatric Oral Drops (100mg/ml)", "Suppositories (170mg, 250mg)"],
+      "general_usage_info": "Typically taken every 4 to 6 hours as required with a glass of water. Do not exceed 4000mg (4 grams) per 24 hours in adults. Always consult your consulting doctor for paediatric dosing.",
       "precautions_and_warnings": [
-        "Do not consume alcohol while taking Paracetamol.",
-        "Patients with pre-existing liver or kidney impairment must consult a doctor first.",
-        "Do not combine with other medications containing paracetamol (risk of accidental overdose)."
+        "Do not consume alcohol while taking Paracetamol (heightened risk of acute hepatotoxicity).",
+        "Patients with pre-existing liver disease, hepatitis, or severe kidney impairment must seek prior physician approval.",
+        "Check labels of other combination cold/cough products to avoid accidental paracetamol double-dosing."
       ],
-      "contraindications": ["Severe active liver disease", "Known hypersensitivity to paracetamol"],
-      "common_side_effects": ["Nausea (rare)", "Mild stomach upset (rare)"],
-      "storage_instructions": "Store in a cool, dry place away from direct sunlight and out of reach of children.",
+      "contraindications": ["Severe active hepatic impairment or acute liver failure", "Known severe hypersensitivity to paracetamol"],
+      "common_side_effects": ["Nausea (rare)", "Mild allergic rash or pruritus (very rare)"],
+      "storage_instructions": "Store in a cool, dry place below 30°C away from direct sunlight, moisture, and reach of children.",
       "requires_prescription": false
     },
     {
       "medicine_id": "MED-002",
       "name": "Azithromycin",
-      "brand_names": ["Azithral", "Azee", "Zithromax"],
-      "generic_name": "Azithromycin",
+      "brand_names": ["Azithral", "Azee", "Zithromax", "Azimax", "ATM"],
+      "generic_name": "Azithromycin Dihydrate",
       "category": "Macrolide Antibiotic",
-      "purpose": "Prescription antibiotic used to treat bacterial infections of the respiratory tract, throat, ear, and skin.",
-      "dosage_forms": ["Tablets (250mg, 500mg)", "Oral Suspension"],
-      "general_usage_info": "Must strictly be taken as prescribed by a licensed doctor. Complete the full course even if symptoms improve.",
+      "purpose": "Prescription antibiotic indicated for susceptible bacterial infections of the upper and lower respiratory tracts, pharyngitis, sinusitis, otitis media, skin/soft tissue, and genital infections.",
+      "dosage_forms": ["Film-coated Tablets (250mg, 500mg)", "Oral Suspension (100mg/5ml, 200mg/5ml)", "IV Infusion (500mg)"],
+      "general_usage_info": "Take strictly as prescribed by a licensed doctor, once daily at the same time. May be taken with or without food (taking with food reduces gastric upset). Complete the full duration prescribed even if symptoms resolve early.",
       "precautions_and_warnings": [
-        "Requires a valid doctor prescription.",
-        "Ineffective against viral infections such as the common cold or flu.",
-        "Inform your doctor if you have a history of heart rhythm irregularities (QT prolongation) or liver disease."
+        "Mandatory valid doctor prescription required (Schedule H drug in India).",
+        "Ineffective against viral pathogens including influenza, common rhinovirus colds, and COVID-19.",
+        "Caution in patients with prolonged QT interval, arrhythmia, severe hepatic dysfunction, or myasthenia gravis.",
+        "Antacids containing aluminium or magnesium should not be taken concurrently (separate by at least 2 hours)."
       ],
-      "contraindications": ["Known allergy to azithromycin, erythromycin, or any macrolide antibiotic"],
-      "common_side_effects": ["Diarrhea", "Nausea", "Abdominal cramping", "Headache"],
-      "storage_instructions": "Store at room temperature below 30°C.",
+      "contraindications": ["Known hypersensitivity to azithromycin, erythromycin, or any macrolide/ketolide antibiotics", "History of cholestatic jaundice/hepatic dysfunction with prior azithromycin use"],
+      "common_side_effects": ["Mild diarrhea or loose stools", "Nausea", "Abdominal discomfort", "Headache"],
+      "storage_instructions": "Store below 25°C in original packaging away from excessive moisture.",
       "requires_prescription": true
     },
     {
       "medicine_id": "MED-003",
       "name": "Cetirizine",
-      "brand_names": ["Cetzine", "Zyrtec", "Alerid", "Okacet"],
-      "generic_name": "Cetirizine Hydrochloride",
-      "category": "Second-Generation Antihistamine",
-      "purpose": "Relieves allergy symptoms such as watery eyes, runny nose, itching eyes/nose, sneezing, and hives.",
-      "dosage_forms": ["Tablets (5mg, 10mg)", "Syrup (5mg/5ml)"],
-      "general_usage_info": "Usually taken once daily in the evening, with or without water.",
+      "brand_names": ["Cetzine", "Zyrtec", "Alerid", "Okacet", "Incid-L", "Cetgel"],
+      "generic_name": "Cetirizine Dihydrochloride",
+      "category": "Second-Generation H1 Antihistamine",
+      "purpose": "Relief of seasonal and perennial allergic rhinitis, watery eyes, sneezing, rhinorrhea, pruritus, and chronic idiopathic urticaria.",
+      "dosage_forms": ["Tablets (5mg, 10mg)", "Oral Syrup (5mg/5ml)", "Chewable Tablets (10mg)"],
+      "general_usage_info": "Typically taken once daily in the evening, with or without food. Drink adequate water throughout the day.",
       "precautions_and_warnings": [
-        "May cause mild drowsiness. Avoid driving or operating heavy machinery until you know how it affects you.",
-        "Avoid concurrent alcohol consumption as it increases sedative effects."
+        "May cause mild drowsiness in sensitive individuals. Refrain from operating motor vehicles or machinery until tolerance is known.",
+        "Avoid concurrent consumption of alcohol or central nervous system depressants.",
+        "Dose reduction is necessary in moderate-to-severe renal impairment."
       ],
-      "contraindications": ["Severe renal failure (CrCl < 10 ml/min)", "Hypersensitivity to hydroxyzine or cetirizine"],
-      "common_side_effects": ["Drowsiness", "Dry mouth", "Fatigue", "Mild dizziness"],
-      "storage_instructions": "Store in a cool, dry place away from moisture and heat.",
+      "contraindications": ["End-stage renal disease (Creatinine Clearance < 10 mL/min)", "Known hypersensitivity to cetirizine or hydroxyzine"],
+      "common_side_effects": ["Somnolence / drowsiness", "Dry mouth", "Mild fatigue", "Headache"],
+      "storage_instructions": "Store at controlled room temperature (15°C to 30°C) protected from humidity.",
       "requires_prescription": false
     },
     {
       "medicine_id": "MED-004",
       "name": "Pantoprazole",
-      "brand_names": ["Pan 40", "Pantocid", "Protonix"],
-      "generic_name": "Pantoprazole Sodium",
-      "category": "Proton Pump Inhibitor (Antacid / Anti-ulcer)",
-      "purpose": "Reduces stomach acid production. Used for gastroesophageal reflux disease (GERD), acidity, heartburn, and stomach ulcers.",
-      "dosage_forms": ["Enteric-coated Tablets (20mg, 40mg)", "IV Injection"],
-      "general_usage_info": "Best taken in the morning 30 to 60 minutes before breakfast with a glass of water.",
+      "brand_names": ["Pan 40", "Pantocid", "Protonix", "Pantodac", "Penta 40"],
+      "generic_name": "Pantoprazole Sodium Sesquihydrate",
+      "category": "Proton Pump Inhibitor (Gastric Acid Reducer)",
+      "purpose": "Treatment of gastroesophageal reflux disease (GERD), erosive esophagitis, hyperacidic dyspepsia, and gastric/duodenal ulcers. Also used for gastric mucosal protection during NSAID therapy.",
+      "dosage_forms": ["Enteric-coated Delayed-Release Tablets (20mg, 40mg)", "IV Injection (40mg vial)"],
+      "general_usage_info": "Swallow the enteric-coated tablet whole with water in the morning, 30 to 60 minutes before breakfast. Do not chew, split, or crush the tablet.",
       "precautions_and_warnings": [
-        "Do not crush or chew enteric-coated tablets.",
-        "Long-term use requires periodic medical review for vitamin B12 and magnesium levels."
+        "Prolonged unmonitored use (>12 months) may reduce absorption of dietary Vitamin B12, calcium, and magnesium.",
+        "Seek medical advice if alarm symptoms occur: dysphagia (difficulty swallowing), recurrent vomiting, or unintentional weight loss.",
+        "Can interact with medicines like methotrexate, ketoconazole, and clopidogrel."
       ],
-      "contraindications": ["Severe hypersensitivity to substituted benzimidazoles"],
-      "common_side_effects": ["Headache", "Mild diarrhea", "Flatulence", "Stomach ache"],
-      "storage_instructions": "Store below 25°C protected from light.",
+      "contraindications": ["Documented severe hypersensitivity to substituted benzimidazoles"],
+      "common_side_effects": ["Headache", "Flatulence", "Mild abdominal pain", "Constipation or mild diarrhea"],
+      "storage_instructions": "Store below 25°C protected from moisture and direct light.",
       "requires_prescription": true
     },
     {
       "medicine_id": "MED-005",
       "name": "Oral Rehydration Salts (ORS)",
-      "brand_names": ["Electral", "WHO-ORS", "Walyte"],
-      "generic_name": "Sodium Chloride, Potassium Chloride, Sodium Citrate, Dextrose",
-      "category": "Electrolyte Replenisher",
-      "purpose": "Prevents and treats dehydration and electrolyte loss caused by acute diarrhea, vomiting, or excessive heat/sweating.",
-      "dosage_forms": ["Powder sachet (mix with clean water)", "Ready-to-drink solution"],
-      "general_usage_info": "Dissolve the standard sachet in exactly the recommended volume of clean drinking water (usually 1 liter). Sip slowly throughout the day.",
+      "brand_names": ["Electral", "WHO-ORS", "Walyte", "Prolyte ORS", "Electrobion"],
+      "generic_name": "Sodium Chloride, Potassium Chloride, Sodium Citrate, Dextrose Anhydrous (WHO Formula)",
+      "category": "Electrolyte Replenisher & Rehydration Formulation",
+      "purpose": "Prevention and replacement of fluid and electrolyte depletion caused by acute diarrheal episodes, cholera, vomiting, or excessive heat/physical exhaustion.",
+      "dosage_forms": ["Soluble Powder Sachet (21.8g for 1 Liter water; 4.2g for 200ml water)", "Pre-mixed Ready-to-Drink Tetra Packs (200ml)"],
+      "general_usage_info": "Dissolve the entire contents of a standard sachet into exactly the stated volume of clean potable or boiled-then-cooled water. Sip continuously throughout the day following every loose bowel movement.",
       "precautions_and_warnings": [
-        "Do not boil the prepared ORS solution.",
-        "Discard any unused prepared solution after 24 hours.",
-        "Patients with kidney disease or heart conditions should consult a physician regarding electrolyte balance."
+        "Never boil the prepared solution and never mix in milk, juice, or sweetened liquids.",
+        "Use within 24 hours of preparation; discard any remaining fluid after 24 hours to prevent microbial contamination.",
+        "Caution in patients with severe congestive heart failure, hyperkalemia, or advanced chronic kidney disease."
       ],
-      "contraindications": ["Severe persistent vomiting requiring IV fluids", "Intestinal obstruction"],
-      "common_side_effects": ["Generally very safe when mixed in correct water proportions."],
-      "storage_instructions": "Keep unopened sachets in a dry place. Store prepared solution covered in a refrigerator for up to 24 hours.",
+      "contraindications": ["Intractable vomiting requiring parenteral IV fluid administration", "Intestinal obstruction, ileus, or bowel perforation"],
+      "common_side_effects": ["None when reconstituted in exact water proportions. Nausea if ingested too rapidly."],
+      "storage_instructions": "Store sachets in a dry, cool area. Keep prepared solution covered in a refrigerator for up to 24 hours.",
       "requires_prescription": false
     },
     {
       "medicine_id": "MED-006",
       "name": "Ibuprofen",
-      "brand_names": ["Brufen", "Combiflam (combination)", "Advil"],
+      "brand_names": ["Brufen", "Combiflam (Ibuprofen + Paracetamol)", "Advil", "Ibugesic"],
       "generic_name": "Ibuprofen",
       "category": "Non-Steroidal Anti-Inflammatory Drug (NSAID)",
-      "purpose": "Relieves inflammation, swelling, joint pain, muscle aches, and reduces fever.",
-      "dosage_forms": ["Tablets (200mg, 400mg)", "Suspension"],
-      "general_usage_info": "Always take after meals or with a glass of milk to prevent stomach irritation.",
+      "purpose": "Relief of inflammatory pain, musculoskeletal aches, dental pain, osteoarthritis, dysmenorrhea, and high fever unresponsive to single agents.",
+      "dosage_forms": ["Film-coated Tablets (200mg, 400mg)", "Oral Suspension (100mg/5ml)"],
+      "general_usage_info": "Always take with food, a meal, or a glass of milk to prevent gastrointestinal mucosal irritation. Use the lowest effective dose for the shortest duration.",
       "precautions_and_warnings": [
-        "Avoid if you have a history of stomach ulcers, gastric bleeding, or asthma triggered by NSAIDs.",
-        "Do not take during the third trimester of pregnancy.",
-        "Caution in patients with high blood pressure or renal disease."
+        "Avoid if you have active or recurrent peptic ulcers, gastrointestinal bleeding history, or severe heart disease.",
+        "Contraindicated during the third trimester of pregnancy (risk of premature closure of fetal ductus arteriosus).",
+        "Patients with asthma, hypertension, or impaired renal function require close physician supervision.",
+        "Do not take concurrently with other NSAIDs (e.g., aspirin, diclofenac)."
       ],
-      "contraindications": ["Active peptic ulcer disease", "Severe heart failure", "Severe renal impairment"],
-      "common_side_effects": ["Heartburn", "Stomach irritation", "Nausea", "Dizziness"],
-      "storage_instructions": "Store at controlled room temperature.",
+      "contraindications": ["Active gastrointestinal ulceration or hemorrhage", "Aspirin-triad / NSAID-exacerbated respiratory disease (NERD)", "Severe congestive heart failure (NYHA Class IV)"],
+      "common_side_effects": ["Epigastric discomfort / dyspepsia", "Heartburn", "Nausea", "Mild dizziness"],
+      "storage_instructions": "Store in a well-closed container below 25°C.",
+      "requires_prescription": false
+    },
+    {
+      "medicine_id": "MED-007",
+      "name": "Amoxicillin and Potassium Clavulanate",
+      "brand_names": ["Augmentin", "Moxikind-CV", "Clavam", "Sensiclav", "Novamox-CV"],
+      "generic_name": "Amoxicillin + Potassium Clavulanate",
+      "category": "Beta-Lactam Antibiotic with Beta-Lactamase Inhibitor",
+      "purpose": "Treatment of acute otitis media, acute bacterial sinusitis, community-acquired pneumonia, lower respiratory tract infections, and complicated urinary tract/skin infections caused by beta-lactamase producing bacteria.",
+      "dosage_forms": ["Tablets (375mg, 625mg, 1000mg)", "Dry Syrup / Suspension (228.5mg/5ml, 457mg/5ml)", "IV Injection (1.2g)"],
+      "general_usage_info": "Take immediately at the start of a meal to optimize absorption and minimize gastrointestinal intolerance. Must be taken exactly for the prescribed duration.",
+      "precautions_and_warnings": [
+        "Strict Schedule H prescription drug; inappropriate use leads to antimicrobial resistance.",
+        "Inform your doctor of any prior penicillin or cephalosporin allergies before intake.",
+        "Discontinue and seek immediate medical evaluation if watery or bloody diarrhea develops (suspected pseudomembranous colitis)."
+      ],
+      "contraindications": ["History of severe allergic reactions (anaphylaxis) to penicillins or beta-lactams", "History of amoxicillin-clavulanate-associated cholestatic jaundice or hepatic dysfunction"],
+      "common_side_effects": ["Mild diarrhea / loose motions", "Nausea and vomiting", "Cutaneous rash", "Candidiasis (oral or vaginal thrush)"],
+      "storage_instructions": "Store tablets in airtight blisters below 25°C. Reconstituted dry syrups must be stored in a refrigerator (2°C - 8°C) and used within 7 days.",
+      "requires_prescription": true
+    },
+    {
+      "medicine_id": "MED-008",
+      "name": "Metformin",
+      "brand_names": ["Glycomet", "Glucophage", "Obimet", "Cetapin", "Formin"],
+      "generic_name": "Metformin Hydrochloride",
+      "category": "Biguanide Antidiabetic Agent",
+      "purpose": "First-line oral glycemic controller for Type 2 Diabetes Mellitus. Reduces hepatic glucose production, decreases intestinal absorption of glucose, and improves peripheral insulin sensitivity.",
+      "dosage_forms": ["Immediate-Release Tablets (500mg, 850mg, 1000mg)", "Extended-Release / SR Tablets (500mg, 850mg, 1000mg)"],
+      "general_usage_info": "Take with or immediately after meals to reduce gastrointestinal side effects. Extended-release (SR) formulations should be swallowed whole without chewing or crushing, typically with evening dinner.",
+      "precautions_and_warnings": [
+        "Requires periodic HbA1c and renal function tests (eGFR, serum creatinine).",
+        "Temporarily withhold prior to radiological iodinated contrast procedures or major surgical operations.",
+        "Avoid excessive acute or chronic alcohol intake due to potentiation of lactic acidosis risk.",
+        "Long-term use may precipitate Vitamin B12 deficiency; regular monitoring is recommended."
+      ],
+      "contraindications": ["Severe renal impairment (eGFR < 30 mL/min/1.73m²)", "Acute or chronic metabolic acidosis, diabetic ketoacidosis (DKA)", "Severe hypoxic conditions (acute heart failure, sepsis)"],
+      "common_side_effects": ["Metallic taste", "Nausea", "Abdominal bloating / gas", "Loose stools during initiation"],
+      "storage_instructions": "Store below 30°C in a dry environment away from light.",
+      "requires_prescription": true
+    },
+    {
+      "medicine_id": "MED-009",
+      "name": "Amlodipine",
+      "brand_names": ["Amlong", "Norvasc", "Amlodac", "Stamlo", "Amlovas"],
+      "generic_name": "Amlodipine Besylate",
+      "category": "Dihydropyridine Calcium Channel Blocker (Antihypertensive)",
+      "purpose": "Management of essential arterial hypertension, chronic stable angina pectoris, and vasospastic (Prinzmetal's) angina. Relaxes vascular smooth muscles and dilates peripheral coronary arteries.",
+      "dosage_forms": ["Tablets (2.5mg, 5mg, 10mg)"],
+      "general_usage_info": "Take once daily, at roughly the same hour every day, with or without food. Do not discontinue abruptly without physician consultation.",
+      "precautions_and_warnings": [
+        "Monitor blood pressure and pulse rate regularly at home or clinic.",
+        "Dose adjustments required in severe hepatic insufficiency and elderly patients.",
+        "May cause peripheral dependent edema (foot/ankle swelling). Report persistent swelling to your doctor."
+      ],
+      "contraindications": ["Severe hypotension (Systolic BP < 90 mmHg)", "Cardiogenic shock", "Clinically significant aortic stenosis"],
+      "common_side_effects": ["Peripheral edema (ankle swelling)", "Flushing", "Palpitations", "Headache or dizziness when standing rapidly"],
+      "storage_instructions": "Store protected from light and moisture at room temperature below 30°C.",
+      "requires_prescription": true
+    },
+    {
+      "medicine_id": "MED-010",
+      "name": "Salbutamol (Albuterol) Inhaler",
+      "brand_names": ["Asthalin Inhaler", "Ventorlin", "Ventolin Evohaler", "Aerocort (combination)"],
+      "generic_name": "Salbutamol Sulphate",
+      "category": "Short-Acting Beta-2 Adrenergic Agonist (SABA Bronchodilator)",
+      "purpose": "Rapid symptomatic relief of acute bronchospasm in bronchial asthma, chronic obstructive pulmonary disease (COPD), and exercise-induced bronchospasm.",
+      "dosage_forms": ["Metered Dose Inhaler - MDI (100mcg/puff)", "Rotacaps / Dry Powder Inhaler (200mcg)", "Respirator Solution for Nebulisation"],
+      "general_usage_info": "Shake canister well prior to actuation. Inhale slowly and deeply while pressing canister, then hold breath for 10 seconds. Use with a spacer device if coordinated inhalation is difficult.",
+      "precautions_and_warnings": [
+        "Fast-acting rescue medication: If reliance exceeds 2-3 times per week, consult your pulmonologist for long-term controller therapy.",
+        "Inform physician if you have hyperthyroidism, cardiovascular disease, hypertension, or hypokalemia.",
+        "Overuse may cause paradoxical bronchospasm, tachycardia, and hypokalemia."
+      ],
+      "contraindications": ["Documented hypersensitivity to salbutamol or chlorofluorocarbon/HFA propellants"],
+      "common_side_effects": ["Fine skeletal muscle tremors (especially in fingers)", "Transient tachycardia / palpitations", "Nervousness", "Throat irritation"],
+      "storage_instructions": "Store below 30°C. Protect from frost and direct sunlight. Do not puncture or burn pressurised canisters.",
+      "requires_prescription": true
+    },
+    {
+      "medicine_id": "MED-011",
+      "name": "Sitopaladi Churna",
+      "brand_names": ["Baidyanath Sitopaladi", "Dabur Sitopaladi", "Zandu Sitopaladi", "Kottakkal Sitopaladi"],
+      "generic_name": "Mishri, Vanshalochan, Pippali, Ela, Twak (Classical Ayurvedic Formulation)",
+      "category": "Ayurvedic Respiratory Formulation (Rasayana & Kasahara)",
+      "purpose": "Classical Ayurvedic formulation for soothing respiratory discomfort, seasonal cough, hoarseness of voice, chest congestion, and loss of appetite.",
+      "dosage_forms": ["Fine Herbal Powder (Churna) 30g, 60g, 100g bottles"],
+      "general_usage_info": "Traditionally taken as 1 to 3 grams, 2 to 3 times daily, mixed with pure honey (Madhu) or warm ghee after light meals, or as directed by an Ayurvedic physician.",
+      "precautions_and_warnings": [
+        "Contains natural sugar (Sharkara/Mishri); diabetic individuals should consult their Ayurvedic practitioner before consumption.",
+        "Not a substitute for emergency bronchodilators in acute asthma attacks.",
+        "Ensure authentic GMP-certified brand preparation."
+      ],
+      "contraindications": ["Uncontrolled hyperglycemia without physician supervision", "Severe active gastritis with intolerance to pippali"],
+      "common_side_effects": ["Well-tolerated with zero known adverse effects when taken at nominal classical dosages."],
+      "storage_instructions": "Store in an airtight container in a dry place away from direct sunlight.",
+      "requires_prescription": false
+    },
+    {
+      "medicine_id": "MED-012",
+      "name": "Ashwagandha (Withania Somnifera)",
+      "brand_names": ["Himalaya Ashwagandha", "Organic India Ashwagandha", "Baidyanath Ashwagandharishta", "Patanjali Ashwagandha"],
+      "generic_name": "Withania Somnifera Root Extract",
+      "category": "Ayurvedic Adaptogen, Balya & Rasayana",
+      "purpose": "Supports body's resistance to physiological stress, promotes restful sleep, reduces mental fatigue, supports joint mobility, and enhances vitality and immunity (Ojas).",
+      "dosage_forms": ["Tablets / Capsules (250mg, 500mg)", "Pure Root Powder (Churna)", "Fermented Liquid (Ashwagandharishta)"],
+      "general_usage_info": "Take 1 tablet (or 2-3g churna) once or twice daily with warm milk or warm water, preferably after dinner or before bedtime.",
+      "precautions_and_warnings": [
+        "Avoid during pregnancy (may possess mild abortifacient/uterine-stimulating properties at high doses).",
+        "May increase thyroid hormone levels; use caution in hyperthyroidism.",
+        "May amplify the sedative effects of prescription anxiolytics or sedatives."
+      ],
+      "contraindications": ["Pregnancy", "Severe active peptic ulcers", "Autoimmune conditions during acute flare-ups"],
+      "common_side_effects": ["Mild drowsiness", "Mild gastrointestinal upset if taken on an empty stomach"],
+      "storage_instructions": "Store in a cool, dry place away from light and moisture.",
       "requires_prescription": false
     }
   ],
   "symptom_guidance": [
     {
       "symptom_key": "mild_cold_cough",
-      "title": "Mild Common Cold & Cough",
-      "description": "Transient upper respiratory irritation, clear nasal discharge, mild dry or tickling cough without severe distress.",
+      "title": "Mild Common Cold, Rhinitis & Cough",
+      "description": "Transient upper respiratory irritation, clear-to-whitish nasal discharge, sneezing, scratchy throat, and mild dry or tickling cough without respiratory distress.",
       "allowed_nominal_advice": [
-        "Drink warm water, herbal teas (Tulsi, Ginger, Honey), or warm broths throughout the day.",
-        "Perform warm saline gargles 2-3 times daily to soothe throat irritation.",
-        "Use steam inhalation for 5-10 minutes to relieve nasal congestion.",
-        "Ensure adequate rest and maintain comfortable room humidity."
+        "Hydrate continuously with warm water, herbal decoctions (Tulsi, Ginger, Mint), or warm clear broths throughout the day.",
+        "Perform warm saline gargles (half teaspoon common salt in warm water) 3 times daily to soothe inflamed pharyngeal tissue.",
+        "Use plain warm water steam inhalation for 5 to 10 minutes twice daily to loosen nasal mucus and relieve congestion.",
+        "Prioritize 7-8 hours of sleep and keep the sleeping area well ventilated and free from cold air draughts."
       ],
       "ayush_care_tips": [
-        "Sitopaladi Churna (1-2 grams) mixed with honey twice daily after meals (Ayurvedic classical supportive care).",
-        "Golden turmeric milk (Haldi Doodh) before bedtime."
+        "Sitopaladi Churna (1 to 2 grams) blended with half teaspoon pure honey twice daily after meals (classical Kapha-soothing supportive care).",
+        "Drink Golden Turmeric Milk (Haldi Doodh: a pinch of turmeric and black pepper boiled in milk) before bedtime.",
+        "Inhale steam infused with 2-3 drops of eucalyptus oil (Nilgiri taila) or pudina satva."
       ],
       "red_flags": [
-        "Difficulty breathing or persistent chest tightness",
-        "High fever exceeding 102°F (38.9°C) lasting more than 3 days",
-        "Coughing up blood or rust-colored sputum",
-        "Stridor or wheezing sound while breathing"
+        "Shortness of breath, rapid breathing, or visible chest indrawing / retractions",
+        "High continuous fever exceeding 102°F (38.9°C) lasting longer than 48-72 hours",
+        "Coughing up frank blood or rust-colored sputum (hemoptysis)",
+        "Stridor, audible wheezing, or difficulty in speaking full sentences without pausing"
       ],
-      "escalation_note": "If symptoms persist beyond 7-10 days or worsen significantly, visit the OPD consultation room."
+      "escalation_note": "If symptoms persist beyond 7-10 days, or if fever and thick purulent sputum appear, visit the hospital OPD consultation desk."
     },
     {
       "symptom_key": "mild_headache",
-      "title": "Mild Tension / Fatigue Headache",
-      "description": "Dull, aching head discomfort often associated with eye strain, dehydration, stress, or lack of sleep.",
+      "title": "Mild Tension / Digital Fatigue Headache",
+      "description": "Dull, bilateral aching band-like discomfort across forehead or temples, associated with prolonged screen exposure, poor posture, mental stress, or mild dehydration.",
       "allowed_nominal_advice": [
-        "Drink a large glass of water to ensure adequate hydration.",
-        "Rest in a quiet, dark, well-ventilated room for 20-30 minutes.",
-        "Apply a cool damp cloth or gentle compress across the forehead and temples.",
-        "Take regular breaks from digital screens (20-20-20 rule)."
+        "Immediately drink 1 to 2 large glasses of water to rule out dehydration-induced cranial tension.",
+        "Rest in a quiet, darkened, and well-ventilated room for 20 to 30 minutes with eyes closed.",
+        "Apply a cool, damp cloth across the forehead or a gentle warm compress to the back of the neck.",
+        "Implement the 20-20-20 rule during screen use (every 20 minutes, look at an object 20 feet away for 20 seconds)."
       ],
       "ayush_care_tips": [
-        "Gentle temple massage with warm sesame or coconut oil.",
-        "Brahmi or Chamomile tea to calm mental fatigue."
+        "Gentle head massage (Shiro-Abhyanga) with warm sesame, coconut, or Brahmi oil over temples and scalp.",
+        "Warm infusion of chamomile or peppermint tea to alleviate mental fatigue and nervous tension.",
+        "Gentle slow alternate-nostril breathing (Anulom Vilom Pranayama) for 5-10 minutes."
       ],
       "red_flags": [
-        "Sudden 'thunderclap' severe headache (worst headache of your life)",
-        "Headache accompanied by stiff neck, high fever, or confusion",
-        "Headache with facial numbness, slurred speech, or weakness on one side of the body",
-        "Headache following recent head trauma or fall"
+        "Sudden explosive 'thunderclap' headache reaching peak intensity within seconds (worst headache of life)",
+        "Headache accompanied by neck stiffness, photophobia, confusion, or high fever (meningeal signs)",
+        "Focal neurological deficits: unilateral limb weakness, facial drooping, vision loss, or dysarthria (slurred speech)",
+        "New onset headache following recent head trauma, fall, or vehicular accident"
       ],
-      "escalation_note": "Immediate doctor evaluation is required if accompanied by neurological signs."
+      "escalation_note": "Any sudden severe headache with neurological disturbance warrants immediate emergency room evaluation."
     },
     {
       "symptom_key": "mild_acidity_heartburn",
-      "title": "Mild Indigestion & Acidity",
-      "description": "Temporary mild burning sensation in the chest/epigastric area, typically following spicy, oily, or irregular meals.",
+      "title": "Mild Hyperacidity, Dyspepsia & Heartburn",
+      "description": "Mild substernal burning sensation, acid regurgitation, epigastric fullness, or bloating following heavy, spicy, fried, or irregular meals.",
       "allowed_nominal_advice": [
-        "Avoid heavy, spicy, or fried meals and carbonated drinks.",
-        "Eat smaller, more frequent meals and avoid lying down immediately after eating.",
-        "Drink a small cup of cool milk or tender coconut water.",
-        "Keep dinner light and leave at least 2 hours between dinner and sleep."
+        "Refrain from consuming excessively spicy, oily, or fried food items, citrus fruits, caffeine, and carbonated beverages.",
+        "Consume smaller, lighter, and more frequent meals; never skip meals or overeat in a single sitting.",
+        "Remain upright for at least 2 hours following a meal; avoid lying down or reclining immediately after food.",
+        "Elevate the head of your bed by 6 inches if nighttime heartburn disturbs sleep."
       ],
       "ayush_care_tips": [
-        "Fennel seed (Saunf) water after meals.",
-        "Amla (Indian gooseberry) powder or juice in the morning to balance Pitta."
+        "Sip freshly boiled and cooled Fennel (Saunf) and Cumin (Jeera) seed water after lunch and dinner.",
+        "Drink a small glass of tender coconut water or cold milk to provide immediate soothing alkaline buffer.",
+        "Consume 1 teaspoon of Amla (Indian gooseberry) powder or fresh amla juice in the morning to balance aggravated Pitta dosha."
       ],
       "red_flags": [
-        "Severe crushing chest pain radiating to the left arm, jaw, neck, or back",
-        "Chest discomfort accompanied by cold sweating, dizziness, or shortness of breath",
-        "Difficulty or pain while swallowing food",
-        "Vomiting blood or passing dark black stools"
+        "Crushing, squeezing retrosternal chest pain radiating to the left arm, neck, jaw, or shoulder blade",
+        "Chest discomfort accompanied by cold diaphoresis (sweating), lightheadedness, nausea, or shortness of breath",
+        "Dysphagia (difficulty or pain while swallowing solid food or liquids)",
+        "Hematemesis (vomiting blood or coffee-ground material) or melena (black tarry stools)"
       ],
-      "escalation_note": "Never ignore severe chest discomfort that could mimic cardiac issues. Seek immediate emergency evaluation."
+      "escalation_note": "CRITICAL: Retrosternal burning must never be assumed to be simple acidity if accompanied by sweating or radiation. Seek emergency medical assessment."
+    },
+    {
+      "symptom_key": "mild_fever",
+      "title": "Mild Low-Grade Fever (Pyrexia)",
+      "description": "Oral body temperature between 99.5°F and 101.0°F (37.5°C - 38.3°C), typically accompanying early viral prodrome, seasonal change, or mild localized inflammation.",
+      "allowed_nominal_advice": [
+        "Take complete physical rest in a cool, well-ventilated room with light breathable cotton clothing.",
+        "Maintain continuous fluid intake: warm water, thin clear vegetable or moong dal soups, tender coconut water, and diluted electoral/ORS.",
+        "Apply lukewarm (never ice-cold) sponge cloths to forehead, neck, and axilla if feeling uncomfortably warm.",
+        "Monitor and log temperature readings every 4 to 6 hours using a certified digital thermometer."
+      ],
+      "ayush_care_tips": [
+        "Shadanga Paniya: Ayurvedic classical boiled water processed with Musta, Chandana, Sunthi, Ushira, Parpataka, and Udichya.",
+        "Light easily digestible diet (Laghu Ahara): warm moong dal khichdi cooked with cumin, ginger, and a pinch of rock salt.",
+        "Boil 5-6 fresh Tulsi leaves with a small piece of crushed ginger in water and sip warm throughout the day."
+      ],
+      "red_flags": [
+        "Body temperature exceeding 103°F (39.4°C) or failure to respond to standard measures after 48 hours",
+        "Fever associated with confusion, altered mental state, delirium, or febrile seizures",
+        "Petechial rash, non-blanching purple spots on skin, or severe persistent vomiting",
+        "Persistent severe abdominal pain, chest pain, or rapid shallow breathing"
+      ],
+      "escalation_note": "Patients with diabetes, immunosuppression, or elderly individuals must be evaluated by a physician early in any febrile illness."
+    },
+    {
+      "symptom_key": "mild_diarrhea_vomiting",
+      "title": "Mild Acute Gastroenteritis & Dehydration",
+      "description": "Occasional loose watery bowel movements (fewer than 4-5 per day) and mild nausea without high fever, blood in stools, or severe dehydration signs.",
+      "allowed_nominal_advice": [
+        "Primary objective is continuous oral rehydration: sip WHO-formulation ORS solution (1 cup after each loose stool).",
+        "Follow a gentle digestive diet: cooked rice, curd (yogurt with active probiotics), ripe banana, boiled potatoes, and thin toast (BRAT diet principles).",
+        "Avoid dairy products (except fresh buttermilk/curd), oily gravies, processed sweets, caffeinated drinks, and raw salads.",
+        "Wash hands thoroughly with soap and water before meals and after restroom visits."
+      ],
+      "ayush_care_tips": [
+        "Takra (Spiced Buttermilk): Fresh homemade churned buttermilk mixed with roasted cumin powder, dry ginger, and a pinch of black salt (Deepana & Pachana).",
+        "Boiled water infused with coriander seeds (Dhaniya) and fennel to relieve gut cramps and settle digestion.",
+        "Pomegranate juice (Dadima) or stewed apple to naturally firm stool consistency."
+      ],
+      "red_flags": [
+        "Presence of frank red blood or mucus in loose stools (suspected dysentery)",
+        "Signs of moderate-to-severe dehydration: extreme unquenchable thirst, dry sunken eyes, no urine output for 6+ hours, or dizziness upon standing",
+        "Inability to retain any oral fluids due to persistent intractable vomiting",
+        "High fever exceeding 102°F or severe cramping abdominal pain localized to right lower quadrant"
+      ],
+      "escalation_note": "Infants, young children, and elderly patients deteriorate rapidly from dehydration and require immediate clinical assessment."
+    },
+    {
+      "symptom_key": "mild_joint_muscle_pain",
+      "title": "Mild Musculoskeletal Strain & Joint Stiffness",
+      "description": "Localized dull aching, stiffness, or mild discomfort in back, knees, neck, or shoulders after physical exertion, prolonged poor ergonomics, or seasonal changes.",
+      "allowed_nominal_advice": [
+        "Rest the affected limb/joint during the first 24-48 hours; avoid heavy lifting or repetitive loading.",
+        "Apply an ice pack wrapped in a towel for 15-20 minutes every 3-4 hours during acute acute strain (first 24h); use warm fomentation for chronic stiffness.",
+        "Perform gentle active range-of-motion stretching once acute sharp pain subsides.",
+        "Maintain ergonomic posture with supportive seating and regular 5-minute movement breaks every hour."
+      ],
+      "ayush_care_tips": [
+        "Gentle external application of warm sesame oil (Tila Taila) or Mahanarayan taila over affected joint followed by warm fomentation.",
+        "Drink Golden Turmeric Milk with a small pinch of dry ginger (Sunthi) to support natural inflammatory modulation.",
+        "Gentle joint mobilization (Sukshma Vyayama) and Pawanmuktasana series under proper guidance."
+      ],
+      "red_flags": [
+        "Hot, swollen, visibly erythematous (red) joint accompanied by systemic fever (suspected septic arthritis)",
+        "Sudden inability to bear weight or visible gross bone deformity following trauma (suspected fracture)",
+        "Progressive numbness, tingling sensation, or muscle weakness radiating down an arm or leg",
+        "Loss of bowel or bladder control accompanying acute low back pain (suspected cauda equina syndrome)"
+      ],
+      "escalation_note": "Warm red swollen joints are an orthopedic emergency and require immediate hospital evaluation."
     }
   ],
   "faqs": [
     {
       "faq_id": "FAQ-001",
-      "category": "ABHA & Identity",
+      "category": "ABHA & National Digital Health",
       "question": "What is ABHA and why should I link it at MediKiosk?",
-      "answer": "ABHA (Ayushman Bharat Health Account) is your unique 14-digit national health ID under the Government of India's ABDM initiative. Linking your ABHA at MediKiosk ensures your clinical history, prescriptions, and lab reports are securely stored and interoperable with participating hospitals across India."
+      "answer": "ABHA (Ayushman Bharat Health Account) is your unique 14-digit national health identity issued under the Government of India's Ayushman Bharat Digital Mission (ABDM). Linking your ABHA at MediKiosk securely anchors your verified health records, consultation summaries, prescriptions, and lab test results into a unified national health locker, granting you frictionless access across empaneled hospitals, clinics, and diagnostic labs nationwide."
     },
     {
       "faq_id": "FAQ-002",
-      "category": "AI History Intake",
+      "category": "AI Conversational History Intake",
       "question": "How does the AI Clinical History Intake work?",
-      "answer": "MediKiosk's multilingual conversational AI (Module A) listens to your symptoms in your preferred language (English, Hindi, Gujarati, etc.), asks clinical follow-up questions following the standardized SOCRATES framework, and organizes a concise summary for the doctor before you step into the OPD room."
+      "answer": "MediKiosk's multilingual conversational module listens to your spoken or typed symptom descriptions in your preferred language (English, Hindi, Gujarati). Following the standardized clinical SOCRATES protocol (Site, Onset, Character, Radiation, Associations, Timing, Exacerbating factors, Severity), it structures a synthesized pre-consultation summary so your doctor receives an organized clinical briefing the instant you enter the OPD room."
     },
     {
       "faq_id": "FAQ-003",
-      "category": "Document Upload",
-      "question": "Can I upload my past physical prescriptions and blood test reports?",
-      "answer": "Yes! In Module B (Document AI), you can take a photo or upload PDFs of previous doctor prescriptions or lab reports. Our OCR pipeline extracts medicines, past diagnoses, and flags abnormal lab test values for the doctor's review."
+      "category": "Document AI & OCR",
+      "question": "Can I upload physical handwritten prescriptions and previous blood test reports?",
+      "answer": "Yes! You can capture photos or upload PDF copies of past paper prescriptions, discharge summaries, and laboratory reports directly at the kiosk. Our Document AI OCR pipeline digitizes handwritten medicines, detects past chronic illnesses, extracts laboratory test values (such as CBC, HbA1c, Lipid profile), and flags out-of-range biomarkers directly onto the doctor's workstation."
     },
     {
       "faq_id": "FAQ-004",
-      "category": "Data Privacy & Security",
-      "question": "Is my medical data safe and private?",
-      "answer": "Absolutely. MediKiosk complies with India's DPDP Act 2023 and ABDM FHIR standards. Your data is encrypted at rest and in transit. Only authorized medical staff attending to your case can view your clinical details during consultation."
+      "category": "Data Privacy & DPDP Compliance",
+      "question": "Is my confidential health information protected and private?",
+      "answer": "Yes. MediKiosk complies strictly with the Digital Personal Data Protection (DPDP) Act 2023 and ABDM FHIR cryptographic standards. Voice recordings are processed temporarily for transcript synthesis and purged from operational memory. All data is protected with TLS 1.3 in transit and AES-256 at rest, accessible only by verified licensed healthcare providers attending your case."
     },
     {
       "faq_id": "FAQ-005",
-      "category": "Doctor Consultation",
-      "question": "Does the AI diagnose or replace my doctor?",
-      "answer": "No. MediKiosk AI is an intake assistant, not a doctor. It never diagnoses diseases or prescribes treatments independently. All diagnostic evaluations and prescriptions are conducted solely by your consulting physician in the OPD."
+      "category": "Clinical Safety Boundaries",
+      "question": "Does the MediKiosk AI diagnose diseases or replace my physician?",
+      "answer": "Under no circumstances does MediKiosk AI diagnose illnesses or issue autonomous prescriptions. The AI functions strictly as an intake documentation assistant, clinical structuring engine, and administrative guide. All diagnostic judgements, treatment plans, clinical verifications, and drug orders remain under the exclusive professional authority of your consulting physician."
+    },
+    {
+      "faq_id": "FAQ-006",
+      "category": "AYUSH & Integrative Medicine",
+      "question": "What is the Dashavidha Pariksha assessment in AYUSH OPD mode?",
+      "answer": "When AYUSH mode is chosen during kiosk registration, the system initiates the classical Ayurvedic 10-fold clinical framework (Dashavidha Pariksha): Prakriti (Constitutional dosha), Vikriti (Pathological imbalance), Sara (Tissue essence), Samhanana (Body compactness), Pramana (Anthropometric proportions), Satmya (Adaptability), Satwa (Mental resilience), Ahara-Shakti (Digestive power), Vyayama-Shakti (Physical endurance), and Vaya (Age status). This assists Ayurvedic doctors in customized holistic therapy planning."
+    },
+    {
+      "faq_id": "FAQ-007",
+      "category": "Token & Queue Management",
+      "question": "How do I know my token number and estimated consultation wait time?",
+      "answer": "Upon completing your check-in and history intake, the kiosk screen displays your unique Token ID, Priority Status (Normal / Urgent / Triage), assigned Doctor Station Number, and real-time live queue counter. A digital copy is sent via SMS to your registered mobile number."
+    },
+    {
+      "faq_id": "FAQ-008",
+      "category": "Multilingual Accessibility",
+      "question": "Which regional languages are supported by the kiosk voice intake?",
+      "answer": "MediKiosk natively supports English, Hindi (हिन्दी), and Gujarati (ગુજરાતી) for voice interaction, text queries, and visual screen interfaces, featuring automated localized speech recognition and synthetic speech responses."
     }
   ],
   "website_help": [
@@ -218,55 +427,81 @@
       "topic": "patient_checkin",
       "title": "Patient Check-in & Registration Guide",
       "route": "/patient/register",
-      "summary": "Step 1 of the Kiosk flow: Enter your mobile number, select preferred language (English, Hindi, Gujarati), choose OPD mode (General or AYUSH), and grant digital consent for AI history taking."
+      "summary": "Step 1 of Kiosk: Enter your 10-digit mobile number, choose your preferred interface language (English, Hindi, Gujarati), select OPD clinical mode (General Medicine or AYUSH Holistic), and grant digital consent under DPDP Act 2023."
     },
     {
       "topic": "clinical_intake",
-      "title": "Clinical History Intake & Document Upload",
+      "title": "Conversational Clinical Intake & AI History Taking",
       "route": "/patient/intake",
-      "summary": "Step 2 of the Kiosk flow: Speak your symptoms using the voice recorder or touch chips, complete the 10-fold Dashavidha assessment if in AYUSH mode, and upload past medical documents for instant OCR."
+      "summary": "Step 2 of Kiosk: Converse naturally using the interactive voice microphone or quick-selection symptom chips. The system dynamically explores your chief complaint, duration, onset, and associated symptoms using the clinical SOCRATES dialogue engine."
     },
     {
-      "topic": "doctor_portal",
-      "title": "Doctor OPD Consultation Dashboard",
-      "route": "/doctor",
-      "summary": "Physician portal: View queued patients, triage status, synthesized clinical summaries, extracted lab values, Dashavidha constitution cards, and approve final clinical records."
+      "topic": "document_upload",
+      "title": "Medical Document AI & Prescription Digitizer",
+      "route": "/patient/intake",
+      "summary": "Step 2 (Documents): Use the integrated kiosk camera or file picker to upload paper prescriptions, lab investigations, or discharge summaries. The system executes automated OCR extraction to highlight past treatments and abnormal biomarkers."
     },
     {
       "topic": "patient_tracking",
-      "title": "Live Patient Case Tracking",
+      "title": "Live Queue & Token Status Tracking",
       "route": "/patient/success",
-      "summary": "View your live session status (Token Number, Queue Position, Triage Priority, and Doctor Station Assignment) after completing the kiosk check-in."
+      "summary": "Step 3 of Kiosk: View your live token number, triage priority badge, assigned OPD consultation room, and real-time waiting queue length prior to your doctor call."
+    },
+    {
+      "topic": "doctor_portal",
+      "title": "Physician OPD Clinical Workstation",
+      "route": "/doctor",
+      "summary": "Physician Portal: Access live triage queue, reviewed patient summaries, AI synthesized SOAP notes, extracted OCR medication history, Dashavidha constitution matrix, and electronic prescription authoring."
+    },
+    {
+      "topic": "landing_home",
+      "title": "MediKiosk Platform Overview & Portal Selection",
+      "route": "/",
+      "summary": "Home Portal: Overview of autonomous digital clinical kiosks, fast patient check-in entry, physician login, and interactive Smart AI Assistant access."
     }
   ],
   "contacts": [
     {
-      "department": "Emergency Medical Helpline",
-      "phone": "108 / 102",
+      "department": "Emergency Trauma Center & Ambulance",
+      "phone": "108 / 102 / +91 79 2630 1111",
       "email": "emergency@medikiosk.hospital.in",
-      "hours": "24x7 Available",
-      "location": "Ground Floor, Emergency Trauma Center"
+      "hours": "24 Hours x 7 Days (Continuous Emergency)",
+      "location": "Ground Floor, Red Zone Entrance Bay, Trauma Ward"
     },
     {
-      "department": "OPD Registration & Help Desk",
+      "department": "Central OPD Registration & Kiosk Bay",
       "phone": "+91 79 2630 1100",
-      "email": "opdhelp@medikiosk.hospital.in",
-      "hours": "08:00 AM - 06:00 PM (Mon-Sat)",
-      "location": "Main Entrance Lobby, Kiosk Bay A-D"
+      "email": "opd@medikiosk.hospital.in",
+      "hours": "08:00 AM - 06:00 PM (Monday through Saturday)",
+      "location": "Main Hospital Lobby, Gate 1, Kiosk Bays A to F"
     },
     {
-      "department": "Hospital Central Pharmacy",
+      "department": "AYUSH & Holistic Care Consultation Desk",
+      "phone": "+91 79 2630 1150",
+      "email": "ayush@medikiosk.hospital.in",
+      "hours": "09:00 AM - 05:00 PM (Monday through Saturday)",
+      "location": "Block C, 1st Floor, Department of Integrative Medicine"
+    },
+    {
+      "department": "Hospital 24x7 Central Pharmacy",
       "phone": "+91 79 2630 1122",
       "email": "pharmacy@medikiosk.hospital.in",
-      "hours": "24x7 Available",
-      "location": "Wing B, Near OPD Discharge Desk"
+      "hours": "24 Hours x 7 Days Open",
+      "location": "Wing B Ground Floor, Adjacent to OPD Discharge Counter"
     },
     {
-      "department": "Technical Support & ABHA Desk",
+      "department": "Diagnostic Laboratory & Radiology Imaging",
+      "phone": "+91 79 2630 1133",
+      "email": "lab@medikiosk.hospital.in",
+      "hours": "07:00 AM - 09:00 PM (Routine); 24x7 for Inpatient Emergencies",
+      "location": "Basement 1, Diagnostic Imaging Center"
+    },
+    {
+      "department": "Digital Health & ABHA Helpdesk",
       "phone": "+91 79 2630 1199",
       "email": "support@medikiosk.ai",
-      "hours": "09:00 AM - 08:00 PM",
-      "location": "Digital Health Center, Room 104"
+      "hours": "08:30 AM - 07:30 PM",
+      "location": "Digital Health Center, Room 104, IT Administration Block"
     }
   ]
 }

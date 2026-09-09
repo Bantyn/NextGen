@@ -76,10 +76,42 @@
 }
 
 /* -----------------------------------------------------------------
- * 6. DARK THEME MATRIX (Default Clinical Dark Mode)
+ * 6. LIGHT THEME MATRIX (Default Clean Clinical Theme)
  * ----------------------------------------------------------------- */
-[data-theme="dark"],
-:root {
+:root,
+[data-theme="light"] {
+  --bg-app: #f8fafc;                   /* Soft Slate White Canvas (slate-50) */
+  --bg-sidebar: #ffffff;               /* Clean white sidebar surface */
+  --bg-header: rgba(255, 255, 255, 0.85);/* Translucent blurred header */
+  
+  --surface-card: rgba(255, 255, 255, 0.92);
+  --surface-card-hover: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-input: #ffffff;
+
+  --border-subtle: rgba(226, 232, 240, 0.9);
+  --border-medium: rgba(203, 213, 225, 0.9);
+  --border-focus: var(--primary);
+
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(226, 232, 240, 0.9);
+  --glass-blur: blur(20px);
+
+  --text-main: #020617;                /* Slate 950 - highly visible header & body */
+  --text-secondary: #64748b;           /* Slate 500 - legible secondary text */
+  --text-muted: #94a3b8;               /* Slate 400 - tertiary text */
+  --text-inverse: #ffffff;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.10);
+  --shadow-glow: 0 0 16px rgba(14, 165, 233, 0.2);
+}
+
+/* -----------------------------------------------------------------
+ * 7. DARK THEME MATRIX (Clinical Dark Mode)
+ * ----------------------------------------------------------------- */
+[data-theme="dark"] {
   --bg-app: #090d16;                   /* Deep Slate Navy Canvas */
   --bg-sidebar: #0d1322;               /* Slightly lighter sidebar surface */
   --bg-header: rgba(13, 19, 34, 0.75); /* Translucent blurred header */
@@ -106,36 +138,4 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px var(--primary-glow);
-}
-
-/* -----------------------------------------------------------------
- * 7. LIGHT THEME MATRIX
- * ----------------------------------------------------------------- */
-[data-theme="light"] {
-  --bg-app: #f8fafc;                   /* Soft Slate White Canvas */
-  --bg-sidebar: #ffffff;               /* Clean white sidebar surface */
-  --bg-header: rgba(255, 255, 255, 0.80);/* Translucent blurred header */
-  
-  --surface-card: rgba(255, 255, 255, 0.90);
-  --surface-card-hover: #ffffff;
-  --surface-elevated: #ffffff;
-  --surface-input: #f1f5f9;
-
-  --border-subtle: rgba(0, 0, 0, 0.06);
-  --border-medium: rgba(0, 0, 0, 0.12);
-  --border-focus: var(--primary);
-
-  --glass-bg: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --glass-blur: blur(20px);
-
-  --text-main: #0f172a;                /* Deep slate black */
-  --text-secondary: #475569;           /* Medium contrast gray */
-  --text-muted: #94a3b8;               /* Light tertiary gray */
-  --text-inverse: #ffffff;
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 16px rgba(14, 165, 233, 0.2);
 }

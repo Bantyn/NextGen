@@ -2,199 +2,929 @@
   {
     "complaint_id": "ckb_chest_pain",
     "complaint": "chest pain",
-    "synonyms": ["chest discomfort", "chest pressure", "heart pain", "છાતીમાં દુખાવો", "सीने में दर्द"],
+    "category": "CARDIOVASCULAR",
+    "protocol": "SOCRATES_ACS_TRIAGE",
+    "synonyms": [
+      "chest discomfort", "chest pressure", "heart pain", "retrosternal burning", "angina",
+      "છાતીમાં દુખાવો", "છાતીમાં દબાણ", "છાતીમાં ભારેપણું", "છાતીમાં બળતરા",
+      "सीने में दर्द", "सीने में भारीपन", "सीने में जलन", "दिल में दर्द"
+    ],
     "assessment_dimensions": [
       "onset", "duration", "severity", "location", "character", "radiation", "breathing", "sweating", "dizziness", "exertion", "past_cardiac_history"
     ],
     "completion_criteria": ["onset", "severity", "radiation", "breathing"],
     "questions": [
-      { "dimension": "onset", "priority": 10, "question": "When did the chest pain start? Did it come on suddenly or develop gradually?" },
-      { "dimension": "severity", "priority": 10, "question": "On a scale of 1 to 10, how severe is the chest discomfort right now?" },
-      { "dimension": "radiation", "priority": 9, "question": "Does the pain radiate to your left arm, shoulder, neck, jaw, or back?" },
-      { "dimension": "breathing", "priority": 9, "question": "Are you having difficulty breathing or shortness of breath along with the pain?" },
-      { "dimension": "sweating", "priority": 8, "question": "Are you experiencing heavy cold sweating, nausea, or dizziness?" }
+      {
+        "dimension": "onset",
+        "priority": 10,
+        "question": {
+          "en-IN": "When did the chest pain start? Did it come on suddenly like a lightning bolt or develop gradually?",
+          "hi-IN": "सीने में दर्द कब शुरू हुआ? क्या यह अचानक शुरू हुआ या धीरे-धीरे बढ़ा?",
+          "gu-IN": "છાતીમાં દુખાવો ક્યારે શરૂ થયો? અચાનક શરૂ થયો કે ધીમે-ધીમે વધ્યો?"
+        },
+        "quick_chips": {
+          "en-IN": ["Within last 30 mins", "Since this morning", "Since yesterday", "Sudden sharp onset"],
+          "hi-IN": ["30 मिनट पहले", "आज सुबह से", "कल से", "अचानक तेज दर्द"],
+          "gu-IN": ["૩૦ મિનિટ પહેલા", "આજ સવારથી", "ગઈકાલથી", "અચાનક તીવ્ર શરૂઆત"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 10,
+        "question": {
+          "en-IN": "On a scale of 1 to 10 (1 = mild, 10 = unbearable crushing), how severe is the chest discomfort right now?",
+          "hi-IN": "1 से 10 के पैमाने पर (1 = हल्का, 10 = असहनीय), यह दर्द अभी कितना तीव्र है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર (૧ = હળવો, ૧૦ = અસહ્ય), આ દુખાવો અત્યારે કેટલો તીવ્ર છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Mild discomfort)", "5/10 (Moderate ache)", "8/10 (Severe pressure)", "10/10 (Unbearable)"],
+          "hi-IN": ["3/10 (हल्का दर्द)", "5/10 (मध्यम दबाव)", "8/10 (काफी तेज)", "10/10 (असहनीय)"],
+          "gu-IN": ["૩/૧૦ (હળવો)", "૫/૧૦ (મધ્યમ)", "૮/૧૦ (ખૂબ તીવ્ર)", "૧૦/૧૦ (અસહ્ય)"]
+        }
+      },
+      {
+        "dimension": "character",
+        "priority": 9,
+        "question": {
+          "en-IN": "How does the chest sensation feel? Heavy tight squeezing pressure, sharp knife-like piercing, or burning acidity?",
+          "hi-IN": "सीने का दर्द कैसा लग रहा है? भारी दबाव/निचोड़ जैसा, सुई या छुरी चुभने जैसा, या एसिडिटी जैसी जलन?",
+          "gu-IN": "દુખાવો કેવો લાગે છે? ભારે દબાણ જેવો, સોય ભોંકાતી હોય તેવો કે એસિડિટી જેવી બળતરા?"
+        },
+        "quick_chips": {
+          "en-IN": ["Heavy squeezing pressure", "Sharp piercing pain", "Burning sensation", "Dull ache"],
+          "hi-IN": ["भारी निचोड़ जैसा दबाव", "तेज चुभन जैसा", "जलन जैसा", "हल्का मीठा दर्द"],
+          "gu-IN": ["ભારે દબાણ જેવો", "તીવ્ર સોય ભોંકાય તેવો", "બળતરા જેવો", "હળવો કણસતો"]
+        }
+      },
+      {
+        "dimension": "radiation",
+        "priority": 9,
+        "question": {
+          "en-IN": "Does the pain travel or radiate anywhere else, such as into your left arm, shoulder, neck, jaw, or upper back?",
+          "hi-IN": "क्या दर्द कहीं और फैल रहा है, जैसे बाएं हाथ, कंधे, गर्दन, जबड़े या पीठ की तरफ?",
+          "gu-IN": "શું દુખાવો ડાબા હાથ, ખભા, ગળા, જડબા કે પીઠ તરફ ફેલાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Radiating to left arm/shoulder", "Spreading to jaw/neck", "Upper back between blades", "No, stays strictly in chest"],
+          "hi-IN": ["बाएं हाथ/कंधे में फैल रहा है", "जबड़े/गर्दन की तरफ", "पीठ में बीचों-बीच", "नहीं, केवल सीने में ही है"],
+          "gu-IN": ["ડાબા હાથ/ખભામાં ફેલાય છે", "જડબા/ગળા તરફ", "પીઠમાં પાછળ", "ના, ફક્ત છાતીમાં જ રહે છે"]
+        }
+      },
+      {
+        "dimension": "breathing",
+        "priority": 9,
+        "question": {
+          "en-IN": "Are you feeling breathless or finding it difficult to take a full deep breath along with the pain?",
+          "hi-IN": "क्या दर्द के साथ सांस लेने में तकलीफ, घबराहट या सांस फूलने की समस्या हो रही है?",
+          "gu-IN": "શું દુખાવાની સાથે શ્વાસ લેવામાં તકલીફ કે દમ ઘૂંટાતો હોય તેવું લાગે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Yes, breathless on resting", "Breathless on slight walking", "Normal breathing"],
+          "hi-IN": ["हाँ, बैठे-बैठे सांस फूल रही है", "चलने पर सांस फूलती है", "सांस बिल्कुल सामान्य है"],
+          "gu-IN": ["હા, બેઠા-બેઠા પણ શ્વાસ ચડે છે", "ચાલતી વખતે શ્વાસ ચડે છે", "ના, શ્વાસ સામાન્ય છે"]
+        }
+      },
+      {
+        "dimension": "sweating",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you experiencing unusual cold drenching sweat, dizziness, lightheadedness, or nausea?",
+          "hi-IN": "क्या ठंडा पसीना आ रहा है, चक्कर आ रहे हैं, या जी मिचला रहा है?",
+          "gu-IN": "શું અસામાન્ય ઠંડો પરસેવો વળે છે, ચક્કર આવે છે કે ઉબકા આવે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Yes, cold heavy sweating", "Dizzy & lightheaded", "Nausea present", "No sweating or dizziness"],
+          "hi-IN": ["हाँ, ठंडा पसीना आ रहा है", "चक्कर आ रहे हैं", "जी मिचला रहा है", "नहीं, ऐसा कुछ नहीं"],
+          "gu-IN": ["હા, ઠંડો પરસેવો વળે છે", "ચક્કર આવે છે", "ઉબકા આવે છે", "ના, એવું કંઈ નથી"]
+        }
+      }
     ],
     "red_flag_indicators": [
       "severe chest pain",
       "chest pain with breathing difficulty",
       "chest pain with fainting",
       "chest pain with severe sweating",
-      "crushing chest pain radiating to left arm"
-    ]
-  },
-  {
-    "complaint_id": "ckb_joint_pain",
-    "complaint": "joint pain",
-    "synonyms": ["arthralgia", "body joint ache", "સાંધાનો દુખાવો", "जोड़ों में दर्द"],
-    "assessment_dimensions": [
-      "location", "duration", "severity", "onset", "swelling", "stiffness", "movement_difficulty", "previous_injury", "fever", "progression"
-    ],
-    "completion_criteria": ["location", "duration", "severity", "stiffness"],
-    "questions": [
-      { "dimension": "location", "priority": 10, "question": "Which specific joints are hurting (e.g. knees, hips, hands, shoulders)?" },
-      { "dimension": "duration", "priority": 10, "question": "How long have you had this joint pain?" },
-      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how severe is the joint pain?" },
-      { "dimension": "stiffness", "priority": 8, "question": "Do you experience stiffness in the joints, especially in the morning?" },
-      { "dimension": "swelling", "priority": 8, "question": "Is there any visible swelling, redness, or heat around the joints?" }
-    ],
-    "red_flag_indicators": [
-      "severe sudden joint pain",
-      "inability to move the joint",
-      "inability to bear weight",
-      "severe swelling",
-      "joint symptoms with high fever"
-    ]
-  },
-  {
-    "complaint_id": "ckb_knee_pain",
-    "complaint": "knee pain",
-    "synonyms": ["knee ache", "knee stiffness", "ઘૂંટણનો દુખાવો", "घुटने का दर्द"],
-    "assessment_dimensions": [
-      "location", "duration", "severity", "onset", "stiffness", "swelling", "walking_difficulty", "crepitus_sound"
-    ],
-    "completion_criteria": ["duration", "severity", "onset", "stiffness"],
-    "questions": [
-      { "dimension": "duration", "priority": 10, "question": "How long have you had this knee pain?" },
-      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the knee pain?" },
-      { "dimension": "onset", "priority": 8, "question": "Did the knee pain start gradually or suddenly after an injury?" },
-      { "dimension": "stiffness", "priority": 8, "question": "Do your knees feel stiff or make cracking sounds when bending or walking?" }
-    ],
-    "red_flag_indicators": [
-      "inability to bear any weight on knee",
-      "knee joint locked in one position",
-      "severe sudden knee swelling and hot red joint"
+      "crushing chest pain radiating to left arm",
+      "chest pain radiating to jaw or back"
     ]
   },
   {
     "complaint_id": "ckb_fever",
     "complaint": "fever",
-    "synonyms": ["high temperature", "pyrexia", "તાવ", "बुखार"],
+    "category": "INFECTIOUS_DISEASE",
+    "protocol": "PYREXIA_WORKUP",
+    "synonyms": [
+      "high temperature", "pyrexia", "febrile", "chills and rigors",
+      "તાવ", "બુખાર", "ધ્રુજારી સાથે તાવ", "ઝીણો તાવ", "ગરમી ચડવી",
+      "बुखार", "तेज बुखार", "कंपकंपी के साथ बुखार", "हल्का बुखार"
+    ],
     "assessment_dimensions": [
-      "onset", "duration", "temperature_grade", "chills", "cough", "body_ache", "rash", "burning_urination"
+      "onset", "duration", "temperature_grade", "chills", "cough", "body_ache", "rash", "burning_urination", "vomiting"
     ],
     "completion_criteria": ["duration", "temperature_grade", "chills"],
     "questions": [
-      { "dimension": "duration", "priority": 10, "question": "How many days have you had this fever?" },
-      { "dimension": "chills", "priority": 9, "question": "Does the fever come with shivering, chills, or heavy sweating?" },
-      { "dimension": "associated_symptoms", "priority": 8, "question": "Do you have any cough, sore throat, vomiting, rash, or burning urination?" }
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "How many days have you had this fever, and does it stay continuous or come and go at specific times?",
+          "hi-IN": "यह बुखार कितने दिनों से आ रहा है, और क्या यह लगातार बना रहता है या उतर-चढ़कर आता है?",
+          "gu-IN": "આ તાવ કેટલા દિવસથી આવે છે, અને શું તે સતત રહે છે કે વધતો-ઊતરતો રહે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Started today", "2 to 3 days", "4 to 7 days", "More than 1 week"],
+          "hi-IN": ["आज से शुरू हुआ", "2-3 दिन से", "4-7 दिन से", "एक हफ्ते से ज्यादा"],
+          "gu-IN": ["આજથી શરૂ થયો", "૨-૩ દિવસથી", "૪-૭ દિવસથી", "૧ અઠવાડિયાથી વધારે"]
+        }
+      },
+      {
+        "dimension": "temperature_grade",
+        "priority": 9,
+        "question": {
+          "en-IN": "Have you measured your body temperature with a thermometer? Was it mild (around 99-100°F) or high (above 102°F)?",
+          "hi-IN": "क्या थर्मामीटर से बुखार नापा है? क्या यह हल्का था (99-100°F) या तेज (102°F से ज्यादा)?",
+          "gu-IN": "શું થર્મોમીટરથી તાવ માપ્યો છે? શું તે સામાન્ય (૯૯-૧૦૦°F) હતો કે ખૂબ વધારે (૧૦૨°F થી વધુ)?"
+        },
+        "quick_chips": {
+          "en-IN": ["High fever (>102°F)", "Moderate (100-101°F)", "Mild (99°F)", "Not measured with thermometer"],
+          "hi-IN": ["तेज बुखार (>102°F)", "मध्यम (100-101°F)", "हल्का बुखार (99°F)", "नापा नहीं है"],
+          "gu-IN": ["ખૂબ તાવ (>૧૦૨°F)", "મધ્યમ (૧૦૦-૧૦૧°F)", "ઝીણો તાવ (૯૯°F)", "માપ્યો નથી"]
+        }
+      },
+      {
+        "dimension": "chills",
+        "priority": 9,
+        "question": {
+          "en-IN": "Does the fever spike with teeth-chattering shivering, cold sensations, or heavy sweats as it comes down?",
+          "hi-IN": "क्या बुखार आने से पहले तेज ठंड लगकर दांत किटकिटाने वाली कंपकंपी छूटती है, या उतरते समय पसीना आता है?",
+          "gu-IN": "શું તાવ ચડતી વખતે ખૂબ ઠંડી લાગીને ધ્રુજારી છૂટે છે, કે ઊતરતી વખતે ખૂબ પરસેવો વળે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Shivering & chills (rigors)", "Heavy sweating when breaking", "Constant warm body without chills"],
+          "hi-IN": ["ठंड और कंपकंपी के साथ", "उतरते समय तेज पसीना", "बिना ठंड का लगातार बुखार"],
+          "gu-IN": ["ધ્રુજારી અને ઠંડી સાથે", "તાવ ઊતરતી વખતે પરસેવો", "ધ્રુજારી વગર સતત ગરમ શરીર"]
+        }
+      },
+      {
+        "dimension": "associated_symptoms",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you experiencing severe headache, retro-orbital eye pain, joint pain, skin rash, or burning when passing urine?",
+          "hi-IN": "क्या तेज सिरदर्द, आंखों के पीछे दर्द, जोड़ों में दर्द, त्वचा पर लाल दाने, या पेशाब में जलन है?",
+          "gu-IN": "શું માથામાં દુખાવો, આંખો પાછળ દુખાવો, સાંધા-શરીરમાં કળતર, ચામડી પર ચકામા કે પેશાબમાં બળતરા થાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Severe body ache & eye pain", "Burning sensation in urine", "Skin rash / red spots", "Throat pain & cough", "None of these"],
+          "hi-IN": ["बदन दर्द और आंखों में दर्द", "पेशाब में जलन", "त्वचा पर दाने/चकत्ते", "गले में दर्द और खांसी", "इनमें से कोई नहीं"],
+          "gu-IN": ["શરીરમાં કળતર અને આંખમાં દુખાવો", "પેશાબમાં બળતરા", "ચામડી પર ચકામા/લાલ ડાઘ", "ગળામાં દુખાવો અને ખાંસી", "આમાંથી કંઈ નથી"]
+        }
+      }
     ],
     "red_flag_indicators": [
       "fever with stiff neck and altered mental state",
       "fever with persistent vomiting and extreme lethargy",
-      "fever with breathing difficulty or blue lips"
+      "fever with breathing difficulty or blue lips",
+      "petechial dark bleeding spots on skin with fever",
+      "febrile seizure or sudden confusion"
     ]
   },
   {
     "complaint_id": "ckb_cough",
     "complaint": "cough",
-    "synonyms": ["cold and cough", "chest congestion", "ખાંસી", "ઉધરસ", "खांसी"],
+    "category": "RESPIRATORY",
+    "protocol": "PULMONARY_SOCRATES",
+    "synonyms": [
+      "cold and cough", "chest congestion", "productive cough", "dry cough", "bronchitis",
+      "ખાંસી", "ઉધરસ", "કફ", "ગળામાં ખારાશ", "છાતીમાં કફ ભરાવો",
+      "खांसी", "बलगम वाली खांसी", "सूखी खांसी", "छाती में जकड़न", "गले में खराश"
+    ],
     "assessment_dimensions": [
-      "duration", "type_dry_wet", "sputum_color", "breathlessness", "fever", "chest_pain", "hemoptysis"
+      "duration", "type_dry_wet", "sputum_color", "breathlessness", "fever", "chest_pain", "hemoptysis", "night_sweats"
     ],
     "completion_criteria": ["duration", "type_dry_wet", "breathlessness"],
     "questions": [
-      { "dimension": "duration", "priority": 10, "question": "How long have you had this cough?" },
-      { "dimension": "type_dry_wet", "priority": 9, "question": "Is it a dry cough or are you bringing up phlegm/mucus?" },
-      { "dimension": "breathlessness", "priority": 8, "question": "Are you having any wheezing, chest tightness, or trouble breathing?" }
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "How long have you had this cough? Is it acute (few days) or ongoing for more than 2 to 3 weeks?",
+          "hi-IN": "यह खांसी आपको कितने समय से है? क्या यह कुछ दिनों से है या 2-3 हफ्तों से ज्यादा समय से चली आ रही है?",
+          "gu-IN": "આ ખાંસી/ઉધરસ તમને કેટલા સમયથી છે? થોડા દિવસથી છે કે ૨-૩ અઠવાડિયાથી વધુ સમયથી ચાલે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["2 to 3 days", "1 to 2 weeks", "More than 3 weeks", "Started today"],
+          "hi-IN": ["2-3 दिन से", "1-2 हफ्ते से", "3 हफ्ते से अधिक", "आज से शुरू हुई"],
+          "gu-IN": ["૨-૩ દિવસથી", "૧-૨ અઠવાડિયાથી", "૩ અઠવાડિયાથી વધુ", "આજથી શરૂ થઈ"]
+        }
+      },
+      {
+        "dimension": "type_dry_wet",
+        "priority": 9,
+        "question": {
+          "en-IN": "Is the cough dry and scratchy, or are you bringing up thick phlegm, mucus, or sputum?",
+          "hi-IN": "क्या खांसी सूखी है, या खांसने पर बलगम/कफ बाहर निकल रहा है?",
+          "gu-IN": "શું ખાંસી સૂકી છે, કે ખાંસતી વખતે કફ/બળગમ નીકળે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Dry tickling cough", "Productive with yellow/green phlegm", "Clear watery mucus", "Rust-colored phlegm"],
+          "hi-IN": ["सूखी और गले में खराश वाली", "पीला/हरा गाढ़ा बलगम", "सफेद पतला कफ", "कफ में जंग जैसा रंग"],
+          "gu-IN": ["સૂકી ખાંસી", "પીળો/લીલો ઘટ્ટ કફ", "પાતળો સફેદ કફ", "લાલાશ પડતો કફ"]
+        }
+      },
+      {
+        "dimension": "breathlessness",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you having any wheezing (whistling sounds in chest), chest tightness, or difficulty breathing while lying flat?",
+          "hi-IN": "क्या सीने में सीटी जैसी आवाज (घरघराहट), सीने में जकड़न, या लेटने पर सांस फूलने की समस्या है?",
+          "gu-IN": "શું શ્વાસ લેતી વખતે સીટી જેવો અવાજ, છાતીમાં જકડન કે સૂતી વખતે શ્વાસ ચડવાની તકલીફ થાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Wheezing / whistling sound", "Breathless when walking", "Breathless even at rest", "No breathing difficulty"],
+          "hi-IN": ["सीटी/घरघराहट की आवाज", "चलने पर सांस फूलना", "बैठे-बैठे भी सांस फूलना", "सांस सामान्य है"],
+          "gu-IN": ["સીટી જેવો અવાજ આવે છે", "ચાલતી વખતે શ્વાસ ચડે છે", "બેઠા-બેઠા પણ શ્વાસ ચડે છે", "ના, શ્વાસ સામાન્ય છે"]
+        }
+      },
+      {
+        "dimension": "hemoptysis",
+        "priority": 8,
+        "question": {
+          "en-IN": "Have you noticed any blood streaks or fresh red blood in your cough/phlegm?",
+          "hi-IN": "क्या बलगम में कभी खून के छींटे या लाल रंग का खून दिखा है?",
+          "gu-IN": "શું કફ કે ઉધરસમાં લોહીના અંશ કે લાલ રંગનું લોહી જણાયું છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Yes, blood in phlegm", "Dark brown streaks", "No blood at all"],
+          "hi-IN": ["हाँ, बलगम में खून दिखा", "कत्थई रंग के धागे", "नहीं, बिल्कुल खून नहीं"],
+          "gu-IN": ["હા, કફમાં લોહી નીકળ્યું", "ઘાટા ડાઘા દેખાયા", "ના, બિલકુલ લોહી નથી"]
+        }
+      }
     ],
     "red_flag_indicators": [
       "coughing up blood (hemoptysis)",
       "severe stridor or inability to speak full sentences",
-      "cough with high fever and sudden chest pain"
-    ]
-  },
-  {
-    "complaint_id": "ckb_headache",
-    "complaint": "headache",
-    "synonyms": ["head pain", "migraine", "માથાનો દુખાવો", "सिर दर्द"],
-    "assessment_dimensions": [
-      "onset", "duration", "severity", "location_one_both", "vision_blur", "nausea", "neck_stiffness", "fever"
-    ],
-    "completion_criteria": ["onset", "severity", "vision_blur"],
-    "questions": [
-      { "dimension": "onset", "priority": 10, "question": "Did the headache start suddenly like a thunderclap or build up slowly?" },
-      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the headache?" },
-      { "dimension": "associated_symptoms", "priority": 8, "question": "Are you experiencing any vomiting, blurred vision, light sensitivity, or neck stiffness?" }
-    ],
-    "red_flag_indicators": [
-      "thunderclap headache reaching max intensity in seconds",
-      "headache with neck stiffness and high fever",
-      "headache with sudden weakness or speech difficulty"
+      "cough with high fever and sudden pleuritic chest pain",
+      "chronic cough >3 weeks with unexplained weight loss and drenching night sweats"
     ]
   },
   {
     "complaint_id": "ckb_abdominal_pain",
     "complaint": "abdominal pain",
-    "synonyms": ["stomach pain", "belly ache", "gut pain", "પેટમાં દુખાવો", "पेट में दर्द"],
+    "category": "GASTROENTEROLOGY",
+    "protocol": "ACUTE_ABDOMEN_WORKUP",
+    "synonyms": [
+      "stomach pain", "belly ache", "gut pain", "gastric cramp", "stomach cramps",
+      "પેટમાં દુખાવો", "પેટમાં ચૂંક", "પેટનો દુખાવો", "પેટમાં મરોડ", "નાભિ પાસે દુખાવો",
+      "पेट में दर्द", "पेट दर्द", "मरोड़", "पेट में ऐंठन", "नाभि के पास दर्द"
+    ],
     "assessment_dimensions": [
-      "location_quadrant", "duration", "severity", "onset", "vomiting", "bowel_habits", "fever"
+      "location_quadrant", "duration", "severity", "onset", "vomiting", "bowel_habits", "fever", "food_relation", "rigidity"
     ],
     "completion_criteria": ["location_quadrant", "duration", "severity", "vomiting"],
     "questions": [
-      { "dimension": "location_quadrant", "priority": 10, "question": "Where in the stomach is the pain located?" },
-      { "dimension": "duration", "priority": 10, "question": "When did the stomach pain start and is it continuous or cramping?" },
-      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how severe is the stomach pain?" },
-      { "dimension": "associated_symptoms", "priority": 8, "question": "Are you experiencing vomiting, loose motions, or fever?" }
+      {
+        "dimension": "location_quadrant",
+        "priority": 10,
+        "question": {
+          "en-IN": "Where specifically in your abdomen is the pain located? Upper stomach (epigastric), lower right side, around the navel, or all over?",
+          "hi-IN": "पेट में दर्द ठीक किस जगह हो रहा है? ऊपरी हिस्से में (सीने के नीचे), दाईं तरफ नीचे, नाभि के चारों तरफ, या पूरे पेट में?",
+          "gu-IN": "પેટમાં દુખાવો બરાબર કઈ જગ્યાએ થાય છે? ઉપર પેટમાં, જમણી બાજુ નીચે, નાભિની આસપાસ કે આખા પેટમાં?"
+        },
+        "quick_chips": {
+          "en-IN": ["Upper abdomen (acidity area)", "Right lower quadrant (appendix area)", "Around navel", "Left lower side", "Generalized all over"],
+          "hi-IN": ["ऊपरी पेट (गैस/जलन की जगह)", "दाईं तरफ नीचे (अपेंडिक्स जगह)", "नाभि के पास", "बाईं तरफ नीचे", "पूरे पेट में"],
+          "gu-IN": ["ઉપર પેટમાં (બળતરાવાળો ભાગ)", "જમણી બાજુ નીચે (એપેન્ડિક્સ ભાગ)", "નાભિ પાસે", "ડાબી બાજુ નીચે", "આખા પેટમાં"]
+        }
+      },
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "When did the stomach pain start, and is it a continuous dull ache or does it come in sharp severe waves/cramps?",
+          "hi-IN": "पेट दर्द कब शुरू हुआ, और क्या यह लगातार बना हुआ है या मरोड़ के साथ रुक-रुक कर आता है?",
+          "gu-IN": "પેટમાં દુખાવો ક્યારથી શરૂ થયો, અને શું તે સતત રહે છે કે ચૂંક સાથે વધતો-ઓછો થાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Continuous pain since morning", "Severe cramping waves", "Started after heavy meal", "Ongoing for 2 to 3 days"],
+          "hi-IN": ["सुबह से लगातार दर्द", "तेज मरोड़ के साथ", "भारी भोजन के बाद शुरू हुआ", "2-3 दिन से लगातार"],
+          "gu-IN": ["સવારથી સતત દુખાવો", "તીવ્ર ચૂંક સાથે", "જમ્યા પછી શરૂ થયો", "૨-૩ દિવસથી ચાલુ છે"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "On a scale of 1 to 10, how severe is the stomach pain right now?",
+          "hi-IN": "1 से 10 के पैमाने पर यह पेट दर्द अभी कितना तेज महसूस हो रहा है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર પેટનો દુખાવો અત્યારે કેટલો તીવ્ર છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Mild)", "5/10 (Moderate)", "8/10 (Severe)", "10/10 (Unbearable)"],
+          "hi-IN": ["3/10 (हल्का)", "5/10 (मध्यम)", "8/10 (काफी तेज)", "10/10 (असहनीय)"],
+          "gu-IN": ["૩/૧૦ (હળવો)", "૫/૧૦ (મધ્યમ)", "૮/૧૦ (તીવ્ર)", "૧૦/૧૦ (અસહ્ય)"]
+        }
+      },
+      {
+        "dimension": "associated_symptoms",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you experiencing repeated vomiting, loose motions (diarrhea), inability to pass gas or stool, or high fever?",
+          "hi-IN": "क्या बार-बार उल्टी, दस्त, गैस या शौच का बिल्कुल पास न होना, या तेज बुखार हो रहा है?",
+          "gu-IN": "શું વારંવાર ઉલ્ટી, ઝાડા, ગેસ કે મળ પાસ ન થવો, કે ખૂબ તાવ આવે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Vomiting everything consumed", "Watery loose stools", "Severe bloating / unable to pass gas", "No vomiting or loose motions"],
+          "hi-IN": ["जो भी खाएं उल्टी हो रही है", "पतले पानी जैसे दस्त", "पेट फूलना / गैस न निकलना", "उल्टी या दस्त नहीं है"],
+          "gu-IN": ["પાણી પણ ઉલ્ટી થઈ જાય છે", "પાતળા ઝાડા", "પેટ ફૂલી ગયું / ગેસ પાસ નથી થતો", "ના, ઉલ્ટી કે ઝાડા નથી"]
+        }
+      }
     ],
     "red_flag_indicators": [
-      "severe rigid abdomen with extreme tenderness",
-      "vomiting blood or black coffee ground material",
-      "black tarry stools with abdominal pain"
+      "severe rigid abdomen with board-like hardness and extreme rebound tenderness",
+      "vomiting fresh blood or coffee ground material",
+      "black tarry stools (melena)",
+      "abdominal pain with sudden high fever and yellow jaundice",
+      "complete obstipation (inability to pass gas or stool for >24h with abdominal distension)"
+    ]
+  },
+  {
+    "complaint_id": "ckb_headache",
+    "complaint": "headache",
+    "category": "NEUROLOGY",
+    "protocol": "CEPHALALGIA_TRIAGE",
+    "synonyms": [
+      "head pain", "migraine", "cranial tension", "cluster headache",
+      "માથાનો દુખાવો", "માથું ચડવું", "અડધા માથાનો દુખાવો", "નસ ખેંચાવી",
+      "सिर दर्द", "माइग्रेन दर्द", "आधे सिर में दर्द", "सिर भारी होना"
+    ],
+    "assessment_dimensions": [
+      "onset", "duration", "severity", "location_one_both", "vision_blur", "nausea", "neck_stiffness", "fever", "neurological_weakness"
+    ],
+    "completion_criteria": ["onset", "severity", "vision_blur"],
+    "questions": [
+      {
+        "dimension": "onset",
+        "priority": 10,
+        "question": {
+          "en-IN": "Did the headache reach maximum severe intensity within seconds like a sudden explosion/thunderclap, or did it build up gradually?",
+          "hi-IN": "क्या सिरदर्द बिजली के झटके या धमाके की तरह कुछ ही सेकंड में असहनीय हो गया, या धीरे-धीरे बढ़ा?",
+          "gu-IN": "શું માથાનો દુખાવો વીજળીના ઝટકાની જેમ થોડી સેકન્ડમાં અસહ્ય થઈ ગયો, કે ધીમે-ધીમે વધ્યો?"
+        },
+        "quick_chips": {
+          "en-IN": ["Gradual build-up over hours", "Sudden explosion / thunderclap", "Pulsating throbbing on one side", "Continuous dull pressure"],
+          "hi-IN": ["घंटों में धीरे-धीरे बढ़ा", "बिजली के झटके जैसा अचानक", "एक तरफ धड़कने वाला दर्द", "लगातार भारी दबाव"],
+          "gu-IN": ["કલાકોમાં ધીમે ધીમે વધ્યો", "વીજળીના ઝટકા જેવો અચાનક", "એક બાજુ ધબકારા સાથે", "સતત ભારે દબાણ"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "On a scale of 1 to 10, how intense is the headache? Is this the worst headache you have ever experienced in your life?",
+          "hi-IN": "1 से 10 के पैमाने पर सिरदर्द कितना तेज है? क्या यह आपके जीवन का अब तक का सबसे तेज सिरदर्द है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર માથાનો દુખાવો કેટલો તીવ્ર છે? શું આ તમારી જિંદગીનો સૌથી તીવ્ર દુખાવો છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Tension / fatigue)", "6/10 (Moderate migraine)", "8/10 (Severe)", "10/10 (Worst headache of my life)"],
+          "hi-IN": ["3/10 (हल्का/थकावट)", "6/10 (माइग्रेन)", "8/10 (काफी तेज)", "10/10 (जिंदगी का सबसे भयानक दर्द)"],
+          "gu-IN": ["૩/૧૦ (હળવો/થાક)", "૬/૧૦ (માઇગ્રેન)", "૮/૧૦ (ખૂબ તીવ્ર)", "૧૦/૧૦ (જિંદગીનો સૌથી અસહ્ય દુખાવો)"]
+        }
+      },
+      {
+        "dimension": "associated_symptoms",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you experiencing projectile vomiting, blurred or double vision, extreme sensitivity to light/sound, or stiffness in bending your neck down?",
+          "hi-IN": "क्या तेज उल्टी, धुंधला दिखना, तेज रोशनी/आवाज से सिर फटना, या गर्दन आगे झुकाने में अकड़न हो रही है?",
+          "gu-IN": "શું જોરદાર ઉલ્ટી, ઝાંખું કે બેવડું દેખાવું, અજવાળા-અવાજથી અકળામણ કે ગરદન વાળવામાં અકડાઈ જવી થાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Nausea & light sensitivity (photophobia)", "Blurred vision / seeing flashing lights", "Stiff neck unable to touch chin to chest", "None of these"],
+          "hi-IN": ["रोशनी से परेशानी और जी मिचलाना", "धुंधला दिखना / चमक दिखना", "गर्दन में तेज अकड़न", "इनमें से कोई नहीं"],
+          "gu-IN": ["પ્રકાશથી અકળામણ અને ઉબકા", "ઝાંખું દેખાવું / ઝબકારા", "ગરદન અકડાઈ જવી", "આમાંથી કંઈ નથી"]
+        }
+      }
+    ],
+    "red_flag_indicators": [
+      "thunderclap headache reaching maximum intensity in seconds",
+      "headache with neck stiffness and high fever (meningismus)",
+      "headache accompanied by unilateral weakness, facial droop, or slurred speech",
+      "new onset headache following recent head trauma or fall with drowsiness",
+      "headache with sudden partial or total vision loss"
+    ]
+  },
+  {
+    "complaint_id": "ckb_joint_pain",
+    "complaint": "joint pain",
+    "category": "RHEUMATOLOGY_AYUSH",
+    "protocol": "SANDHIGATA_VATA_ARTHRITIS",
+    "synonyms": [
+      "arthralgia", "body joint ache", "arthritis", "rheumatism", "gout",
+      "સાંધાનો દુખાવો", "સાંધા જકડાઈ જવા", "વા નો દુખાવો", "સંધિવા", "હાથ-પગના સાંધા",
+      "जोड़ों में दर्द", "गठिया दर्द", "जोड़ों की जकड़न", "संधिवात", "यूरिक एसिड दर्द"
+    ],
+    "assessment_dimensions": [
+      "location", "duration", "severity", "onset", "swelling", "stiffness", "movement_difficulty", "previous_injury", "fever", "progression"
+    ],
+    "completion_criteria": ["location", "duration", "severity", "stiffness"],
+    "questions": [
+      {
+        "dimension": "location",
+        "priority": 10,
+        "question": {
+          "en-IN": "Which specific joints are hurting (e.g. knees, hips, small finger joints, shoulders, or big toe)?",
+          "hi-IN": "शरीर के कौन-से जोड़ों में दर्द हो रहा है (जैसे घुटने, कूल्हे, हाथ की छोटी उंगलियां, कंधे या पैर का अंगूठा)?",
+          "gu-IN": "કયા સાંધામાં દુખાવો થાય છે (જેમ કે ઘૂંટણ, થાપા, આંગળીઓના નાના સાંધા, ખભા કે પગનો અંગૂઠો)?"
+        },
+        "quick_chips": {
+          "en-IN": ["Both knees", "Small joints of hands & wrists", "Lower back & hips", "Big toe (very painful/red)", "Multiple body joints"],
+          "hi-IN": ["दोनों घुटनों में", "हाथ और उंगलियों के जोड़ों में", "कमर और कूल्हों में", "पैर के अंगूठे में", "शरीर के कई जोड़ों में"],
+          "gu-IN": ["બંને ઘૂંટણમાં", "હાથ અને આંગળીઓના સાંધામાં", "કમર અને થાપામાં", "પગના અંગૂઠામાં", "બધા સાંધામાં"]
+        }
+      },
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "How long have you had this joint pain, and has it progressively worsened over months/years?",
+          "hi-IN": "यह जोड़ों का दर्द कितने समय से है, और क्या यह महीनों या सालों से लगातार बढ़ रहा है?",
+          "gu-IN": "આ સાંધાનો દુખાવો તમને કેટલા સમયથી છે, અને શું તે સમય જતાં ધીમે-ધીમે વધ્યો છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["More than 1 to 2 years (chronic)", "2 to 3 months", "Few weeks", "Sudden flare-up overnight"],
+          "hi-IN": ["1-2 साल से ज्यादा समय से", "2-3 महीने से", "कुछ हफ्तों से", "रातभर में अचानक तेज दर्द"],
+          "gu-IN": ["૧-૨ વર્ષથી વધુ સમયથી", "૨-૩ મહિનાથી", "થોડા અઠવાડિયાથી", "રાતોરાત અચાનક તીવ્ર દુખાવો"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "On a scale of 1 to 10, how severe is the joint pain right now, and does it restrict your daily walking?",
+          "hi-IN": "1 से 10 के पैमाने पर जोड़ों का दर्द कितना है, और क्या यह चलने-फिरने में रुकावट बन रहा है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર દુખાવો કેટલો તીવ્ર છે, અને શું તેનાથી ચાલવામાં તકલીફ થાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Mild ache)", "5/10 (Difficulty in squatting)", "8/10 (Difficulty walking)", "10/10 (Unable to bear weight)"],
+          "hi-IN": ["3/10 (हल्का दर्द)", "5/10 (उकड़ू बैठने में दर्द)", "8/10 (चलने में काफी दर्द)", "10/10 (पैर जमीन पर नहीं रख सकते)"],
+          "gu-IN": ["૩/૧૦ (હળવો)", "૫/૧૦ (નીચે બેસવામાં તકલીફ)", "૮/૧૦ (ચાલવામાં ખૂબ તકલીફ)", "૧૦/૧૦ (પગ જમીન પર નથી મૂકી શકાતો)"]
+        }
+      },
+      {
+        "dimension": "stiffness",
+        "priority": 8,
+        "question": {
+          "en-IN": "Do you experience joint stiffness in the morning after waking up? Does it last longer than 30 minutes to an hour?",
+          "hi-IN": "क्या सुबह उठने पर जोड़ों में तेज जकड़न (अकड़न) रहती है? क्या यह 30 मिनट या 1 घंटे से ज्यादा रहती है?",
+          "gu-IN": "શું સવારે ઊઠ્યા પછી સાંધા ખૂબ જકડાઈ જાય છે? શું તે ૩૦ મિનિટ કે ૧ કલાકથી વધુ સમય સુધી રહે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Morning stiffness >30 to 60 mins (improves with movement)", "Stiffness eases within 10 mins", "No morning stiffness"],
+          "hi-IN": ["सुबह तेज जकड़न (>30-60 मिनट)", "10 मिनट में सामान्य हो जाती है", "सुबह कोई जकड़न नहीं"],
+          "gu-IN": ["સવારે ૩૦-૬૦ મિનિટ સુધી અકડાઈ રહે છે", "૧૦ મિનિટમાં હળવું થઈ જાય છે", "સવારે અકડાઈ જતી નથી"]
+        }
+      },
+      {
+        "dimension": "swelling",
+        "priority": 8,
+        "question": {
+          "en-IN": "Is there visible swelling, red skin discoloration, or noticeable warmth to touch around the affected joints?",
+          "hi-IN": "क्या जोड़ों के आसपास सूजन, त्वचा पर लालिमा, या छूने पर गर्माहट महसूस होती है?",
+          "gu-IN": "શું સાંધાની આસપાસ સોજો, ચામડી પર લાલાશ કે અડવાથી ગરમી લાગે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Hot, red & swollen joint", "Swelling present without redness", "Crackling sounds (crepitus)", "No swelling"],
+          "hi-IN": ["गर्म, लाल और सूजा हुआ जोड़", "सिर्फ सूजन है, लाल नहीं", "चलने पर कटक की आवाज", "कोई सूजन नहीं"],
+          "gu-IN": ["ગરમ, લાલ અને સૂજી ગયેલો સાંધો", "ફક્ત સોજો છે, લાલ નથી", "ચાલતી વખતે અવાજ આવે છે", "ના, સોજો નથી"]
+        }
+      }
+    ],
+    "red_flag_indicators": [
+      "hot, red, severely swollen single joint with systemic fever (suspected septic arthritis)",
+      "complete inability to bear any weight on the limb following injury",
+      "visible joint deformity or bone dislocation following trauma",
+      "multiple rapidly inflamed joints with difficulty in moving"
+    ]
+  },
+  {
+    "complaint_id": "ckb_knee_pain",
+    "complaint": "knee pain",
+    "category": "ORTHOPEDICS",
+    "protocol": "GONARTHROSIS_ASSESSMENT",
+    "synonyms": [
+      "knee ache", "knee stiffness", "knee osteoarthritis",
+      "ઘૂંટણનો દુખાવો", "ગોઠણનો દુખાવો", "ઘૂંટણમાં કટક અવાજ", "પલાંઠી ન વળવી",
+      "घुटने का दर्द", "घुटनों में दर्द", "घुटनों से कट-कट आवाज आना", "सीढ़ियां चढ़ने में दर्द"
+    ],
+    "assessment_dimensions": [
+      "location", "duration", "severity", "onset", "stiffness", "swelling", "walking_difficulty", "crepitus_sound", "stairs_difficulty"
+    ],
+    "completion_criteria": ["duration", "severity", "onset", "stiffness"],
+    "questions": [
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "How long have you had this knee pain, and is it worse when climbing stairs, squatting, or walking long distances?",
+          "hi-IN": "यह घुटनों का दर्द कितने समय से है, और क्या सीढ़ियां चढ़ते-उतरते, नीचे बैठते, या ज्यादा चलने पर बढ़ जाता है?",
+          "gu-IN": "આ ઘૂંટણનો દુખાવો કેટલા સમયથી છે, અને શું પગથિયાં ચડવા-ઊતરવામાં, નીચે બેસવામાં કે ચાલવામાં વધી જાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Chronic (>1 to 2 years)", "Few months", "Few weeks", "Worse climbing stairs / squatting"],
+          "hi-IN": ["1-2 साल से ज्यादा समय से", "कुछ महीनों से", "कुछ हफ्तों से", "सीढ़ियां चढ़ने और नीचे बैठने में ज्यादा"],
+          "gu-IN": ["૧-૨ વર્ષથી વધુ સમયથી", "થોડા મહિનાઓથી", "થોડા અઠવાડિયાથી", "પગથિયાં ચડવામાં અને પલાંઠી વાળવામાં વધુ"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "On a scale of 1 to 10, how intense is the knee discomfort?",
+          "hi-IN": "1 से 10 के पैमाने पर घुटने का दर्द कितना तेज है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર ઘૂંટણનો દુખાવો કેટલો તીવ્ર છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Mild ache)", "5/10 (Moderate pain)", "8/10 (Severe pain on walking)", "10/10 (Unbearable)"],
+          "hi-IN": ["3/10 (हल्का दर्द)", "5/10 (मध्यम दर्द)", "8/10 (चलने में काफी तेज दर्द)", "10/10 (असहनीय)"],
+          "gu-IN": ["૩/૧૦ (હળવો)", "૫/૧૦ (મધ્યમ)", "૮/૧૦ (ચાલવામાં ખૂબ તીવ્ર)", "૧૦/૧૦ (અસહ્ય)"]
+        }
+      },
+      {
+        "dimension": "stiffness",
+        "priority": 8,
+        "question": {
+          "en-IN": "Do your knees make grating/clicking sounds (crepitus) or get locked in one angle while sitting or standing?",
+          "hi-IN": "क्या घुटने मोड़ते या चलते समय कटक-कटक की आवाज आती है या घुटना किसी कोण पर अटक (लॉक) जाता है?",
+          "gu-IN": "શું ઘૂંટણ વાળતી કે ચાલતી વખતે કટક-કટક અવાજ આવે છે કે ઘૂંટણ અટકી (લૉક) જાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Clicking / grating sounds present", "Knee feels like it gives way / buckles", "Knee joint gets locked", "No clicking or locking"],
+          "hi-IN": ["कट-कट आवाज आती है", "घुटना अचानक मुड़/फिसल जाता है", "घुटना अटक (लॉक) जाता है", "कोई आवाज या अटकाव नहीं"],
+          "gu-IN": ["કટક-કટક અવાજ આવે છે", "ઘૂંટણ ઢીલો પડી જાય છે", "ઘૂંટણ લૉક થઈ જાય છે", "ના, એવું કંઈ નથી"]
+        }
+      }
+    ],
+    "red_flag_indicators": [
+      "inability to bear any weight on the affected knee",
+      "knee joint locked in a fixed flexion angle unable to straighten",
+      "severe sudden knee swelling and hot red joint with fever",
+      "gross visible deformity of the knee joint following trauma"
     ]
   },
   {
     "complaint_id": "ckb_back_pain",
     "complaint": "back pain",
-    "synonyms": ["lumbago", "lower back ache", "spine pain", "કમરનો દુખાવો", "कमर दर्द"],
+    "category": "SPINE_NEURO_ORTHO",
+    "protocol": "LUMBAR_SPINE_TRIAGE",
+    "synonyms": [
+      "lumbago", "lower back ache", "spine pain", "sciatica", "slipped disc",
+      "કમરનો દુખાવો", "પીઠનો દુખાવો", "કમર જકડાઈ જવી", "રાંઝણ", "પગમાં ખાલી ચડવી",
+      "कमर दर्द", "पीठ दर्द", "रीढ़ की हड्डी में दर्द", "सायटिका", "पैरों में झनझनाहट"
+    ],
     "assessment_dimensions": [
-      "onset", "duration", "severity", "radiation_legs", "numbness_tingling", "bladder_bowel_control"
+      "onset", "duration", "severity", "radiation_legs", "numbness_tingling", "bladder_bowel_control", "trauma_lifting"
     ],
     "completion_criteria": ["duration", "severity", "radiation_legs", "bladder_bowel_control"],
     "questions": [
-      { "dimension": "duration", "priority": 10, "question": "How long have you had this back pain?" },
-      { "dimension": "severity", "priority": 9, "question": "On a scale of 1 to 10, how intense is the back pain?" },
-      { "dimension": "radiation_legs", "priority": 8, "question": "Does the pain shoot down into your legs with tingling or numbness?" }
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "How long have you had this back pain, and did it start suddenly after lifting heavy weight or bending awkwardly?",
+          "hi-IN": "यह कमर दर्द कितने समय से है, और क्या यह कोई भारी वजन उठाने या गलत तरीके से झुकने के बाद शुरू हुआ?",
+          "gu-IN": "આ કમરનો દુખાવો કેટલા સમયથી છે, અને શું કોઈ ભારે વજન ઊંચક્યા કે વાંકા વળ્યા પછી શરૂ થયો હતો?"
+        },
+        "quick_chips": {
+          "en-IN": ["Started after lifting heavy weight", "Few days ago", "Few weeks", "Chronic ongoing for months"],
+          "hi-IN": ["भारी वजन उठाने के बाद", "कुछ दिनों से", "कुछ हफ्तों से", "महीनों से लगातार"],
+          "gu-IN": ["ભારે વજન ઊંચક્યા પછી", "થોડા દિવસથી", "થોડા અઠવાડિયાથી", "મહિનાઓથી જૂનો દુખાવો"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "On a scale of 1 to 10, how intense is the back pain?",
+          "hi-IN": "1 से 10 के पैमाने पर कमर दर्द कितना तेज है?",
+          "gu-IN": "૧ થી ૧૦ ના સ્કેલ પર કમરનો દુખાવો કેટલો તીવ્ર છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["3/10 (Mild ache)", "5/10 (Moderate pain on sitting)", "8/10 (Severe pain standing/walking)", "10/10 (Bedridden)"],
+          "hi-IN": ["3/10 (हल्का दर्द)", "5/10 (बैठने में दर्द)", "8/10 (खड़े होने/चलने में तेज दर्द)", "10/10 (बिस्तर से उठना मुश्किल)"],
+          "gu-IN": ["૩/૧૦ (હળવો)", "૫/૧૦ (બેસવામાં દુખાવો)", "૮/૧૦ (ઊભા થવા/ચાલવામાં ખૂબ દુખાવો)", "૧૦/૧૦ (પથારીવશ)"]
+        }
+      },
+      {
+        "dimension": "radiation_legs",
+        "priority": 8,
+        "question": {
+          "en-IN": "Does the pain shoot like an electric shock down your buttock, thigh, calf, or foot (sciatica), or cause numbness/tingling in toes?",
+          "hi-IN": "क्या दर्द बिजली के झटके की तरह कूल्हे से होकर जांघ, पिंडली या पैर के तलवे तक (सायटिका) जा रहा है, या पैरों में सुन्नपन/झनझनाहट है?",
+          "gu-IN": "શું દુખાવો કરંટ જેવો થાપામાંથી નીચે સાથળ, પિંડી કે પગના તળિયા સુધી (રાંઝણ) ઉતરે છે, કે આંગળીઓમાં ખાલી/ઝણઝણાટી ચડે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Electric shooting pain down leg (sciatica)", "Numbness / pins & needles in feet", "Foot feels weak / drops when walking", "No radiation, only in back"],
+          "hi-IN": ["पैर में नीचे उतरता तेज करंट जैसा दर्द", "पैरों में सुन्नपन और झनझनाहट", "पैर में कमजोरी/उठने में परेशानी", "नहीं, केवल कमर में ही है"],
+          "gu-IN": ["પગમાં નીચે ઉતરતો કરંટ જેવો દુખાવો", "પગમાં ખાલી ચડવી / ઝણઝણાટી", "ચાલતી વખતે પગમાં નબળાઈ", "ના, ફક્ત કમરમાં જ છે"]
+        }
+      },
+      {
+        "dimension": "bladder_bowel_control",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are you having any difficulty controlling your urination or bowel movements, or numbness around your groin/saddle area?",
+          "hi-IN": "क्या पेशाब या शौच पर नियंत्रण रखने में कोई परेशानी हो रही है, या जांघों के बीच/गुप्तांग के आसपास सुन्नपन लग रहा है?",
+          "gu-IN": "શું પેશાબ કે શૌચ પર નિયંત્રણ રાખવામાં તકલીફ થાય છે, કે ગુપ્તાંગની આસપાસ બહેરાશ જેવું લાગે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Loss of urine control / incontinence", "Numbness around groin area", "Normal bladder & bowel control"],
+          "hi-IN": ["पेशाब पर नियंत्रण नहीं रह पा रहा", "जांघों के बीच सुन्नपन", "पेशाब और शौच बिल्कुल सामान्य"],
+          "gu-IN": ["પેશાબ રોકવામાં તકલીફ", "ગુપ્તાંગ પાસે બહેરાશ", "પેશાબ અને શૌચ સામાન્ય છે"]
+        }
+      }
     ],
     "red_flag_indicators": [
-      "back pain with loss of bladder or bowel control (Cauda Equina)",
-      "back pain with sudden numbness around saddle/groin area",
-      "back pain with sudden leg paralysis"
+      "back pain with loss of bladder or bowel control (Cauda Equina Syndrome)",
+      "back pain with sudden numbness around saddle/groin area (saddle anesthesia)",
+      "back pain with progressive bilateral lower extremity weakness or foot drop",
+      "back pain with high fever and focal spine tenderness (suspected spinal epidural abscess/discitis)",
+      "severe back pain in a patient with active cancer history"
     ]
   },
   {
     "complaint_id": "ckb_vomiting",
     "complaint": "vomiting",
-    "synonyms": ["emesis", "throwing up", "ઉલ્ટી", "उल्टी"],
+    "category": "GASTROENTEROLOGY",
+    "protocol": "EMESIS_DEHYDRATION_WORKUP",
+    "synonyms": [
+      "emesis", "throwing up", "nausea and vomiting",
+      "ઉલ્ટી", "ઉબકા", "ઉલ્ટી થવી", "મોળ આવવી",
+      "उल्टी", "जी मिचलाना", "उल्टी होना", "कै होना"
+    ],
     "assessment_dimensions": [
-      "duration", "frequency", "fluid_retention", "vomitus_content", "diarrhea", "abdominal_pain"
+      "duration", "frequency", "fluid_retention", "vomitus_content", "diarrhea", "abdominal_pain", "fever", "blood_in_vomit"
     ],
     "completion_criteria": ["duration", "frequency", "fluid_retention"],
     "questions": [
-      { "dimension": "duration", "priority": 10, "question": "When did the vomiting start and how many times have you thrown up?" },
-      { "dimension": "fluid_retention", "priority": 9, "question": "Are you able to keep water or liquids down?" }
+      {
+        "dimension": "duration",
+        "priority": 10,
+        "question": {
+          "en-IN": "When did the vomiting start, and roughly how many times have you thrown up today?",
+          "hi-IN": "उल्टी कब शुरू हुई, और आज लगभग कितनी बार उल्टी हो चुकी है?",
+          "gu-IN": "ઉલ્ટી ક્યારથી શરૂ થઈ, અને આજે અંદાજે કેટલી વાર થઈ ચૂકી છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["1 to 2 times today", "3 to 5 times", "More than 6 to 8 times", "Continuous retching"],
+          "hi-IN": ["आज 1-2 बार", "3-5 बार", "6-8 बार से ज्यादा", "लगातार उल्टियां आ रही हैं"],
+          "gu-IN": ["આજે ૧-૨ વાર", "૩-૫ વાર", "૬-૮ વારથી વધુ", "સતત ઉલ્ટીઓ થયા કરે છે"]
+        }
+      },
+      {
+        "dimension": "fluid_retention",
+        "priority": 9,
+        "question": {
+          "en-IN": "Are you able to keep sips of water or liquids down, or does drinking water immediately trigger another vomiting episode?",
+          "hi-IN": "क्या आप घूंट-घूंट पानी या तरल पदार्थ पी पा रहे हैं, या एक घूंट पानी पीने पर भी उल्टी आ जाती है?",
+          "gu-IN": "શું તમે થોડું પાણી કે પ્રવાહી પી શકો છો, કે એક ઘૂંટડો પાણી પીતાં જ તરત ઉલ્ટી થઈ જાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Able to drink water slowly", "Vomits out even a single sip of water", "Dry mouth & extreme thirst", "Reduced urination today"],
+          "hi-IN": ["धीरे-धीरे पानी पी पा रहे हैं", "एक घूंट पानी भी बाहर आ जाता है", "मुंह सूखना और बहुत ज्यादा प्यास", "आज पेशाब बहुत कम हुआ है"],
+          "gu-IN": ["ધીમે-ધીમે પાણી પી શકું છું", "એક ઘૂંટડો પાણી પણ નથી ટકતું", "મોં સુકાઈ ગયું છે અને તરસ લાગે છે", "આજે પેશાબ ખૂબ ઓછો થયો છે"]
+        }
+      },
+      {
+        "dimension": "vomitus_content",
+        "priority": 8,
+        "question": {
+          "en-IN": "What does the vomit look like? Clear watery, food contents, green/yellow bile, or does it contain dark coffee-ground material or fresh blood?",
+          "hi-IN": "उल्टी में क्या निकल रहा है? सिर्फ पानी, खाया हुआ खाना, हरा/पीला पित्त, या गहरा कत्थई/खून जैसा कुछ?",
+          "gu-IN": "ઉલ્ટીમાં શું નીકળે છે? સામાન્ય પાણી, ખાધેલો ખોરાક, પીળું/લીલું પિત્ત, કે કાળા ડાઘાવાળું કે લાલ લોહી?"
+        },
+        "quick_chips": {
+          "en-IN": ["Clear or undigested food", "Greenish/yellow bitter fluid (bile)", "Fresh red blood present", "Dark coffee-ground material"],
+          "hi-IN": ["साफ पानी या बिना पचा खाना", "हरा/पीला कड़वा पित्त", "उल्टी में लाल खून दिखा", "कॉफी जैसे गहरे रंग का"],
+          "gu-IN": ["સામાન્ય પાણી કે અપાચ્ય ખોરાક", "લીલું/પીળું કડવું પિત્ત", "ઉલ્ટીમાં લાલ લોહી દેખાયું", "કૉફી જેવા ઘાટા રંગનું"]
+        }
+      }
     ],
     "red_flag_indicators": [
-      "vomiting fresh red blood or black coffee ground material",
-      "vomiting with severe unremitting abdominal pain",
-      "inability to keep any fluids for >24h with severe dehydration"
+      "vomiting fresh red blood (hematemesis) or dark coffee-ground material",
+      "vomiting accompanied by severe continuous abdominal pain and abdomen rigidity",
+      "inability to keep any oral fluids for >24 hours with severe signs of dehydration",
+      "vomiting with sudden severe headache, confusion, or neck stiffness",
+      "vomiting following recent head injury with increasing drowsiness"
     ]
   },
   {
     "complaint_id": "ckb_dizziness",
     "complaint": "dizziness",
-    "synonyms": ["vertigo", "lightheadedness", "fainting feeling", "ચક્કર", "चक्कर आना"],
+    "category": "NEURO_VESTIBULAR",
+    "protocol": "VERTIGO_SYNCOPE_WORKUP",
+    "synonyms": [
+      "vertigo", "lightheadedness", "fainting feeling", "imbalance", "blackout",
+      "ચક્કર", "ચક્કર આવવા", "માથું ઘૂમવું", "આંખે અંધારા આવવા", "બેહોશ જેવું થવું",
+      "चक्कर आना", "सिर घूमना", "आंखों के आगे अंधेरा छाना", "बेहोशी जैसा लगना", "संतुलन बिगड़ना"
+    ],
     "assessment_dimensions": [
-      "onset", "room_spinning_vertigo", "duration", "syncope_fainting", "hearing_loss_tinnitus"
+      "onset", "room_spinning_vertigo", "duration", "syncope_fainting", "hearing_loss_tinnitus", "postural_change", "chest_palpitations"
     ],
     "completion_criteria": ["onset", "room_spinning_vertigo", "syncope_fainting"],
     "questions": [
-      { "dimension": "room_spinning_vertigo", "priority": 10, "question": "Does the room feel like it is spinning around you, or is it lightheadedness?" },
-      { "dimension": "syncope_fainting", "priority": 9, "question": "Did you black out, lose consciousness, or fall down?" }
+      {
+        "dimension": "room_spinning_vertigo",
+        "priority": 10,
+        "question": {
+          "en-IN": "Does the room or ceiling feel like it is spinning around you (true vertigo), or is it a lightheaded feeling like you might pass out?",
+          "hi-IN": "क्या कमरा या पंखा चारों तरफ गोल-गोल घूमता हुआ महसूस हो रहा है (चक्कर), या कमजोरी से सिर हल्का लग रहा है जैसे गिर पड़ेंगे?",
+          "gu-IN": "શું રૂમ કે છત તમારી આસપાસ ગોળ-ગોળ ફરતી હોય તેવું લાગે છે, કે નબળાઈથી માથું હળવું લાગે છે જાણે બેહોશ થઈ જશો?"
+        },
+        "quick_chips": {
+          "en-IN": ["Room spinning around (true vertigo)", "Lightheaded / faint feeling", "Unsteady while walking", "Triggered by turning head in bed"],
+          "hi-IN": ["कमरा गोल घूम रहा है (चक्कर)", "सिर हल्का / बेहोशी जैसा", "चलने में संतुलन बिगड़ना", "बिस्तर में करवट लेने पर चक्कर"],
+          "gu-IN": ["રૂમ ગોળ-ગોળ ફરે છે (ચક્કર)", "માથું હળવું / બેહોશી જેવું", "ચાલવામાં સંતુલન બગડવું", "પથારીમાં પડખું ફેરવતાં ચક્કર"]
+        }
+      },
+      {
+        "dimension": "syncope_fainting",
+        "priority": 9,
+        "question": {
+          "en-IN": "Did you completely lose consciousness, black out, or collapse to the ground during the dizziness?",
+          "hi-IN": "क्या चक्कर आने पर आप पूरी तरह बेहोश हो गए थे, आंखों के आगे अंधेरा छाकर गिर पड़े थे?",
+          "gu-IN": "શું ચક્કર આવતાં તમે સાવ બેહોશ થઈ ગયા હતા, આંખે અંધારા આવીને નીચે પડી ગયા હતા?"
+        },
+        "quick_chips": {
+          "en-IN": ["No blackout or fainting", "Momentary blackout (few seconds)", "Completely passed out / collapsed to floor"],
+          "hi-IN": ["बेहोश नहीं हुए", "पल भर के लिए अंधेरा छाया", "पूरी तरह बेहोश होकर गिर पड़े"],
+          "gu-IN": ["બેહોશ નથી થયા", "ક્ષણ માટે અંધારા આવ્યા", "સાવ બેહોશ થઈને નીચે પડી ગયા"]
+        }
+      },
+      {
+        "dimension": "hearing_loss_tinnitus",
+        "priority": 8,
+        "question": {
+          "en-IN": "Do you hear buzzing or ringing noises in your ears (tinnitus), or have you noticed sudden hearing loss or ear fullness?",
+          "hi-IN": "क्या कानों में सीटी या घंटी बजने जैसी आवाजें (टिनिटस) आ रही हैं, या कान में भारीपन/कम सुनाई दे रहा है?",
+          "gu-IN": "શું કાનમાં સીટી કે ઘંટડી જેવો અવાજ આવે છે, કે કાનમાં ભારેપણું / ઓછું સંભળાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Ringing/buzzing in ears (tinnitus)", "Reduced hearing in one ear", "No ear symptoms"],
+          "hi-IN": ["कानों में सीटी/आवाज आ रही है", "एक कान से कम सुनाई दे रहा है", "कान में कोई परेशानी नहीं"],
+          "gu-IN": ["કાનમાં સીટી/અવાજ આવે છે", "એક કાનથી ઓછું સંભળાય છે", "ના, કાનમાં કોઈ તકલીફ નથી"]
+        }
+      }
     ],
     "red_flag_indicators": [
       "dizziness with sudden loss of consciousness (syncope)",
-      "dizziness with sudden speech slurring or one-sided arm weakness",
-      "dizziness accompanied by severe chest pressure or palpitations"
+      "dizziness with sudden slurred speech, facial asymmetry, or arm weakness (stroke alert)",
+      "dizziness accompanied by chest pressure or rapid pounding palpitations",
+      "dizziness with sudden total inability to sit upright or walk (acute cerebellar stroke)"
+    ]
+  },
+  {
+    "complaint_id": "ckb_breathlessness",
+    "complaint": "breathlessness",
+    "category": "CARDIO_RESPIRATORY",
+    "protocol": "DYSPNEA_ACUTE_ASSESSMENT",
+    "synonyms": [
+      "shortness of breath", "dyspnea", "difficulty breathing", "asthma attack", "choking",
+      "શ્વાસ ચડવો", "શ્વાસ લેવામાં તકલીફ", "દમ ઘૂંટાવો", "હાંફ ચડવી",
+      "सांस फूलना", "सांस लेने में दिक्कत", "दम घुटना", "हांफना", "सांस की तकलीफ"
+    ],
+    "assessment_dimensions": [
+      "onset", "duration", "severity", "exertion_vs_rest", "orthopnea_lying_flat", "wheezing", "chest_pain", "swollen_feet"
+    ],
+    "completion_criteria": ["onset", "severity", "exertion_vs_rest", "chest_pain"],
+    "questions": [
+      {
+        "dimension": "onset",
+        "priority": 10,
+        "question": {
+          "en-IN": "Did this breathlessness develop suddenly within minutes, or has it built up over days or weeks?",
+          "hi-IN": "क्या सांस फूलने की समस्या कुछ ही मिनटों में अचानक शुरू हुई, या दिनों या हफ्तों से धीरे-धीरे बढ़ रही है?",
+          "gu-IN": "શું શ્વાસ ચડવાની તકલીફ થોડી મિનિટોમાં અચાનક શરૂ થઈ, કે દિવસો-અઠવાડિયાથી ધીમે-ધીમે વધતી હતી?"
+        },
+        "quick_chips": {
+          "en-IN": ["Sudden acute onset within minutes", "Developed today", "Ongoing for several days", "Gradual over weeks/months"],
+          "hi-IN": ["कुछ ही मिनटों में अचानक", "आज से शुरू हुई", "कुछ दिनों से लगातार", "हफ्तों से धीरे-धीरे"],
+          "gu-IN": ["થોડી મિનિટોમાં અચાનક", "આજથી શરૂ થઈ", "થોડા દિવસથી ચાલે છે", "અઠવાડિયાઓથી ધીમે ધીમે"]
+        }
+      },
+      {
+        "dimension": "severity",
+        "priority": 10,
+        "question": {
+          "en-IN": "Can you speak a full sentence comfortably without gasping for breath, or do you have to pause for air after every few words?",
+          "hi-IN": "क्या आप बिना सांस फूले पूरा वाक्य आसानी से बोल पा रहे हैं, या हर दो-तीन शब्दों के बाद सांस लेने के लिए रुकना पड़ता है?",
+          "gu-IN": "શું તમે શ્વાસ ચડ્યા વગર આખું વાક્ય સરળતાથી બોલી શકો છો, કે દર બે-ત્રણ શબ્દો પછી શ્વાસ લેવા થોભવું પડે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Can speak full sentences", "Must pause every few words", "Unable to speak due to gasping"],
+          "hi-IN": ["आसानी से बोल पा रहे हैं", "हर 2-3 शब्द पर रुकना पड़ता है", "सांस के कारण बोला नहीं जा रहा"],
+          "gu-IN": ["સરળતાથી બોલી શકું છું", "દર બે-ત્રણ શબ્દે થોભવું પડે છે", "શ્વાસને કારણે બોલાતું નથી"]
+        }
+      },
+      {
+        "dimension": "orthopnea_lying_flat",
+        "priority": 9,
+        "question": {
+          "en-IN": "Does your breathlessness become severe when lying flat on your back, forcing you to prop up on multiple pillows to sleep?",
+          "hi-IN": "क्या सीधा लेटने पर सांस ज्यादा फूलती है, जिससे सोने के लिए कई तकियों का सहारा लेना पड़ता है?",
+          "gu-IN": "શું ચત્તા સૂતી વખતે શ્વાસ વધુ ચડે છે, જેથી ઊંઘવા માટે માથા નીચે વધુ ઓશીકાં રાખવા પડે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Severe when lying flat (needs pillows)", "Wake up gasping at midnight", "No difference lying down"],
+          "hi-IN": ["सीधा लेटने पर ज्यादा सांस फूलती है", "रात को अचानक सांस फूलने से नींद खुलती है", "लेटने से कोई फर्क नहीं"],
+          "gu-IN": ["ચત્તા સૂવાથી શ્વાસ વધુ ચડે છે", "રાત્રે અચાનક શ્વાસ ચડવાથી ઊંઘ ઊડી જાય છે", "સૂવાથી કોઈ ફેર નથી પડતો"]
+        }
+      },
+      {
+        "dimension": "chest_pain",
+        "priority": 9,
+        "question": {
+          "en-IN": "Do you also feel any chest tightness, chest pain, or noticeable swelling around both feet/ankles?",
+          "hi-IN": "क्या सीने में दर्द, जकड़न, या दोनों पैरों/टखनों में सूजन भी महसूस हो रही है?",
+          "gu-IN": "શું છાતીમાં દુખાવો, જકડન કે બંને પગના ઘૂંટી પાસે સોજો પણ છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Chest pain & tightness present", "Both ankles/feet swollen", "Neither chest pain nor swelling"],
+          "hi-IN": ["सीने में दर्द और जकड़न है", "दोनों पैरों/टखनों में सूजन", "न सीने में दर्द, न सूजन"],
+          "gu-IN": ["છાતીમાં દુખાવો અને જકડન છે", "બંને પગમાં સોજો છે", "દુખાવો કે સોજો નથી"]
+        }
+      }
+    ],
+    "red_flag_indicators": [
+      "inability to speak full words or gasping at rest",
+      "breathlessness accompanied by chest pain or left arm radiation",
+      "cyanosis (bluish tint on lips, tongue, or fingernails)",
+      "audible stridor (harsh high-pitched sound on breathing in)",
+      "sudden unilateral chest pain with acute breathlessness (suspected pneumothorax or pulmonary embolism)"
+    ]
+  },
+  {
+    "complaint_id": "ckb_skin_rash",
+    "complaint": "skin rash",
+    "category": "DERMATOLOGY",
+    "protocol": "EXANTHEMA_URTICARIA_WORKUP",
+    "synonyms": [
+      "itching", "urticaria", "hives", "skin allergy", "dermatitis", "eczema",
+      "ચામડી પર ચકામા", "ખંજવાળ", "ચામડીનો રોગ", "લાલ દાણા", "શીળસ",
+      "त्वचा पर दाने", "खुजली", "चकत्ते", "पित्ती उछलना", "त्वचा की एलर्जी"
+    ],
+    "assessment_dimensions": [
+      "onset", "location", "duration", "itching_severity", "blisters_peeling", "mucous_membrane_involvement", "recent_medications", "fever"
+    ],
+    "completion_criteria": ["location", "duration", "itching_severity", "blisters_peeling"],
+    "questions": [
+      {
+        "dimension": "location",
+        "priority": 10,
+        "question": {
+          "en-IN": "Where on your body is the rash located, and is it spreading rapidly?",
+          "hi-IN": "शरीर के किस हिस्से पर दाने या चकत्ते हैं, और क्या यह तेजी से फैल रहे हैं?",
+          "gu-IN": "શરીરના કયા ભાગ પર ચકામા કે દાણા થયા છે, અને શું તે ઝડપથી ફેલાય છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["All over body", "Face & neck", "Hands & arms", "Localized patch on legs"],
+          "hi-IN": ["पूरे शरीर पर", "चेहरे और गर्दन पर", "हाथों पर", "केवल पैरों पर"],
+          "gu-IN": ["આખા શરીર પર", "ચહેરા અને ગળા પર", "હાથ પર", "ફક્ત પગ પર"]
+        }
+      },
+      {
+        "dimension": "itching_severity",
+        "priority": 9,
+        "question": {
+          "en-IN": "How severe is the itching? Does it burn or cause swelling of lips, eyelids, or throat?",
+          "hi-IN": "खुजली कितनी तेज है? क्या जलन हो रही है या होंठ, पलकों या गले में सूजन आ रही है?",
+          "gu-IN": "ખંજવાળ કેટલી તીવ્ર છે? શું બળતરા થાય છે કે હોઠ, પોપચાં કે ગળામાં સોજો આવે છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Severe intense itching (hives)", "Swelling of lips / face (angioedema)", "Mild dry itch", "No itching, only red patches"],
+          "hi-IN": ["काफी तेज खुजली (पित्ती)", "होंठ और चेहरे पर सूजन", "हल्की सूखी खुजली", "खुजली नहीं, सिर्फ लाल चकत्ते"],
+          "gu-IN": ["ખૂબ તીવ્ર ખંજવાળ (શીળસ)", "હોઠ અને ચહેરા પર સોજો", "હળવી ખંજવાળ", "ખંજવાળ નથી, ફક્ત લાલ ચકામા"]
+        }
+      },
+      {
+        "dimension": "blisters_peeling",
+        "priority": 8,
+        "question": {
+          "en-IN": "Are there fluid-filled blisters, skin peeling like a burn, or sores inside your mouth, lips, or eyes?",
+          "hi-IN": "क्या पानी भरे छाले हैं, जली हुई त्वचा की तरह चमड़ी उतर रही है, या मुंह, होंठ या आंखों के अंदर छाले हैं?",
+          "gu-IN": "શું પાણી ભરેલા ફોલ્લા છે, ચામડી બળી ગઈ હોય તેમ છોલાઈ રહી છે, કે મોં, હોઠ કે આંખોની અંદર ચાંદા પડ્યા છે?"
+        },
+        "quick_chips": {
+          "en-IN": ["Fluid-filled blisters present", "Skin peeling / painful", "Sores in mouth or eyes", "No blisters or peeling"],
+          "hi-IN": ["पानी भरे छाले हैं", "चमड़ी उतर रही है", "मुंह या आंखों में छाले", "कोई छाले या चमड़ी उतरना नहीं"],
+          "gu-IN": ["પાણી ભરેલા ફોલ્લા છે", "ચામડી છોલાઈ રહી છે", "મોં કે આંખમાં ચાંદા છે", "ના, ફોલ્લા કે ચાંદા નથી"]
+        }
+      }
+    ],
+    "red_flag_indicators": [
+      "rapidly spreading rash with swelling of lips, tongue, or difficulty swallowing/breathing (anaphylaxis)",
+      "skin peeling, detachment, or extensive bullae with mouth ulcers (suspected Stevens-Johnson Syndrome / TEN)",
+      "purpuric non-blanching dark purple rash with high fever (suspected meningococcemia)",
+      "widespread painful blistering with systemic illness"
     ]
   }
 ]
