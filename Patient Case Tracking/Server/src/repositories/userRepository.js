@@ -34,7 +34,7 @@ export class UserRepository {
     return User.findByIdAndUpdate(
       id,
       { role: newRole },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
   }
 
@@ -42,8 +42,12 @@ export class UserRepository {
     return User.findByIdAndUpdate(
       id,
       { is_active: isActive },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
+  }
+
+  async findDoctors(filter = {}) {
+    return User.find({ role: 'DOCTOR', ...filter });
   }
 }
 

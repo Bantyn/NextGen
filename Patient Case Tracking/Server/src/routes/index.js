@@ -11,6 +11,8 @@ import documentRoutes from './documentRoutes.js';
 import intakeRoutes from './intakeRoutes.js';
 import assistantRoutes from './assistantRoutes.js';
 import whatsappRoutes from './whatsappRoutes.js';
+import clinicalCaseRoutes from './clinicalCaseRoutes.js';
+import adminRoutes from './adminRoutes.js';
 
 const router = express.Router();
 
@@ -27,5 +29,8 @@ router.use('/documents', documentRoutes);
 router.use('/intake', intakeRoutes);
 router.use('/assistant', assistantRoutes);
 router.use('/whatsapp', whatsappRoutes);
+router.use('/clinical-cases', clinicalCaseRoutes);
+router.use('/doctors/emergency-cases', clinicalCaseRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

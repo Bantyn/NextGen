@@ -3,6 +3,7 @@ import {
   handleAuthCheck,
   handleGetAuthorizedRecords,
   handleTriageAlert,
+  handleSendRegistrationSuccess,
 } from '../controllers/whatsappController.js';
 
 const router = express.Router();
@@ -15,5 +16,8 @@ router.post('/authorized-records', handleGetAuthorizedRecords);
 
 // 3. Emergency & red-flag triage alert logging
 router.post('/triage-alert', handleTriageAlert);
+
+// 4. Patient registration & OPD check-in success notification with token & status url
+router.post('/send-registration-success', handleSendRegistrationSuccess);
 
 export default router;

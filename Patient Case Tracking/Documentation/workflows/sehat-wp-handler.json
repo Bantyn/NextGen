@@ -398,7 +398,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://openwa-g0m6.onrender.com/api/sessions/{{ $json.sessionId }}/messages/send-text",
+        "url": "=https://openwa-g0m6.onrender.com/api/sessions/207513ad-f6c6-4a87-b1c3-269b993de448/messages/send-text",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBearerAuth",
         "sendHeaders": true,

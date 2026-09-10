@@ -715,4 +715,413 @@ All responses conform to the enterprise JSON envelope contract:
 }
 ```
 
+---
+
+### `POST /api/v1/whatsapp/send-registration-success`
+
+- **Description**: Dispatch registration and live OPD check-in details (Token Number, Assigned OPD Room, Check-in Time, Wait Duration, and Live Status Link `http://localhost:5173/patient/success`) to the patient's WhatsApp number using OpenWA Gateway credentials.
+- **Access Control**: Public / Kiosk / Backend Service
+- **Headers**:
+  - `Content-Type`: `application/json`
+
+#### Request Parameters / Body:
+```json
+{
+  "phone": "9876543210",
+  "patient_id": "PAT-AD16808B",
+  "first_name": "Ramesh",
+  "last_name": "Patel",
+  "token_number": "TK-142",
+  "session_id": "SES-3DB65058",
+  "opd_mode": "AYUSH",
+  "abha_id": "91-4432-8812-9901",
+  "language": "gu-IN"
+}
+```
+
+#### Success Response (200 OK):
+```json
+{
+  "success": true,
+  "message": "WhatsApp registration notification processed",
+  "data": {
+    "sent": true,
+    "chatId": "919876543210@c.us",
+    "token": "TK-142",
+    "patient_id": "PAT-AD16808B",
+    "successUrl": "http://localhost:5173/patient/success",
+    "openwaResponse": {
+      "id": "true_919876543210@c.us_3EB0...",
+      "status": "PENDING_OR_SENT"
+    }
+  }
+}
+```
+
+#### Fallback / Gateway Sleeping Response (200 OK):
+```json
+{
+  "success": true,
+  "message": "WhatsApp registration notification processed",
+  "data": {
+    "sent": false,
+    "chatId": "919876543210@c.us",
+    "token": "TK-142",
+    "messageText": "🏥 *મેડીકિયોસ્ક - OPD રજીસ્ટ્રેશન સફળ!*...",
+    "notice": "OpenWA gateway is sleeping or unreachable, details preserved."
+  }
+}
+```
+
+---
+
+## 14. 🚨 Red Flag Case Routing & Doctor Handoff System
+
+Backend-controlled emergency triage routing system that evaluates genuine clinical red flags, performs multi-tier doctor specialty matching, broadcasts data-minimized alerts, and protects against simultaneous claim race conditions via atomic database operations.
+
+### `POST /api/v1/clinical-cases/trigger-red-flag`
+- **Description**: Trigger or escalate a red-flag emergency case. Performs clinical specialty matching and broadcasts alert preview to eligible on-duty physicians.
+- **Access Control**: Authenticated (`DOCTOR`, `STAFF`, `ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+  - `Content-Type`: `application/json`
+
+#### Request Body:
+```json
+{
+  "session_id": "SES-3DB65058",
+  "patient_id": "PAT-AD16808B",
+  "category": "CARDIOVASCULAR_EMERGENCY",
+  "reason": "Severe crushing chest pain radiating to left arm with breathlessness",
+  "symptoms": ["Chest Pain", "Left Arm Radiation", "Dyspnea"],
+  "clinical_state": {
+    "chief_complaint": "Acute Chest Pain",
+    "severity": "CRITICAL",
+    "duration": "45 mins"
+  }
+}
+```
+
+#### Success Response (`201 Created`):
+```json
+{
+  "success": true,
+  "message": "Red flag emergency case created & broadcasted successfully",
+  "data": {
+    "case_id": "RFC-889FA102",
+    "is_existing": false,
+    "tier": "TIER_1_SPECIALISTS",
+    "notified_count": 3,
+    "case": {
+      "case_id": "RFC-889FA102",
+      "priority": "EMERGENCY",
+      "status": "BROADCASTING",
+      "specialties": ["Cardiology", "Emergency Medicine"]
+    }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/clinical-cases/emergency` (Alias: `GET /api/v1/doctors/emergency-cases`)
+- **Description**: Retrieve active emergency broadcast alerts (data-minimized previews) and assigned cases for the calling physician.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Active emergency cases retrieved",
+  "data": {
+    "active_alerts": [
+      {
+        "notification_id": "NOTIF-41A8820B",
+        "case_id": "RFC-889FA102",
+        "doctor_id": "DOC-CARD-01",
+        "priority": "EMERGENCY",
+        "status": "ACTIVE",
+        "preview_data": {
+          "chief_complaint": "Acute Chest Pain",
+          "symptoms": ["Chest Pain", "Dyspnea"],
+          "triage_reason": "Severe crushing chest pain radiating to left arm with breathlessness",
+          "risk_level": "RED_FLAG"
+        },
+        "notified_at": "2026-09-10T21:00:00.000Z"
+      }
+    ],
+    "assigned_cases": []
+  }
+}
+```
+
+---
+
+### `POST /api/v1/clinical-cases/:caseId/accept`
+- **Description**: Atomically claim an emergency case. Uses MongoDB atomic `findOneAndUpdate` with condition `{ assigned_doctor_id: null }` to guarantee single-doctor assignment. Automatically withdraws active alerts for all other physicians.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Emergency case assigned successfully.",
+  "data": {
+    "status": "CASE_ASSIGNED",
+    "case": {
+      "case_id": "RFC-889FA102",
+      "status": "ASSIGNED",
+      "assigned_doctor_id": "DOC-CARD-01",
+      "claimed_at": "2026-09-10T21:01:05.120Z"
+    }
+  }
+}
+```
+
+#### Race Condition Error Response (`409 Conflict`):
+```json
+{
+  "success": false,
+  "status": "CASE_ALREADY_ASSIGNED",
+  "message": "This emergency case has already been claimed and handled by another physician.",
+  "case_id": "RFC-889FA102"
+}
+```
+
+---
+
+### `POST /api/v1/clinical-cases/:caseId/decline`
+- **Description**: Physician declines an emergency broadcast notification.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+#### Request Body:
+```json
+{
+  "reason": "Physician currently occupied in critical procedure"
+}
+```
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Emergency case alert declined",
+  "data": {
+    "success": true
+  }
+}
+```
+
+---
+
+### `GET /api/v1/clinical-cases/:caseId`
+- **Description**: Authorized clinical snapshot for assigned physician. Enforces strict privacy gating: returns `403 Forbidden` if caller is not the assigned physician or an authorized supervisor.
+- **Access Control**: Authenticated (`Assigned DOCTOR`, `ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Authorized clinical case snapshot retrieved",
+  "data": {
+    "case": {
+      "case_id": "RFC-889FA102",
+      "priority": "EMERGENCY",
+      "risk_level": "RED_FLAG",
+      "status": "ASSIGNED",
+      "assigned_doctor_id": "DOC-CARD-01",
+      "claimed_at": "2026-09-10T21:01:05.120Z"
+    },
+    "patient": {
+      "patient_id": "PAT-AD16808B",
+      "name": "Ramesh Patel",
+      "gender": "MALE",
+      "phone": "9876543210"
+    },
+    "current_health_status": {
+      "chief_complaint": "Acute Chest Pain",
+      "symptoms": ["Chest Pain", "Dyspnea"],
+      "severity": "CRITICAL",
+      "duration": "45 mins"
+    },
+    "medical_history": {
+      "conditions": ["Type 2 Diabetes Mellitus"],
+      "allergies": ["Penicillin"],
+      "medications": ["Metformin 500mg"],
+      "previous_records": []
+    },
+    "documents": [],
+    "clinical_summary": {
+      "chief_complaint": "Acute Chest Pain",
+      "red_flags": ["CARDIOVASCULAR_EMERGENCY"],
+      "key_findings": ["Risk level: RED_FLAG", "Priority: EMERGENCY"]
+    },
+    "audit_trail": []
+  }
+}
+```
+
+#### Unauthorized Access Error (`403 Forbidden`):
+```json
+{
+  "success": false,
+  "message": "Forbidden: You are not authorized to access this patient record. Only the assigned physician or clinical supervisor may view full context.",
+  "error": {
+    "code": "FORBIDDEN_CASE_ACCESS"
+  }
+}
+```
+
+---
+
+### `POST /api/v1/clinical-cases/:caseId/transfer`
+- **Description**: Transfer case from currently assigned physician to another specialist.
+- **Access Control**: Authenticated (`Assigned DOCTOR`, `ADMIN`)
+
+#### Request Body:
+```json
+{
+  "to_doctor_id": "DOC-CARD-02",
+  "reason": "Patient requires immediate cath lab interventional cardiology"
+}
+```
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Emergency case transferred successfully",
+  "data": {
+    "success": true
+  }
+}
+```
+
+---
+
+### `POST /api/v1/clinical-cases/:caseId/resolve`
+- **Description**: Conclude emergency consultation and record clinical disposition.
+- **Access Control**: Authenticated (`Assigned DOCTOR`, `ADMIN`)
+
+#### Request Body:
+```json
+{
+  "notes": "Patient stabilized and admitted to Coronary Care Unit (CCU)",
+  "disposition": "ADMITTED_CCU"
+}
+```
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Emergency case marked as resolved",
+  "data": {
+    "success": true
+  }
+}
+```
+
+---
+
+## 15. 🛡️ Administration & System Operations APIs
+
+Central administrative control layer for hospital operations, live queue management, doctor availability overrides, local medicine database curation, openFDA live search/import, AI knowledge management, audit logs, and live diagnostics.
+
+### `GET /api/v1/admin/dashboard/kpis`
+- **Description**: Aggregate live operational KPIs from across the system (Total Patients, Today's Registrations, Active Sessions, Emergency Red Flags, Pending Reviews, Doctors Available, Documents Processed, and recent activity).
+- **Access Control**: Authenticated (`ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+#### Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "message": "Dashboard operational KPIs retrieved successfully",
+  "data": {
+    "kpis": {
+      "total_patients": 42,
+      "today_patients": 8,
+      "active_clinical_sessions": 12,
+      "waiting_patients": 4,
+      "emergency_cases": 1,
+      "pending_doctor_reviews": 3,
+      "completed_today": 18,
+      "documents_processed": 14,
+      "doctors_available": 12,
+      "doctors_on_duty": 8,
+      "ai_conversations_today": 36
+    },
+    "recent_activity": []
+  }
+}
+```
+
+---
+
+### `GET /api/v1/admin/operations/live`
+- **Description**: Real-time snapshot of the active OPD queue, doctor duty roster with queue length and wait times, and broadcasting emergency alerts.
+- **Access Control**: Authenticated (`ADMIN`)
+- **Headers**:
+  - `Authorization`: `Bearer <token>`
+
+---
+
+### `PATCH /api/v1/admin/queue/:sessionId/priority`
+- **Description**: Human supervisor priority override on live clinical queue with mandatory audit trail.
+- **Access Control**: Authenticated (`ADMIN`)
+- **Request Body**:
+```json
+{
+  "new_priority": "EMERGENCY",
+  "reason": "Visible patient acute distress observed in waiting lounge"
+}
+```
+
+---
+
+### `GET /api/v1/admin/medicines`
+- **Description**: Paginated search and filtering of local verified medicine catalog.
+- **Access Control**: Authenticated (`ADMIN`)
+- **Query Params**: `search`, `page`, `limit`
+
+---
+
+### `GET /api/v1/admin/medicines/openfda/search?drug=Metformin`
+- **Description**: Live query to official FDA Drug Labeling API endpoints with normalized indications, warnings, and dosage forms.
+- **Access Control**: Authenticated (`ADMIN`)
+
+---
+
+### `POST /api/v1/admin/medicines/openfda/import`
+- **Description**: 1-Click approval and import of openFDA drug record into local MongoDB `assistantmedicines` collection.
+- **Access Control**: Authenticated (`ADMIN`)
+
+---
+
+### `GET /api/v1/admin/assistant/config` & `PUT /api/v1/admin/assistant/config`
+- **Description**: Runtime configuration of Smart AI Assistant (languages, enabled capabilities, emergency thresholds, greeting).
+- **Access Control**: Authenticated (`ADMIN`)
+
+---
+
+### `GET /api/v1/admin/system/health`
+- **Description**: Real-time connectivity diagnostics for MongoDB Atlas, Node.js process memory/uptime, openFDA API latency, and AI orchestration engines.
+- **Access Control**: Authenticated (`ADMIN`)
+
+---
+
+### `GET /api/v1/admin/audit-logs`
+- **Description**: Paginated stream of security and administrative audit logs with filter by action, resource, or actor.
+- **Access Control**: Authenticated (`ADMIN`)
+
 

@@ -75,8 +75,45 @@ export async function handleTriageAlert(req, res, next) {
   }
 }
 
+/**
+ * POST /api/v1/whatsapp/send-registration-success
+ * Send registration & OPD check-in success details (Token, Room, Status, Link) via OpenWA Gateway
+ */
+export async function handleSendRegistrationSuccess(req, res, next) {
+  try {
+    const {
+      phone,
+      patient_id,
+      first_name,
+      last_name,
+      token_number,
+      session_id,
+      opd_mode,
+      abha_id,
+      language,
+    } = req.body;
+
+    const result = await whatsappService.sendPatientRegistrationSuccess({
+      phone,
+      patient_id,
+      first_name,
+      last_name,
+      token_number,
+      session_id,
+      opd_mode,
+      abha_id,
+      language,
+    });
+
+    return sendSuccess(res, 200, 'WhatsApp registration notification processed', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export default {
   handleAuthCheck,
   handleGetAuthorizedRecords,
   handleTriageAlert,
+  handleSendRegistrationSuccess,
 };
