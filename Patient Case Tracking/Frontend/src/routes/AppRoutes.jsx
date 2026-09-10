@@ -21,6 +21,8 @@ import {
   ForgotPasswordView,
   UnauthorizedView,
 } from '../modules/auth';
+import { AdminMainView } from '../modules/admin';
+
 
 /**
  * AppRoutes Component
@@ -141,8 +143,19 @@ export const AppRoutes = () => {
             }
           />
 
+          {/* Admin Control Center (Guarded strictly by ProtectedRoute with ADMIN role) */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminMainView />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
+
         </Routes>
 
         {/* Global Site-Wide Smart AI Assistant */}

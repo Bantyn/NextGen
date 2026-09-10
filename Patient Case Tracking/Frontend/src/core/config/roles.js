@@ -35,7 +35,7 @@ export const ROLE_CONFIGS = {
     shortLabel: 'Admin',
     badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
     description: 'Staff Management, System Logs & Facility Analytics',
-    defaultRoute: '/doctor',
+    defaultRoute: '/admin',
     iconName: 'ShieldCheck',
     permissions: ['ALL_PERMISSIONS', 'MANAGE_STAFF', 'SYSTEM_AUDIT'],
   },

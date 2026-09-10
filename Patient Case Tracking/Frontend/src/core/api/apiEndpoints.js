@@ -49,6 +49,25 @@ export const API_ENDPOINTS = {
   RECORD_BY_ID: (id) => `/records/${id}`,
   RECORD_REVIEW: (id) => `/records/${id}/review`,
   RECORDS_BY_PATIENT: (patientId) => `/records/patient/${patientId}`,
+
+  // Admin Operational & Configuration Endpoints
+  ADMIN_DASHBOARD_KPIS: '/admin/dashboard/kpis',
+  ADMIN_OPERATIONS_LIVE: '/admin/operations/live',
+  ADMIN_PATIENTS: '/admin/patients',
+  ADMIN_TRIAGE_REDFLAGS: '/admin/triage/redflags',
+  ADMIN_TRIAGE_RESOLVE: (id) => `/admin/triage/redflags/${id}/resolve`,
+  ADMIN_DOCTORS: '/admin/doctors',
+  ADMIN_DOCTOR_STATUS: (id) => `/admin/doctors/${id}`,
+  ADMIN_QUEUE_PRIORITY: (sessionId) => `/admin/queue/${sessionId}/priority`,
+  ADMIN_MEDICINES: '/admin/medicines',
+  ADMIN_MEDICINE_BY_ID: (id) => `/admin/medicines/${id}`,
+  ADMIN_OPENFDA_SEARCH: '/admin/medicines/openfda/search',
+  ADMIN_OPENFDA_IMPORT: '/admin/medicines/openfda/import',
+  ADMIN_KNOWLEDGE: (category) => `/admin/knowledge/${category}`,
+  ADMIN_ASSISTANT_CONFIG: '/admin/assistant/config',
+  ADMIN_SYSTEM_HEALTH: '/admin/system/health',
+  ADMIN_AUDIT_LOGS: '/admin/audit-logs',
 };
 
 export default API_ENDPOINTS;
+

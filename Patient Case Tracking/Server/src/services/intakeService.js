@@ -6,6 +6,7 @@ import { infermedicaService } from './infermedicaService.js';
 import { caseMessageRepository } from '../repositories/caseMessageRepository.js';
 import { observationRepository } from '../repositories/observationRepository.js';
 import { sessionRepository } from '../repositories/sessionRepository.js';
+import { redFlagCaseService } from './redFlagCaseService.js';
 
 dotenv.config();
 
@@ -1721,6 +1722,17 @@ Extract clinical entities in JSON:
           logger.warn(`[Intake DB Persistence Notice]: ${dbErr.message}`);
         }
       }
+
+      // Automatically trigger red-flag routing & doctor broadcast
+      redFlagCaseService
+        .triggerRedFlagCase({
+          sessionId: session_id,
+          patientId: patient_id,
+          triageResult,
+          state,
+          actorId: 'CLINICAL_INTAKE_ENGINE',
+        })
+        .catch((err) => logger.warn(`[RedFlag Case Broadcast Notice]: ${err.message}`));
 
       const emergencyResponse = {
         success: true,

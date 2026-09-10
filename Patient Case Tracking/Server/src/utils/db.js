@@ -1,5 +1,13 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { logger } from './logger.js';
+
+// Resolve DNS SRV lookup issues on Windows / ISP DNS by setting reliable resolvers (Google & Cloudflare)
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (dnsErr) {
+  logger.warn('Failed to configure custom DNS servers for SRV resolution:', dnsErr);
+}
 
 /**
  * Initialize MongoDB connection pool with auto-reconnect and lifecycle event handlers

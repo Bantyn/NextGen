@@ -36,6 +36,35 @@ const UserSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    // Doctor profile & live availability fields
+    doctor_id: {
+      type: String,
+      default: null,
+      index: true,
+      trim: true,
+    },
+    specialty: {
+      type: String,
+      default: null,
+      index: true,
+      trim: true,
+    },
+    sub_specialty: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    on_duty: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    availability_status: {
+      type: String,
+      enum: ['AVAILABLE', 'IN_CONSULTATION', 'ON_BREAK', 'OFF_DUTY'],
+      default: 'AVAILABLE',
+      index: true,
+    },
   },
   { timestamps: true }
 );
