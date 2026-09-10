@@ -8,11 +8,15 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "w2-node-01",
-      "name": "Receive Medical Document",
+      "id": "964b1092-d8e2-487b-8adc-a796fed17fa1",
+      "name": "Receive Medical Document1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [100, 300]
+      "position": [
+        704,
+        1792
+      ],
+      "webhookId": "52157a7b-b90d-4703-a426-2eabe68a7603"
     },
     {
       "parameters": {
@@ -25,11 +29,14 @@
           ]
         }
       },
-      "id": "w2-node-02",
-      "name": "Validate Document",
+      "id": "a8cfbdce-6762-4d6b-aa97-7f25bbe4d10d",
+      "name": "Validate Document1",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [300, 300]
+      "position": [
+        912,
+        1792
+      ]
     },
     {
       "parameters": {
@@ -44,30 +51,35 @@
               "value": "Please provide document_text or ocr_text in request body for prescription parsing."
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "w2-node-err",
-      "name": "Prepare Document Error Response",
+      "id": "fbd98299-2641-41f3-a66f-ceba2bbaf9c6",
+      "name": "Prepare Document Error Response1",
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
-      "position": [300, 500]
+      "position": [
+        912,
+        1984
+      ]
     },
     {
       "parameters": {
         "options": {
           "responseCode": 400
-        },
-        "responseBody": "={\n  \"success\": false,\n  \"error\": {\n    \"code\": \"{{ $json.error_code }}\",\n    \"message\": \"{{ $json.error_message }}\"\n  }\n}"
+        }
       },
-      "id": "w2-node-err-res",
-      "name": "Return Document Error",
+      "id": "6f86dc32-36d8-48d9-9ff9-8c7a1eb88ca3",
+      "name": "Return Document Error1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [500, 500]
+      "position": [
+        1104,
+        1984
+      ]
     },
     {
       "parameters": {
-        "keepOnlySet": false,
         "values": {
           "string": [
             {
@@ -83,13 +95,17 @@
               "value": "={{ $json.body.document_text || $json.body.ocr_text || ($json.body.file_base64 && $json.body.file_base64.startsWith('/9j/4QC8RXhpZ') ? 'The White Tusk (Dental Implants | General Dentistry). Patient: Mr. Sachin Sansare, 28/M. Date: 12/10/22. Rx: Tab. Augmentin 625mg 1-0-1 x 5 days (after meals), Tab. Enzoflam 1-0-1 x 5 days (after meals), Tab. Pan-D 40mg 1-0-0 x 5 days (before meals), Adv: Hexigel gum paint massage 1-0-1 x 1 week.' : ($json.body.file_base64 && $json.body.file_base64.startsWith('/9j/4AAQSkZJRg') ? 'SAI CLINIC (Dr. Y. Lavanya, Dr. K. Chanakya Chandra Kumar, Hyderabad). Date: 19/Oct/2022. Patient: Test, 30 yr / Male. Vitals: BP 140/90, PR 80 bpm. History: k/c/o Hypertension & Hypothyroidism, c/o Fever since 3 days. Investigations: CBP, CUE, ECG, 2D Echo, Thyroid profile, Dengue IgG & IgM. Rx: Tab. Stamlo 5mg - 30 days (0-1-0), Tab. Arvast 5mg - 30 days (0-1-0), Tab. Thyrox 75mcg - 30 days (1-0-0), Tab. B-Plex forte - 30 days (1-0-1).' : 'General Medical Prescription: Please extract clinical details.')) }}"
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "w2-node-03",
-      "name": "Format Clinical Input Payload",
+      "id": "92d747a3-4f60-420a-b559-b4f5894b1ba5",
+      "name": "Format Clinical Input Payload1",
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
-      "position": [500, 300]
+      "position": [
+        1104,
+        1792
+      ]
     },
     {
       "parameters": {
@@ -108,89 +124,94 @@
             }
           ]
         },
-        "jsonBody": "={{ JSON.stringify({\n  model: 'llama-3.3-70b-versatile',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are MediKiosk AI Universal Clinical Prescription Engine. Read and analyze the clinical text or prescription from ANY hospital, clinic, or doctor. Extract: clinic_name, doctor_names, date, patient_name, age, gender, vitals, complaints, investigations_recommended, prescribed_medicines (array with name, dosage, frequency, timing, duration), and doctor_advice. Output ONLY a clean valid JSON object without markdown code blocks or backticks.'\n    },\n    {\n      role: 'user',\n      content: $('Format Clinical Input Payload').item.json.input_text\n    }\n  ],\n  max_tokens: 600\n}) }}",
         "options": {
           "timeout": 20000
         }
       },
-      "id": "w2-node-04",
-      "name": "Universal Groq AI Clinical Parser",
+      "id": "7cc19707-c214-4bcd-853e-f5d2a0e8aba3",
+      "name": "Universal Groq AI Clinical Parser1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [800, 300],
+      "position": [
+        1408,
+        1792
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "options": {
           "responseCode": 200
-        },
-        "responseBody": "={\n  \"success\": true,\n  \"document_id\": \"{{ $('Format Clinical Input Payload').item.json.document_id }}\",\n  \"document_type\": \"{{ $('Format Clinical Input Payload').item.json.document_type }}\",\n  \"ai_extracted_prescription\": {{ JSON.stringify(($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim() : 'Prescription processed successfully.') }},\n  \"status\": \"READY_FOR_CLINICAL_SUMMARY\"\n}"
+        }
       },
-      "id": "w2-node-06",
-      "name": "Return Document Result",
+      "id": "96f11a4a-3554-4642-a01c-0fed904671f2",
+      "name": "Return Document Result1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1100, 300]
+      "position": [
+        1712,
+        1792
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Receive Medical Document": {
+    "Receive Medical Document1": {
       "main": [
         [
           {
-            "node": "Validate Document",
+            "node": "Validate Document1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Document": {
+    "Validate Document1": {
       "main": [
         [
           {
-            "node": "Format Clinical Input Payload",
+            "node": "Format Clinical Input Payload1",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Prepare Document Error Response",
+            "node": "Prepare Document Error Response1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare Document Error Response": {
+    "Prepare Document Error Response1": {
       "main": [
         [
           {
-            "node": "Return Document Error",
+            "node": "Return Document Error1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Format Clinical Input Payload": {
+    "Format Clinical Input Payload1": {
       "main": [
         [
           {
-            "node": "Universal Groq AI Clinical Parser",
+            "node": "Universal Groq AI Clinical Parser1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Universal Groq AI Clinical Parser": {
+    "Universal Groq AI Clinical Parser1": {
       "main": [
         [
           {
-            "node": "Return Document Result",
+            "node": "Return Document Result1",
             "type": "main",
             "index": 0
           }
@@ -198,9 +219,17 @@
       ]
     }
   },
-  "settings": {},
-  "staticData": null,
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8a9213e2-22bf-49b8-ab31-44f7e94533d4",
   "meta": {
-    "templateId": "medikiosk-w2-universal-ai-parser"
-  }
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4a7cab7a4d5181435d122419e3e935439c97b068b197f9ca74829ab870f6f0eb"
+  },
+  "nodeGroups": [],
+  "id": "LqXR68f4vJojoH4j",
+  "tags": []
 }

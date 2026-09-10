@@ -91,17 +91,23 @@ The assistant uses dedicated Mongoose models and controlled query helpers. **Raw
 | `assistant_website_help` | `AssistantWebsiteHelp` | Guided navigation routes for Module A, B, C, D, check-in, and OPD queue tracking. |
 | `assistant_contacts` | `AssistantContact` | Emergency lines (108 / 102), OPD Help Desk, Pharmacy, and Tech Support. |
 
+### 4.1 Multi-Tiered Medicine Knowledge Retrieval & Source Priority
+The assistant executes a deterministic, 3-tiered medicine resolution sequence:
+1. **Primary: Local Medicine Knowledge Base** (MongoDB `AssistantMedicine` + static seed) — fast, preferred (~5ms).
+2. **Secondary: Official openFDA Drug Labeling API** — queried automatically with in-memory caching (1-hr TTL) and normalization when a medicine is not found locally.
+3. **Tertiary: Safe "Information Unavailable" Response** — if neither source contains verified information, preventing hallucination.
+
 ---
 
 ## 5. Clinical Safety & Medical Boundaries
 
 ### 5.1 No-Hallucination Rule
-If a medicine or health query is not found in MongoDB:
-> *"I don't have verified information for that in the current knowledge base. Please consult a qualified doctor or pharmacist."*
+If a medicine is not found locally, the assistant falls back to openFDA. If neither source has verified data:
+> *"I couldn't retrieve verified medicine information for [Medicine Name] from our local database or official FDA drug labeling. Please consult a qualified doctor or pharmacist."*
 
 ### 5.2 Non-Prescriptive & Non-Diagnostic Rule
-- **No Prescribing**: The assistant never says *"Take 500mg three times daily"*. It only provides database usage notes and directs patients to a doctor/pharmacist.
-- **No Diagnosis**: It never says *"You have X disease"*; instead, it uses *"These symptoms can have several causes"*.
+- **No Prescribing**: The assistant never says *"Take 500mg three times daily"*. If official labeling dosage exists, it provides general labeling summaries and explicitly states that dosages must be confirmed by a doctor or pharmacist.
+- **No Diagnosis**: It never says *"You have X disease"*; instead, it provides educational indication data.
 
 ### 5.3 Contextual Red-Flag Escalation
 - A bare symptom mention (e.g. *"I have chest pain"*) prompts calm contextual questions.

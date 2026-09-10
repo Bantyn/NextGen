@@ -4,6 +4,10 @@
 !.env.example
 *.env
 
+# Local environment overrides
+*.local
+
+
 # Dependencies
 node_modules/
 */node_modules/
