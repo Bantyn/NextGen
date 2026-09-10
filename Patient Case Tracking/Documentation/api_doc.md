@@ -547,3 +547,172 @@ All responses conform to the enterprise JSON envelope contract:
 - `emergency concern`: Provides immediate clinical reassurance and risk triage.
 - `general help` / `repeat/rephrase` / `language change`: Responds naturally.
 
+---
+
+## 14. 📱 WhatsApp Bot & Clinical Access Integration (`/api/v1/whatsapp`)
+
+### `POST /api/v1/whatsapp/auth-check`
+
+- **Description**: Verify patient identity, retrieve active session, and validate DPDP Act 2023 consent state from an incoming WhatsApp message payload.
+- **Access Control**: Public / WhatsApp Webhook Gateway
+- **Headers**:
+  - `Content-Type`: `application/json`
+
+#### Request Parameters / Body:
+```json
+{
+  "phone": "9876543210",
+  "chatId": "919876543210@c.us",
+  "pushName": "Rajesh Patel"
+}
+```
+
+#### Success Response (200 OK):
+```json
+{
+  "success": true,
+  "message": "Patient authenticated with valid clinical consent.",
+  "data": {
+    "authenticated": true,
+    "patient": {
+      "patient_id": "PAT-AD16808B",
+      "first_name": "Rajesh",
+      "last_name": "Patel",
+      "phone": "+919876543210",
+      "gender": "MALE",
+      "date_of_birth": "1985-04-12T00:00:00.000Z"
+    },
+    "session": {
+      "session_id": "SES-3DB65058",
+      "status": "STARTED",
+      "language": "gu-IN",
+      "triage_level": "LOW"
+    },
+    "has_consent": true,
+    "consent_status": "GRANTED",
+    "message": "Patient authenticated with valid clinical consent."
+  }
+}
+```
+
+---
+
+### `POST /api/v1/whatsapp/authorized-records`
+
+- **Description**: Retrieve authorized, sanitized patient medical records (clinical diagnoses, doctor notes, physician prescriptions, observations) strictly gated behind DPDP Act 2023 patient consent.
+- **Access Control**: Authenticated Patient / WhatsApp Webhook Gateway
+- **Headers**:
+  - `Content-Type`: `application/json`
+
+#### Request Parameters / Body:
+```json
+{
+  "patient_id": "PAT-AD16808B",
+  "session_id": "SES-3DB65058",
+  "phone": "9876543210"
+}
+```
+
+#### Success Response (200 OK — Consent Granted):
+```json
+{
+  "success": true,
+  "message": "Authorized medical records retrieved successfully",
+  "data": {
+    "authorized": true,
+    "patient": {
+      "patient_id": "PAT-AD16808B",
+      "name": "Rajesh Patel",
+      "gender": "MALE"
+    },
+    "records": {
+      "latest_record": {
+        "record_id": "REC-948E3B33",
+        "chief_complaint": "Chest discomfort and high blood sugar",
+        "review_status": "APPROVED",
+        "reviewed_at": "2026-09-08T10:30:00.000Z",
+        "doctor_notes": "Advised regular morning walk and low glycemic diet.",
+        "prescriptions": [
+          {
+            "medicine_name": "Metformin",
+            "dosage": "500mg",
+            "frequency": "Once daily after dinner",
+            "duration": "30 days",
+            "instructions": "Take with water"
+          }
+        ],
+        "lab_investigations": [
+          {
+            "test_name": "HbA1c",
+            "observed_value": "7.2",
+            "reference_range": "< 5.7",
+            "unit": "%",
+            "flag": "HIGH"
+          }
+        ],
+        "triage": {
+          "level": "ROUTINE"
+        }
+      },
+      "observations": {
+        "symptoms": [{ "name": "Chest Discomfort", "value": "Mild", "unit": "2 Days" }],
+        "medications": [{ "name": "Metformin", "value": "500mg" }],
+        "allergies": ["Penicillin"],
+        "lab_results": [{ "test": "Fasting Blood Sugar", "value": "138", "unit": "mg/dL" }],
+        "conditions": ["Type 2 Diabetes Mellitus"]
+      },
+      "recent_documents": []
+    }
+  }
+}
+```
+
+#### Response (200 OK — Consent Missing or Revoked):
+```json
+{
+  "success": false,
+  "authorized": false,
+  "reason": "CONSENT_REQUIRED",
+  "message": "Hu tamaru medical record access kari shaktu nathi atyare, because proper verification/authorization required che.",
+  "records": null
+}
+```
+
+---
+
+### `POST /api/v1/whatsapp/triage-alert`
+
+- **Description**: Log emergency red-flag alert triggered during WhatsApp patient dialogue to escalate priority on hospital triage dashboard.
+- **Access Control**: Public / WhatsApp Webhook Gateway
+- **Headers**:
+  - `Content-Type`: `application/json`
+
+#### Request Parameters / Body:
+```json
+{
+  "patient_id": "PAT-AD16808B",
+  "session_id": "SES-3DB65058",
+  "reason": "Severe acute chest pain radiating to left arm and breathlessness",
+  "phone": "9876543210"
+}
+```
+
+#### Success Response (200 OK):
+```json
+{
+  "success": true,
+  "message": "Emergency triage alert logged",
+  "data": {
+    "alert_logged": true,
+    "timestamp": "2026-09-10T11:16:57.827Z",
+    "triage_level": "EMERGENCY",
+    "helplines": {
+      "ambulance": "108",
+      "emergency": "102",
+      "hospital_desk": "079-26578900"
+    }
+  }
+}
+```
+
+

@@ -18,6 +18,16 @@ export class PatientRepository {
     return Patient.findOne({ patient_id: patientId.toUpperCase() });
   }
 
+  async findByPhone(phone) {
+    if (!phone) return null;
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.slice(-10);
+    if (!last10) return null;
+    return Patient.findOne({
+      phone: { $regex: `${last10}$`, $options: 'i' },
+    });
+  }
+
   async search({ search, skip = 0, limit = 20 } = {}) {
     const filter = {};
     if (search && search.trim()) {
