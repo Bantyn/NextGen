@@ -169,11 +169,18 @@ export const PatientSuccessView = () => {
       {/* Action Buttons */}
       <div className="flex items-center justify-center gap-4 flex-wrap">
         <button
-          onClick={() => navigate(`/doctor/cases/${summary.sessionId}`)}
-          className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-sm"
+          onClick={() => navigate('/patient/dashboard')}
+          className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-medium text-white bg-sky-600 hover:bg-sky-500 active:scale-95 transition cursor-pointer shadow-sm"
         >
-          <span>Open Physician Consultation EMR Screen</span>
+          <span>View Patient Dashboard & Reports</span>
           <ArrowRight className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => navigate(`/doctor/cases/${summary.sessionId}`)}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-sm"
+        >
+          <span>Open Physician Consultation EMR</span>
         </button>
 
         <button

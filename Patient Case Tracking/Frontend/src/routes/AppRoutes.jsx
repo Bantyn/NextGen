@@ -8,6 +8,8 @@ import {
   PatientCheckinView,
   PatientIntakeView,
   PatientSuccessView,
+  PatientDashboardView,
+  PatientLoginView,
 } from '../modules/patient';
 import {
   DoctorDashboardView,
@@ -40,7 +42,23 @@ export const AppRoutes = () => {
           />
           <Route
             path="/patient"
-            element={<Navigate to="/patient/register" replace />}
+            element={<Navigate to="/patient/login" replace />}
+          />
+          <Route
+            path="/patient/login"
+            element={
+              <PageLayout>
+                <PatientLoginView />
+              </PageLayout>
+            }
+          />
+          <Route
+            path="/patient/dashboard"
+            element={
+              <PageLayout>
+                <PatientDashboardView />
+              </PageLayout>
+            }
           />
           <Route
             path="/patient/register"

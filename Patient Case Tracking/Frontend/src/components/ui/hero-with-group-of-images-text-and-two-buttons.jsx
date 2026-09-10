@@ -8,6 +8,7 @@ import {
   Sparkles,
   QrCode,
   CheckCircle2,
+  HeartPulse,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -69,7 +70,7 @@ function Hero({ onStartCheckIn, onDoctorPortal }) {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto pt-2">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-3.5 w-full sm:w-auto pt-2 flex-wrap">
               <Button
                 size="lg"
                 onClick={handleStartCheckIn}
@@ -82,11 +83,21 @@ function Hero({ onStartCheckIn, onDoctorPortal }) {
               <Button
                 size="lg"
                 variant="outline"
+                onClick={() => navigate("/patient/dashboard")}
+                className="gap-2.5 rounded-full border-sky-200 bg-sky-50/80 hover:bg-sky-100 text-sky-800 cursor-pointer shadow-2xs active:scale-95 transition"
+              >
+                <HeartPulse className="w-4 h-4 text-sky-600" />
+                <span>Patient Dashboard</span>
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
                 onClick={handleDoctorPortal}
-                className="gap-3 rounded-full border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs active:scale-95 transition"
+                className="gap-2.5 rounded-full border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs active:scale-95 transition"
               >
                 <Stethoscope className="w-4 h-4 text-slate-600" />
-                <span>Doctor OPD Portal</span>
+                <span>Doctor OPD</span>
               </Button>
             </div>
 

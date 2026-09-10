@@ -3,11 +3,22 @@
  */
 
 export const ROLES = {
+  PATIENT: 'PATIENT',
   DOCTOR: 'DOCTOR',
   ADMIN: 'ADMIN',
 };
 
 export const ROLE_CONFIGS = {
+  [ROLES.PATIENT]: {
+    id: ROLES.PATIENT,
+    label: 'Patient (ABHA Verified)',
+    shortLabel: 'Patient',
+    badgeClass: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
+    description: 'Personal Health Records, Lab Reports & OPD Queue',
+    defaultRoute: '/patient/dashboard',
+    iconName: 'User',
+    permissions: ['VIEW_OWN_RECORDS', 'DOWNLOAD_REPORTS', 'TRACK_TOKEN'],
+  },
   [ROLES.DOCTOR]: {
     id: ROLES.DOCTOR,
     label: 'Physician / Doctor',
@@ -35,6 +46,16 @@ export const ROLE_CONFIGS = {
  */
 export const DEMO_USERS = [
   {
+    role: ROLES.PATIENT,
+    name: 'Ramesh Patel',
+    email: 'ramesh.patel@gmail.com',
+    phone: '+91 98765 43210',
+    abhaId: '91-4432-8812-9901',
+    password: 'Password123!',
+    department: 'Patient Portal',
+    license: 'ABHA-PAT-9011',
+  },
+  {
     role: ROLES.DOCTOR,
     name: 'Dr. Aarav Sharma',
     email: 'doctor@sehat.org',
@@ -51,3 +72,4 @@ export const DEMO_USERS = [
     license: 'AIIA-ADM-0001',
   },
 ];
+
