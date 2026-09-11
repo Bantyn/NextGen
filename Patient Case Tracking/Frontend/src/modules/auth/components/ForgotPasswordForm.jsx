@@ -81,9 +81,9 @@ export const ForgotPasswordForm = () => {
       )}
 
       {/* Step Indicator */}
-      <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-100 text-xs text-slate-400">
         <span>Step {step} of 3</span>
-        <span className="font-medium text-[var(--text-secondary)]">
+        <span className="font-medium text-slate-700">
           {step === 1 && 'Identify Staff Account'}
           {step === 2 && 'Verify Code & New Password'}
           {step === 3 && 'Password Updated'}
@@ -93,7 +93,7 @@ export const ForgotPasswordForm = () => {
       {/* Step 1: Request OTP */}
       {step === 1 && (
         <form onSubmit={handleRequestReset} className="space-y-4">
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+          <p className="text-xs text-slate-500 leading-relaxed">
             Enter the registered email associated with your hospital profile. We will dispatch a 6-digit security verification code to recover your account.
           </p>
 
@@ -102,7 +102,7 @@ export const ForgotPasswordForm = () => {
             type="email"
             required
             autoComplete="email"
-            placeholder="e.g. doctor@medikiosk.ai"
+            placeholder="e.g. doctor@sehat.org"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -112,17 +112,20 @@ export const ForgotPasswordForm = () => {
           />
 
           <div className="pt-2">
-            <Button
+            <button
               type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              isLoading={isLoading}
-              icon={ArrowRight}
-              iconPosition="right"
+              disabled={isLoading}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-sm font-normal transition active:scale-[0.99] cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Send Security Code
-            </Button>
+              {isLoading ? (
+                <span>Sending code...</span>
+              ) : (
+                <>
+                  <span>Send Security Code</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
           </div>
         </form>
       )}
@@ -130,8 +133,8 @@ export const ForgotPasswordForm = () => {
       {/* Step 2: OTP & New Password */}
       {step === 2 && (
         <form onSubmit={handleResetPassword} className="space-y-4">
-          <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300">
-            A 6-digit verification code has been dispatched to <strong>{email}</strong>. (For demo testing, enter any 6 digits e.g. <span className="underline font-mono">123456</span>).
+          <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-xs text-sky-800">
+            A 6-digit verification code has been dispatched to <strong>{email}</strong>. (For demo testing, enter any 6 digits e.g. <span className="underline font-mono font-medium">123456</span>).
           </div>
 
           <Input
@@ -175,26 +178,28 @@ export const ForgotPasswordForm = () => {
           />
 
           <div className="pt-2 flex items-center gap-3">
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="lg"
               onClick={() => setStep(1)}
-              icon={ArrowLeft}
+              className="inline-flex items-center justify-center gap-1.5 px-5 py-3.5 rounded-2xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-normal transition cursor-pointer"
             >
-              Back
-            </Button>
-            <Button
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+            <button
               type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              isLoading={isLoading}
-              icon={ArrowRight}
-              iconPosition="right"
+              disabled={isLoading}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-sm font-normal transition active:scale-[0.99] cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Update Password
-            </Button>
+              {isLoading ? (
+                <span>Updating...</span>
+              ) : (
+                <>
+                  <span>Update Password</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
           </div>
         </form>
       )}
@@ -202,39 +207,36 @@ export const ForgotPasswordForm = () => {
       {/* Step 3: Success Confirmation */}
       {step === 3 && (
         <div className="text-center py-6 space-y-4 animate-fadeIn">
-          <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
             <CheckCircle2 className="w-6 h-6" />
           </div>
 
           <div>
-            <h3 className="text-lg font-medium text-[var(--text-main)]">Password Reset Complete</h3>
-            <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-sm mx-auto">
+            <h3 className="text-lg font-medium text-slate-950">Password Reset Complete</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
               Your hospital staff account password has been updated securely. You may now log in with your new credentials.
             </p>
           </div>
 
           <div className="pt-4">
-            <Button
+            <button
               type="button"
-              variant="primary"
-              size="lg"
-              fullWidth
               onClick={() => navigate('/login')}
-              icon={ArrowRight}
-              iconPosition="right"
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-sm font-normal transition active:scale-[0.99] cursor-pointer shadow-xs"
             >
-              Proceed to Sign In
-            </Button>
+              <span>Proceed to Sign In</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
 
       {/* Return to Login */}
       {step !== 3 && (
-        <div className="pt-4 border-t border-[var(--border-subtle)] text-center">
+        <div className="pt-4 border-t border-slate-100 text-center">
           <Link
             to="/login"
-            className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-main)] transition"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 transition"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to Staff Sign In</span>

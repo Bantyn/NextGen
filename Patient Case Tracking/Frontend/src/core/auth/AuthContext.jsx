@@ -5,8 +5,8 @@ import { API_ENDPOINTS } from '../api/apiEndpoints';
 
 export const AuthContext = createContext(null);
 
-const STORAGE_TOKEN_KEY = 'medikiosk_token';
-const STORAGE_USER_KEY = 'medikiosk_user';
+const STORAGE_TOKEN_KEY = 'sehat_token';
+const STORAGE_USER_KEY = 'sehat_user';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -17,29 +17,13 @@ export const AuthProvider = ({ children }) => {
   // Initialize Auth State from LocalStorage
   useEffect(() => {
     try {
-      const savedToken = localStorage.getItem(STORAGE_TOKEN_KEY);
-      const savedUserStr = localStorage.getItem(STORAGE_USER_KEY);
+      const savedToken = localStorage.getItem(STORAGE_TOKEN_KEY) || localStorage.getItem('medikiosk_token');
+      const savedUserStr = localStorage.getItem(STORAGE_USER_KEY) || localStorage.getItem('medikiosk_user');
 
       if (savedToken && savedUserStr) {
         const parsedUser = JSON.parse(savedUserStr);
         setToken(savedToken);
         setUser(parsedUser);
-      } else {
-        // Default to Demo Doctor for seamless hackathon walkthrough experience
-        const defaultDoctor = DEMO_USERS[0];
-        const initialUser = {
-          id: 'usr_doc_default_01',
-          name: defaultDoctor.name,
-          email: defaultDoctor.email,
-          role: defaultDoctor.role,
-          department: defaultDoctor.department,
-          license: defaultDoctor.license,
-        };
-        const initialToken = 'jwt_demo_token_doctor_session';
-        localStorage.setItem(STORAGE_TOKEN_KEY, initialToken);
-        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(initialUser));
-        setToken(initialToken);
-        setUser(initialUser);
       }
     } catch (err) {
       console.error('Failed to parse cached auth state:', err);
@@ -174,6 +158,25 @@ export const AuthProvider = ({ children }) => {
   }, [saveSession]);
 
   /**
+   * Dedicated Patient Login (ABHA / Phone / Demo Profile)
+   */
+  const loginAsPatient = useCallback((patientData) => {
+    const patientUser = {
+      id: patientData?.id || 'usr_patient_9011',
+      name: patientData?.name || 'Ramesh Patel',
+      email: patientData?.email || 'ramesh.patel@gmail.com',
+      phone: patientData?.phone || '+91 98765 43210',
+      abhaId: patientData?.abhaId || '91-4432-8812-9901',
+      role: ROLES.PATIENT,
+      department: 'Patient Portal',
+      license: patientData?.abhaId || 'ABHA-9011',
+    };
+    const token = `jwt_patient_${patientUser.id}_${Date.now()}`;
+    saveSession(token, patientUser);
+    return { success: true, user: patientUser };
+  }, [saveSession]);
+
+  /**
    * Logout user and clear tokens
    */
   const logout = useCallback(() => {
@@ -183,6 +186,8 @@ export const AuthProvider = ({ children }) => {
     try {
       localStorage.removeItem(STORAGE_TOKEN_KEY);
       localStorage.removeItem(STORAGE_USER_KEY);
+      localStorage.removeItem('medikiosk_token');
+      localStorage.removeItem('medikiosk_user');
     } catch (err) {
       console.error('Failed to clear storage:', err);
     }
@@ -196,6 +201,7 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     error,
     login,
+    loginAsPatient,
     register,
     logout,
     switchDemoRole,

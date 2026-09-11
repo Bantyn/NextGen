@@ -120,7 +120,7 @@ export const RegisterForm = () => {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Step 1: Select Staff Role */}
         <div>
-          <label className="text-xs font-medium text-[var(--text-secondary)] block mb-2">
+          <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-2">
             Select Hospital Role <span className="text-rose-500">*</span>
           </label>
           <RoleCardSelector
@@ -144,7 +144,7 @@ export const RegisterForm = () => {
             label="Hospital Email Address"
             type="email"
             required
-            placeholder="e.g. doctor@medikiosk.ai"
+            placeholder="e.g. doctor@sehat.org"
             value={formData.email}
             onChange={(e) => handleChange('email', e.target.value)}
             icon={Mail}
@@ -192,13 +192,13 @@ export const RegisterForm = () => {
             />
             {formData.password && (
               <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden flex gap-1">
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden flex gap-1">
                   <div
                     className={`h-full transition-all ${pwdStrength.color}`}
                     style={{ width: `${(pwdStrength.score / 3) * 100}%` }}
                   />
                 </div>
-                <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                <span className="text-[10px] text-slate-500 font-medium">
                   {pwdStrength.label}
                 </span>
               </div>
@@ -216,14 +216,14 @@ export const RegisterForm = () => {
           />
         </div>
 
-        {/* Institutional Consent Checkbox */}
-        <div className="p-3 rounded-xl bg-[var(--surface-input)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
+        {/* Institutional Consent Checkbox — Module D DPDP Style */}
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 text-xs text-slate-600">
           <label className="flex items-start gap-2.5 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={formData.acceptTerms}
               onChange={(e) => handleChange('acceptTerms', e.target.checked)}
-              className="mt-0.5 rounded border-[var(--border-subtle)] text-[var(--primary)] focus:ring-0 accent-[var(--primary)]"
+              className="mt-0.5 rounded border-slate-300 text-slate-900 focus:ring-0 accent-slate-900"
             />
             <span className="leading-relaxed">
               I agree to abide by the AIIA Clinical Protocol, DPDP Act 2023 regulations, and patient data confidentiality guidelines.
@@ -233,27 +233,30 @@ export const RegisterForm = () => {
 
         {/* Submit Action */}
         <div className="pt-2">
-          <Button
+          <button
             type="submit"
-            variant="primary"
-            size="lg"
-            fullWidth
-            isLoading={isLoading}
-            icon={ArrowRight}
-            iconPosition="right"
+            disabled={isLoading}
+            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-sm font-normal transition active:scale-[0.99] cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Create Staff Account
-          </Button>
+            {isLoading ? (
+              <span>Creating account...</span>
+            ) : (
+              <>
+                <span>Create Staff Account</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
       </form>
 
       {/* Login Switch Link */}
-      <div className="pt-4 border-t border-[var(--border-subtle)] text-center">
-        <p className="text-xs text-[var(--text-secondary)]">
+      <div className="pt-4 border-t border-slate-100 text-center">
+        <p className="text-xs text-slate-500 font-normal">
           Already have a staff account?{' '}
           <Link
             to="/login"
-            className="text-sky-400 font-medium hover:text-sky-300 transition hover:underline ml-1"
+            className="text-sky-600 font-medium hover:text-sky-700 transition hover:underline ml-1"
           >
             Sign In Here
           </Link>

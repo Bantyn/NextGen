@@ -8,6 +8,8 @@ export { ClinicalObservation } from './ClinicalObservation.js';
 export { MedicalDocument } from './MedicalDocument.js';
 export { ClinicalRecord } from './ClinicalRecord.js';
 export { AuditLog } from './AuditLog.js';
+export { RedFlagCase, RED_FLAG_STATUS } from './RedFlagCase.js';
+export { DoctorNotification, NOTIFICATION_STATUS } from './DoctorNotification.js';
 export {
   AssistantMedicine,
   AssistantSymptomGuidance,

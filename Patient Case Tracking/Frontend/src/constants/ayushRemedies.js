@@ -1,6 +1,6 @@
 /**
  * Predefined AYUSH Remedies, Ahara (Diet) & Vihara (Lifestyle) Knowledge Base
- * Ministry of Ayush & AIIA Clinical Guidelines for MediKiosk Pre-Consultation Care.
+ * Ministry of Ayush & AIIA Clinical Guidelines for Sehat Pre-Consultation Care.
  */
 export const AYUSH_REMEDIES = {
   COUGH_COLD: {

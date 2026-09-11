@@ -8,6 +8,8 @@ import {
   PatientCheckinView,
   PatientIntakeView,
   PatientSuccessView,
+  PatientDashboardView,
+  PatientLoginView,
 } from '../modules/patient';
 import {
   DoctorDashboardView,
@@ -19,6 +21,8 @@ import {
   ForgotPasswordView,
   UnauthorizedView,
 } from '../modules/auth';
+import { AdminMainView } from '../modules/admin';
+
 
 /**
  * AppRoutes Component
@@ -40,7 +44,23 @@ export const AppRoutes = () => {
           />
           <Route
             path="/patient"
-            element={<Navigate to="/patient/register" replace />}
+            element={<Navigate to="/patient/login" replace />}
+          />
+          <Route
+            path="/patient/login"
+            element={
+              <PageLayout>
+                <PatientLoginView />
+              </PageLayout>
+            }
+          />
+          <Route
+            path="/patient/dashboard"
+            element={
+              <PageLayout>
+                <PatientDashboardView />
+              </PageLayout>
+            }
           />
           <Route
             path="/patient/register"
@@ -105,7 +125,7 @@ export const AppRoutes = () => {
           <Route
             path="/doctor"
             element={
-              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN', 'NURSE']}>
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
                 <DoctorLayout>
                   <DoctorDashboardView />
                 </DoctorLayout>
@@ -115,7 +135,7 @@ export const AppRoutes = () => {
           <Route
             path="/doctor/cases/:sessionId"
             element={
-              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN', 'NURSE']}>
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
                 <DoctorLayout>
                   <DoctorCaseDetailView />
                 </DoctorLayout>
@@ -123,8 +143,19 @@ export const AppRoutes = () => {
             }
           />
 
+          {/* Admin Control Center (Guarded strictly by ProtectedRoute with ADMIN role) */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminMainView />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
+
         </Routes>
 
         {/* Global Site-Wide Smart AI Assistant */}

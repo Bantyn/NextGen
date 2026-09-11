@@ -42,6 +42,28 @@ const ClinicalRecordSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    triage: {
+      level: { type: String, default: 'LOW' },
+      category: { type: String, default: 'ROUTINE' },
+      reason: { type: String, default: '' },
+    },
+    doctor_verification_required: [
+      {
+        item: String,
+        category: String,
+        reason: String,
+        confidence: Number,
+      },
+    ],
+    lab_investigations: [
+      {
+        test_name: String,
+        observed_value: String,
+        reference_range: String,
+        unit: String,
+        flag: String,
+      },
+    ],
     doctor_notes: {
       type: String,
       default: '',

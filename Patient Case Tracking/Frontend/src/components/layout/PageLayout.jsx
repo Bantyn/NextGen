@@ -9,7 +9,7 @@ import { Footer } from './Footer';
  */
 export const PageLayout = ({ children, onContactClick }) => {
   return (
-    <div className="relative min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between overflow-x-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="relative min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif]">
       {/* Soft Multi-Color Atmospheric Mesh Gradient Glow at the bottom */}
       <div className="fixed inset-x-0 bottom-0 h-[460px] pointer-events-none overflow-hidden z-0 opacity-80 select-none">
         {/* Left Amber/Yellow Aura */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ClipboardList,
@@ -14,6 +14,11 @@ import {
   X,
   User,
 } from 'lucide-react';
+import {
+  getNextWaitingPatient,
+  getDashboardStats,
+  subscribeDoctorDashboard,
+} from '../../modules/doctor/services/doctorDashboardService';
 
 /**
  * DoctorLayout Component
@@ -23,14 +28,51 @@ export const DoctorLayout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [nextPatient, setNextPatient] = useState(null);
+  const [stats, setStats] = useState({
+    awaitingReview: 3,
+    emergencyTriage: 1,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchNavData = async () => {
+      try {
+        const [next, currentStats] = await Promise.all([
+          getNextWaitingPatient(),
+          getDashboardStats(),
+        ]);
+        if (isMounted) {
+          setNextPatient(next);
+          setStats(currentStats);
+        }
+      } catch (err) {
+        console.error('Error fetching doctor layout stats:', err);
+      }
+    };
+
+    fetchNavData();
+
+    const unsubscribe = subscribeDoctorDashboard(({ stats: updatedStats }) => {
+      if (isMounted && updatedStats) {
+        setStats(updatedStats);
+        getNextWaitingPatient().then((np) => isMounted && setNextPatient(np));
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   const navItems = [
-    { name: 'Live OPD Queue', path: '/doctor', icon: ClipboardList, badge: '4' },
+    { name: 'Live OPD Queue', path: '/doctor', icon: ClipboardList, badge: String(stats.awaitingReview || 4) },
     {
       name: 'Priority Triage',
       path: '/doctor?tab=triage',
       icon: AlertTriangle,
-      badge: '1',
+      badge: String(stats.emergencyTriage || 1),
       badgeColor: 'bg-rose-100 text-rose-700',
     },
     { name: 'Patient Archives', path: '/doctor?tab=archive', icon: FolderArchive },
@@ -39,7 +81,7 @@ export const DoctorLayout = ({ children }) => {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-slate-900 flex font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="h-screen w-full bg-slate-50 text-slate-900 flex overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
       {/* 1. Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -50,28 +92,23 @@ export const DoctorLayout = ({ children }) => {
 
       {/* 2. Sidebar Navigation */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between transition-transform duration-200 ease-in-out ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 h-full bg-white border-r border-slate-200/80 flex flex-col transition-transform duration-200 ease-in-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col justify-between">
+          <div>
           {/* Brand Header */}
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2.5 select-none">
-              <div className="flex items-center gap-1">
-                <div className="w-2.5 h-6 rounded-full bg-sky-400" />
-                <div className="w-2.5 h-7 rounded-full bg-amber-400" />
-                <div className="w-2.5 h-6 rounded-full bg-rose-400" />
-                <div className="w-2.5 h-5 rounded-full bg-emerald-400" />
-              </div>
-              <div>
-                <span className="text-base font-normal tracking-tight text-slate-900 block leading-tight">
-                  MediKiosk
-                </span>
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-                  Doctor Portal
-                </span>
-              </div>
+              <img
+                src="/logo.png"
+                alt="Sehat"
+                className="h-8 w-auto object-contain"
+              />
+              <span className="text-[10px] text-sky-600 font-medium px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 uppercase tracking-wider">
+                Doctor Portal
+              </span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -87,7 +124,10 @@ export const DoctorLayout = ({ children }) => {
               Clinical Workspace
             </div>
             {navItems.map((item) => {
-              const isActive = location.pathname === item.path && !location.search;
+              const [itemPath, itemQuery] = item.path.split('?');
+              const isActive = itemQuery
+                ? location.pathname === itemPath && location.search === `?${itemQuery}`
+                : location.pathname === itemPath && !location.search;
               const Icon = item.icon;
               return (
                 <Link
@@ -119,26 +159,7 @@ export const DoctorLayout = ({ children }) => {
             })}
           </div>
 
-          {/* Kiosk Mode Shortcut */}
-          <div className="px-3 pt-2">
-            <div className="px-3 text-[10px] font-medium uppercase tracking-wider text-slate-400 mb-2">
-              Quick Switch
-            </div>
-            <Link
-              to="/patient/register"
-              className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-normal text-slate-600 hover:bg-slate-100 transition"
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>Open Patient Kiosk</span>
-            </Link>
-            <Link
-              to="/"
-              className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-normal text-slate-600 hover:bg-slate-100 transition"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Public Landing Page</span>
-            </Link>
-          </div>
+
         </div>
 
         {/* Doctor Profile Footer */}
@@ -164,10 +185,11 @@ export const DoctorLayout = ({ children }) => {
             <span className="text-slate-400">Shift A</span>
           </div>
         </div>
+        </div>
       </aside>
 
       {/* 3. Main Dashboard Wrapper */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Dashboard Topbar */}
         <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
           {/* Mobile Menu Toggle & Breadcrumb */}
@@ -188,13 +210,16 @@ export const DoctorLayout = ({ children }) => {
           {/* Right Header Actions */}
           <div className="flex items-center gap-4">
             {/* Call Next Patient Quick CTA */}
-            <button
-              onClick={() => navigate('/doctor/cases/DEMO_GUJARATI_001')}
-              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-xs"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>Call Next: <strong>TK-101</strong></span>
-            </button>
+            {nextPatient && (
+              <button
+                type="button"
+                onClick={() => navigate(`/doctor/cases/${nextPatient.sessionId}`)}
+                className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-xs"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Call Next: <strong>{nextPatient.token}</strong></span>
+              </button>
+            )}
 
             {/* Notification Bell */}
             <button
@@ -215,7 +240,7 @@ export const DoctorLayout = ({ children }) => {
         </header>
 
         {/* Dashboard Main Viewport */}
-        <main className="flex-1 p-4 sm:p-8 max-w-full w-full mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-full w-full mx-auto">
           {children}
         </main>
       </div>

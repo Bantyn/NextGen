@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Sparkles, Stethoscope, HeartPulse, UserCheck, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Sparkles, Stethoscope, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../core/auth/useAuth';
 import { DEMO_USERS, ROLES, ROLE_CONFIGS } from '../../../core/config/roles';
 import { Button } from '../../../components/ui/Button';
@@ -55,35 +55,32 @@ export const LoginForm = () => {
   return (
     <div className="space-y-6">
       {/* 1-Click Quick Demo Access Bar for Fast Review */}
-      <div className="p-3.5 rounded-2xl bg-[var(--surface-input)] border border-[var(--border-subtle)] space-y-2">
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50/70 to-slate-50 border border-sky-100 space-y-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
             <span>Instant Demo Logins (Click to Autofill):</span>
           </span>
-          <span className="text-[10px] text-[var(--text-muted)]">1-Click Fast Track</span>
+          <span className="text-[11px] text-slate-500 font-normal">1-Click Fast Track</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
           {DEMO_USERS.map((demo) => {
             const isSelected = selectedDemoRole === demo.role || email === demo.email;
-            let DemoIcon = Stethoscope;
-            if (demo.role === ROLES.NURSE) DemoIcon = HeartPulse;
-            if (demo.role === ROLES.RECEPTIONIST) DemoIcon = UserCheck;
-            if (demo.role === ROLES.ADMIN) DemoIcon = ShieldCheck;
+            const DemoIcon = demo.role === ROLES.ADMIN ? ShieldCheck : Stethoscope;
 
             return (
               <button
                 key={demo.role}
                 type="button"
                 onClick={() => handleSelectDemo(demo)}
-                className={`px-2 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                className={`px-3.5 py-2.5 rounded-xl text-xs font-normal transition-all flex items-center justify-center gap-2 cursor-pointer border ${
                   isSelected
-                    ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-xs'
-                    : 'bg-[var(--surface-card)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-main)] hover:border-[var(--border-medium)]'
+                    ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <DemoIcon className="w-3.5 h-3.5 shrink-0" />
+                <DemoIcon className="w-4 h-4 shrink-0 text-current" />
                 <span>{demo.role.charAt(0) + demo.role.slice(1).toLowerCase()}</span>
               </button>
             );
@@ -102,13 +99,13 @@ export const LoginForm = () => {
       )}
 
       {/* Login Credentials Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           label="Hospital Staff Email"
           type="email"
           required
           autoComplete="email"
-          placeholder="e.g. doctor@medikiosk.ai"
+          placeholder="e.g. doctor@sehat.org"
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -133,47 +130,50 @@ export const LoginForm = () => {
 
         {/* Remember Me & Forgot Password */}
         <div className="flex items-center justify-between text-xs pt-1">
-          <label className="flex items-center gap-2 cursor-pointer select-none text-[var(--text-secondary)]">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-[var(--border-subtle)] text-[var(--primary)] focus:ring-0 focus:ring-offset-0 accent-[var(--primary)]"
+              className="rounded border-slate-300 text-slate-900 focus:ring-0 accent-slate-900"
             />
             <span>Remember this device</span>
           </label>
 
           <Link
             to="/forgot-password"
-            className="text-sky-400 hover:text-sky-300 transition hover:underline"
+            className="text-sky-600 hover:text-sky-700 font-medium transition hover:underline"
           >
             Forgot Password?
           </Link>
         </div>
 
-        {/* Submit Button */}
+        {/* Submit Button — Identical to Patient Intake Action Button */}
         <div className="pt-2">
-          <Button
+          <button
             type="submit"
-            variant="primary"
-            size="lg"
-            fullWidth
-            isLoading={isLoading}
-            icon={ArrowRight}
-            iconPosition="right"
+            disabled={isLoading}
+            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-sm font-normal transition active:scale-[0.99] cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Sign In to Clinical Workspace
-          </Button>
+            {isLoading ? (
+              <span>Signing in...</span>
+            ) : (
+              <>
+                <span>Sign In to Clinical Workspace</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
       </form>
 
       {/* Register Switch Link */}
-      <div className="pt-4 border-t border-[var(--border-subtle)] text-center">
-        <p className="text-xs text-[var(--text-secondary)]">
+      <div className="pt-4 border-t border-slate-100 text-center">
+        <p className="text-xs text-slate-500 font-normal">
           Need a new hospital staff or doctor account?{' '}
           <Link
             to="/register"
-            className="text-sky-400 font-medium hover:text-sky-300 transition hover:underline ml-1"
+            className="text-sky-600 font-medium hover:text-sky-700 transition hover:underline ml-1"
           >
             Register Staff Account
           </Link>

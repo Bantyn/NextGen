@@ -12,6 +12,13 @@ export const errorHandler = (err, req, res, next) => {
     return next(err);
   }
 
+  const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+  console.error(`\x1b[31m💥 [API ERROR]\x1b[0m \x1b[90m${timestamp}\x1b[0m \x1b[1m${req.method}\x1b[0m ${req.originalUrl || req.url}`);
+  console.error(`   \x1b[31m✖ Message:\x1b[0m ${err.message || 'Internal Server Error'}`);
+  if (err.stack) {
+    console.error(`   \x1b[90m${err.stack.split('\n').slice(1, 4).join('\n   ')}\x1b[0m`);
+  }
+
   logger.error(`[ErrorHandler] ${req.method} ${req.originalUrl} - Error: ${err.message}`, {
     stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,
     code: err.code,

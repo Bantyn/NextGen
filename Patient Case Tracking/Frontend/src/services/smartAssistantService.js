@@ -1,6 +1,6 @@
 /**
  * Smart Assistant API Service
- * Handles communication with the secure MediKiosk Assistant API (/api/v1/assistant)
+ * Handles communication with the secure Sehat Assistant API (/api/v1/assistant)
  */
 
 const API_BASE_URL = 'http://localhost:5000/api/v1/assistant';
@@ -62,7 +62,7 @@ export async function fetchQuickActions(role = 'PATIENT', language = 'English') 
   } catch (e) {}
 
   return [
-    { id: 'website_help', label: 'Website Help', action: 'query', text: 'How does MediKiosk work?' },
+    { id: 'website_help', label: 'Website Help', action: 'query', text: 'How does Sehat work?' },
     { id: 'medicine_help', label: 'Medicine Helper', action: 'query', text: 'Tell me about Paracetamol' },
     { id: 'cold_care', label: 'Cold & Cough Care', action: 'query', text: 'What can I do for a mild cold?' },
     { id: 'emergency_help', label: 'Emergency Numbers', action: 'query', text: 'Hospital emergency contact' },

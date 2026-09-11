@@ -1,0 +1,669 @@
+{
+  "name": "Sehat WP Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sehat-wp-handler",
+        "options": {}
+      },
+      "id": "8a553ca3-c83b-452f-987e-4d952a2b6de9",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        180
+      ],
+      "webhookId": "openwa-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Extract & Sanitize incoming WhatsApp message payload\nconst body = $input.first().json.body || {};\nconst data = body.data || {};\n\nconst rawText = data.body || body.message || body.text || '';\nconst chatId = data.chatId || data.from || body.chatId || '';\nconst senderName = data.sender?.pushname || data.sender?.name || 'Patient';\nconst sessionId = body.sessionId || 'wp-session-' + (chatId ? chatId.replace(/[^0-9]/g, '') : Date.now());\n\n// Normalize phone number (strip @c.us, +, and non-digits)\nconst senderPhone = (chatId || '').replace(/@c\\.us/g, '').replace(/[^0-9]/g, '');\n\nreturn {\n  text: rawText.trim(),\n  chatId,\n  senderPhone,\n  senderName,\n  sessionId,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "b1f8e21a-4c22-4299-8d77-6d1a1b029a10",
+      "name": "Message Parser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/v1/whatsapp/auth-check",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.senderPhone, chatId: $json.chatId, pushName: $json.senderName }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c2a79d33-5b89-4b11-9f22-1d5e3a890b11",
+      "name": "Patient Session / Authentication Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 3: Intent Classification (Emergency Triage, Medical Records, or General Query)\nconst parserData = $('Message Parser').first().json;\nconst authPayload = $input.first().json;\nconst authData = authPayload.data || authPayload;\nconst text = (parserData.text || '').toLowerCase();\n\n// Check if backend connection failed\nconst isBackendDown = Boolean(authPayload.error || (authPayload.code && authPayload.code.includes('ECONN')));\n\n// 1. Emergency Red-Flag detection (Always prioritized, even if backend is offline)\nconst emergencyKeywords = [\n  'chest pain', 'cannot breathe', \"can't breathe\", 'gasping', 'shortness of breath',\n  'severe bleeding', 'vomiting blood', 'stroke', 'paralysis', 'unconscious',\n  'fainted', 'loss of consciousness', 'heart attack', 'છાતીમાં દુખાવો', 'શ્વાસ', 'બેભાન', 'લોહી', 'सीना दर्द', 'सांस'\n];\nconst isEmergency = emergencyKeywords.some(k => text.includes(k));\n\n// 2. Medical Record Required detection\nconst recordKeywords = [\n  'report', 'blood report', 'sugar', 'hba1c', 'bp', 'prescription', 'medicine api hati',\n  'doctor e su lakhyu', 'mara reports', 'last checkup', 'previous diagnosis', 'medical history',\n  'file', 'lab test', 'doctor notes', 'રિપોર્ટ', 'દવા', 'પ્રેસ્ક્રિપ્શન', 'તપાસ', 'दवा', 'जांच', 'पर्चा'\n];\nconst isRecordQuery = recordKeywords.some(k => text.includes(k));\n\nlet intent = 'GENERAL_QUERY';\nif (isEmergency) {\n  intent = 'EMERGENCY_TRIAGE';\n} else if (isRecordQuery) {\n  intent = 'MEDICAL_RECORD_REQUIRED';\n}\n\nreturn {\n  text: parserData.text,\n  chatId: parserData.chatId,\n  senderPhone: parserData.senderPhone,\n  senderName: parserData.senderName,\n  sessionId: parserData.sessionId,\n  authenticated: Boolean(authData.authenticated),\n  patient: authData.patient || null,\n  session: authData.session || null,\n  has_consent: Boolean(authData.has_consent),\n  isBackendDown,\n  intent\n};"
+      },
+      "id": "d3b81e44-6c33-4f99-8e11-2e6f4a901c22",
+      "name": "Intent Evaluator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "GENERAL_QUERY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "General Query"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "MEDICAL_RECORD_REQUIRED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Medical Record Required"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "EMERGENCY_TRIAGE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Emergency / Triage"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4c92f55-7d44-4a00-9f22-3f7a5b012d33",
+      "name": "Intent Classification Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        180,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Emergency / Triage Safety Response Generator\nconst item = $input.first().json;\n\nconst output = `🚨 *EMERGENCY TRIAGE ALERT*\\n\\n` +\n  `Tamara symptoms (Severe chest pain / breathing problem / stroke signs) tatkalik emergency doctor examination mange che.\\n\\n` +\n  `⚠️ *WhatsApp chat par wait na karo!*\\n` +\n  `• Immediately Emergency Ambulance call karo: *108 / 102*\\n` +\n  `• Najik na Trauma Center athva Hospital Emergency Room ma pahoncho\\n` +\n  `• MediKiosk Hospital Desk: *079-26578900*\\n\\n` +\n  `Hospital emergency triage team ne alert generate kari didho che.`;\n\nreturn {\n  chatId: item.chatId,\n  sessionId: item.sessionId,\n  output,\n  isEmergency: true\n};"
+      },
+      "id": "f5d03a66-8e55-4b11-a033-4a8b6c123e44",
+      "name": "Safety Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/v1/whatsapp/authorized-records",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ patient_id: $json.patient ? $json.patient.patient_id : null, phone: $json.senderPhone, session_id: $json.session ? $json.session.session_id : null }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a6e14b77-9f66-4c22-b144-5b9c7d234f55",
+      "name": "Backend API (Authorized Records)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Record Formatter & DPDP Consent Gate Validator\nconst recordsResponse = $input.first().json;\nconst intentData = $('Intent Evaluator').first().json;\n\n// Check if backend connection failed\nif (recordsResponse.error || (recordsResponse.code && recordsResponse.code.includes('ECONN'))) {\n  return {\n    chatId: intentData.chatId,\n    sessionId: intentData.sessionId,\n    skipAgent: true,\n    directOutput: 'Hospital medical records server sathe atyare sampark nathi thai shakto. Krupaya thodi vaar pachi prayas karo athva hospital helpdesk par contact karo.'\n  };\n}\n\n// Check authorization (handles both flat and data-wrapped response envelopes)\nconst isAuthorized = recordsResponse.authorized === true || recordsResponse.data?.authorized === true;\nconst rec = recordsResponse.data?.records || recordsResponse.records;\nconst patientInfo = recordsResponse.data?.patient || recordsResponse.patient;\n\nif (!isAuthorized || !rec) {\n  // Access restricted or consent revoked\n  const safeMessage = recordsResponse.message || 'Hu tamaru medical record access kari shaktu nathi atyare, because proper verification/authorization required che.';\n  return {\n    chatId: intentData.chatId,\n    sessionId: intentData.sessionId,\n    skipAgent: true,\n    directOutput: safeMessage\n  };\n}\n\nconst latest = rec.latest_record;\nconst obs = rec.observations || {};\n\nlet recordSummary = `PATIENT: ${patientInfo?.name || 'Verified Patient'}\\n`;\nif (latest) {\n  recordSummary += `RECORD DATE: ${latest.reviewed_at || 'Recent OPD Visit'}\\n`;\n  recordSummary += `CHIEF COMPLAINT: ${latest.chief_complaint || 'N/A'}\\n`;\n  recordSummary += `DOCTOR NOTES: ${latest.doctor_notes || 'N/A'}\\n`;\n  if (latest.prescriptions && latest.prescriptions.length > 0) {\n    recordSummary += `PRESCRIBED MEDICINES:\\n`;\n    latest.prescriptions.forEach(p => {\n      recordSummary += `- ${p.medicine_name} (${p.dosage || ''}), ${p.frequency || ''} for ${p.duration || ''}. ${p.instructions || ''}\\n`;\n    });\n  }\n  if (latest.lab_investigations && latest.lab_investigations.length > 0) {\n    recordSummary += `LAB INVESTIGATIONS:\\n`;\n    latest.lab_investigations.forEach(l => {\n      recordSummary += `- ${l.test_name}: ${l.observed_value} ${l.unit || ''} (Ref: ${l.reference_range || ''}) Flag: ${l.flag || 'Normal'}\\n`;\n    });\n  }\n}\n\nif (obs.symptoms && obs.symptoms.length > 0) {\n  recordSummary += `OBSERVED SYMPTOMS: ${obs.symptoms.map(s => `${s.name} (${s.value || ''})`).join(', ')}\\n`;\n}\nif (obs.conditions && obs.conditions.length > 0) {\n  recordSummary += `DOCUMENTED CONDITIONS: ${obs.conditions.join(', ')}\\n`;\n}\n\nreturn {\n  chatId: intentData.chatId,\n  sessionId: intentData.sessionId,\n  userQuestion: intentData.text,\n  patientId: intentData.patient?.patient_id || '',\n  recordsContext: recordSummary,\n  skipAgent: false\n};"
+      },
+      "id": "b7f25c88-0a77-4d33-c255-6cae8e345a66",
+      "name": "Record Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.skipAgent ? 'SKIP: ' + $json.directOutput : 'Patient Question: ' + $json.userQuestion + '\\nPatient ID: ' + $json.patientId + '\\n\\n<authorized_records>\\n' + $json.recordsContext + '\\n</authorized_records>\\n\\nPlease review the records and query the database tools if more clinical detail is needed to answer.' }}",
+        "options": {
+          "maxIterations": 5,
+          "systemMessage": "# SEHAT — AUTHORIZED MEDICAL RECORD EXPLAINER & CLINICAL AGENT\n\nYou are Sehat, an intelligent clinical assistant operating through WhatsApp.\nYour goal is to explain the patient's medical records and answer clinical questions in simple, reassuring Gujlish (Roman Gujarati + Hindi + English).\n\nTOOL CAPABILITIES:\nYou have direct access to:\n1. Clinical Records DB: Search `clinicalrecords` for past consultations, doctor notes, diagnoses, and prescriptions by patient_id or session_id.\n2. Clinical Observations DB: Search `clinicalobservations` for symptoms, lab investigation results, and allergies.\n3. Medicine Knowledge DB: Search `assistantmedicines` for verified drug details, generic names, and precautions.\n\nTHINKING & VERIFICATION PROCESS:\n1. If the patient's question can be answered from <authorized_records>, answer directly.\n2. Only call MongoDB tools if additional historical clinical details or medicine cross-checks are explicitly needed.\n3. STRICT INVARIANTS:\n   - If prompt starts with 'SKIP:', output the exact text following 'SKIP:' without modification.\n   - Answer ONLY using facts present in the retrieved records or verified database tools.\n   - NEVER invent lab results, medication names, dosages, or diagnoses.\n   - Mention the relevant visit/report date.\n   - Explain medical terminology in simple Gujlish.\n   - Remind the patient that prescription changes require doctor consultation.\n   - Do not expose internal IDs, SQL, or database queries.\n   - Keep your response concise (3-5 sentences or simple bullet points)."
+        }
+      },
+      "id": "c8a36d99-1b88-4e44-d366-7dbf9f456b77",
+      "name": "Medical AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        960,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "maxIterations": 5,
+          "systemMessage": "# SEHAT — GENERAL AI HEALTH ASSISTANT\n\nYou are Sehat, a patient-facing AI health assistant on WhatsApp.\nProvide helpful, safe general health guidance, hospital timing info, clinic navigation, and nominal cold/cough supportive care in natural Gujlish (Roman Gujarati + Hindi + English).\n\nTOOL CAPABILITIES:\nYou have access to:\n1. Medicine Knowledge DB: Search `assistantmedicines` to look up verified medicine details, generic names, and precautions.\n\nTHINKING & REASONING PROCESS:\n1. For greetings (hi, hello, kem cho), hospital timings, or general inquiries, answer directly without calling any tools.\n2. Only query Medicine Knowledge DB when the patient explicitly asks about a specific medicine, drug use, or precautions.\n3. STRICT INVARIANTS:\n   - Never autonomously diagnose diseases.\n   - Never prescribe specific medication dosages.\n   - Remind the patient to consult an OPD doctor for definitive clinical diagnosis.\n   - If user symptoms suggest acute chest pain, breathlessness, or stroke, immediately guide them to emergency services (108 / 102).\n   - Keep your answer natural, concise, and empathetic (40-60 words)."
+        }
+      },
+      "id": "e13b8fb7-76fa-499d-8c04-d2195e73bbf5",
+      "name": "General AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Message Parser').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "id": "a860d312-f4c4-47b6-96c1-c39cc8231329",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        680,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "id": "5d7a8aaf-ea04-475e-8e7b-f517d03b2010",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -200
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "FDp1YUvaokHj839B",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3.5-lightning:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -200
+      ],
+      "id": "e4731dda-809a-45c2-83e0-299759116ebb",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "5MNys5FHzCo5Be8X",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "clinicalrecords",
+        "description": "Call this tool to search and read patient clinical records, doctor prescriptions, diagnosis, and consultation notes from MongoDB using patient_id or session_id.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        380
+      ],
+      "id": "5b25c518-b671-4677-a1f0-45367e331895",
+      "name": "Clinical Records DB",
+      "credentials": {
+        "mongoDb": {
+          "id": "K8vot6jQ2irfEUxI",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "clinicalobservations",
+        "description": "Call this tool to query structured medical observations (symptoms, vital signs, lab investigations, and allergies) from MongoDB by session_id.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.5,
+      "position": [
+        1140,
+        380
+      ],
+      "id": "7a3b4c5d-6e7f-8a9b-0c1d-2e3f4a5b6c7d",
+      "name": "Clinical Observations DB",
+      "credentials": {
+        "mongoDb": {
+          "id": "K8vot6jQ2irfEUxI",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "assistantmedicines",
+        "description": "Call this tool to query verified medicine information, generic names, indications, precautions, and general usage instructions from the MongoDB database.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDbTool",
+      "typeVersion": 1.5,
+      "position": [
+        300,
+        120
+      ],
+      "id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Medicine Knowledge DB",
+      "credentials": {
+        "mongoDb": {
+          "id": "K8vot6jQ2irfEUxI",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step: Post-Generation Safety Validation Firewall\nconst item = $input.first().json;\n\n// Safely check if Record Formatter had skipped the agent (handles both execution paths)\nlet formatterItem = null;\ntry {\n  formatterItem = $('Record Formatter').first()?.json || null;\n} catch (e) {\n  formatterItem = null;\n}\n\nif (formatterItem && formatterItem.skipAgent) {\n  return {\n    chatId: formatterItem.chatId,\n    sessionId: formatterItem.sessionId,\n    validatedText: formatterItem.directOutput\n  };\n}\n\nlet output = item.output || '';\n\n// If LLM output echoed SKIP\nif (output.startsWith('SKIP:')) {\n  output = output.replace(/^SKIP:\\s*/i, '');\n}\n\n// 1. Block unauthorized dosage prescription attempts\nif (/(take|prescribe)\\s+\\d+\\s*(mg|ml|tablets?)\\s+\\d+\\s*times/i.test(output)) {\n  output = output.replace(/(take|prescribe)\\s+\\d+\\s*(mg|ml|tablets?)\\s+\\d+\\s*times/gi, 'take as advised by your doctor');\n}\n\n// 2. Prevent system prompt, connection string, or schema leaks\nif (/system_directives|systemMessage|MONGO_URI|JWT_SECRET|host\\.docker\\.internal/i.test(output)) {\n  output = 'Tamara medical record sambandhit mahiti mate krupaya hospital helpdesk athva consulting doctor no sampark karo.';\n}\n\nconst parserJson = $('Message Parser').first().json;\n\nreturn {\n  chatId: parserJson.chatId,\n  sessionId: parserJson.sessionId,\n  validatedText: output.trim()\n};"
+      },
+      "id": "d9b47e00-2c99-4f55-e477-8eca0a567c88",
+      "name": "Safety Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step: Gujlish Formatter — Ensures natural conversational tone in Roman Gujlish\nconst item = $input.first().json;\nlet text = item.validatedText || '';\n\n// Clean up robotic prefixes\ntext = text\n  .replace(/^Certainly!\\s*/i, '')\n  .replace(/^How may I assist you\\?\\s*/i, '')\n  .replace(/^As an AI health assistant,\\s*/i, '');\n\n// Ensure courteous closing if not present and text is non-empty\nif (text && !text.includes('doctor') && !text.includes('ડોક્ટર')) {\n  text += '\\n\\n_Vadhare jankari mate OPD doctor ni consultation helpful raheshe._';\n}\n\nreturn {\n  chatId: item.chatId,\n  sessionId: item.sessionId,\n  output: text.trim()\n};"
+      },
+      "id": "e0c58f11-3d00-4a66-f588-9fdb1b678d99",
+      "name": "Gujlish Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://openwa-g0m6.onrender.com/api/sessions/207513ad-f6c6-4a87-b1c3-269b993de448/messages/send-text",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, text: $json.output }) }}",
+        "options": {}
+      },
+      "id": "e681c1c2-3c77-45ab-988e-aacf745d3fc5",
+      "name": "WhatsApp Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        180
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "lc3KBgrPS22jUkoJ",
+          "name": "Bearer Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Message Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Parser": {
+      "main": [
+        [
+          {
+            "node": "Patient Session / Authentication Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient Session / Authentication Check": {
+      "main": [
+        [
+          {
+            "node": "Intent Evaluator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Evaluator": {
+      "main": [
+        [
+          {
+            "node": "Intent Classification Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Classification Switch": {
+      "main": [
+        [
+          {
+            "node": "General AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Backend API (Authorized Records)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Safety Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safety Response": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backend API (Authorized Records)": {
+      "main": [
+        [
+          {
+            "node": "Record Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Formatter": {
+      "main": [
+        [
+          {
+            "node": "Medical AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medical AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Safety Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "General AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Safety Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safety Validation": {
+      "main": [
+        [
+          {
+            "node": "Gujlish Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gujlish Formatter": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "General AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Medical AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": []
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "General AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "Medical AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinical Records DB": {
+      "ai_tool": [
+        [
+          {
+            "node": "Medical AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinical Observations DB": {
+      "ai_tool": [
+        [
+          {
+            "node": "Medical AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medicine Knowledge DB": {
+      "ai_tool": [
+        [
+          {
+            "node": "General AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Medical AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e5f6a7b8-1234-4567-89ab-cdef01234567",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc1f62ee8ea35a8f532834aa5842d8b9e4260d9f7f6b61e89217a2e5a92d907f"
+  },
+  "nodeGroups": [],
+  "id": "8K8Krf1Pm4X8FMtg",
+  "tags": []
+}

@@ -1,6 +1,6 @@
 /**
  * 8 Common Clinical Disease Question Frameworks (SOCRATES & Adaptive Clinical Protocols)
- * Standardized for MediKiosk Pre-Consultation History Engine.
+ * Standardized for Sehat Pre-Consultation History Engine.
  */
 export const CLINICAL_DISEASE_FRAMEWORKS = {
   CHEST_PAIN: {

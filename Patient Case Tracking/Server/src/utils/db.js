@@ -1,24 +1,47 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { logger } from './logger.js';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/medikiosk_patient_tracking';
+// Resolve DNS SRV lookup issues on Windows / ISP DNS by setting reliable resolvers (Google & Cloudflare)
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (dnsErr) {
+  logger.warn('Failed to configure custom DNS servers for SRV resolution:', dnsErr);
+}
 
 /**
  * Initialize MongoDB connection pool with auto-reconnect and lifecycle event handlers
  */
 export const connectDB = async () => {
+  const primaryUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/medikiosk_patient_tracking';
+  const localFallbackUri = 'mongodb://127.0.0.1:27017/medikiosk_patient_tracking';
+
   try {
-    const conn = await mongoose.connect(MONGO_URI, {
+    const conn = await mongoose.connect(primaryUri, {
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 4000,
       socketTimeoutMS: 45000,
     });
 
     logger.info(`MongoDB Connected successfully to database: ${conn.connection.name} on ${conn.connection.host}`);
     return conn;
   } catch (error) {
-    logger.error('Failed to establish MongoDB connection on startup:', error);
-    // Don't kill process immediately in development so server can serve static/health with degraded state
+    logger.warn(`Failed to establish primary MongoDB connection: ${error.message}. Attempting local fallback...`);
+
+    if (primaryUri !== localFallbackUri) {
+      try {
+        const localConn = await mongoose.connect(localFallbackUri, {
+          maxPoolSize: 10,
+          serverSelectionTimeoutMS: 3000,
+          socketTimeoutMS: 45000,
+        });
+        logger.info(`MongoDB Local Fallback Connected successfully to database: ${localConn.connection.name} on ${localConn.connection.host}`);
+        return localConn;
+      } catch (localErr) {
+        logger.error('Failed to establish local MongoDB fallback connection as well:', localErr);
+      }
+    }
+
     if (process.env.NODE_ENV === 'production') {
       process.exit(1);
     }

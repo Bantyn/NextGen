@@ -200,11 +200,11 @@ export const VoiceVisualizer3D = ({
 
     // 10. High-Performance Render Loop
     let animationFrameId;
-    const clock = new THREE.Clock();
+    const startTime = performance.now();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
+      const elapsedTime = (performance.now() - startTime) * 0.001;
       const active = stateRef.current.isRecording;
 
       const speed = active ? 3.2 : 0.9;

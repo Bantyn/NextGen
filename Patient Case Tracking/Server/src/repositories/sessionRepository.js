@@ -26,7 +26,7 @@ export class SessionRepository {
     return ClinicalSession.findOneAndUpdate(
       { session_id: sessionId },
       { $set: updateData },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -34,7 +34,7 @@ export class SessionRepository {
     return ClinicalSession.findOneAndUpdate(
       { session_id: sessionId },
       { $set: { clinical_summary: summary } },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 

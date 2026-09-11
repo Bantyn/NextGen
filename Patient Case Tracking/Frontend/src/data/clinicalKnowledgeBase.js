@@ -1,5 +1,5 @@
 /**
- * MediKiosk Clinical Knowledge Base (CKB)
+ * Sehat Clinical Knowledge Base (CKB)
  * 
  * Safety & Architecture Guarantee:
  * - This knowledge base does NOT diagnose diseases.
@@ -105,6 +105,152 @@ export const CLINICAL_KNOWLEDGE_BASE = [
       "chest pain with fainting",
       "chest pain with severe sweating",
       "crushing chest pain radiating to left arm"
+    ]
+  },
+
+  // 1.1 COUGH & RESPIRATORY
+  {
+    complaint_id: "ckb_cough",
+    complaint: "cough",
+    synonyms: [
+      "cold and cough",
+      "cough and cold",
+      "chest congestion",
+      "productive cough",
+      "dry cough",
+      "bronchitis",
+      "cough / cold",
+      "phlegm",
+      "sputum",
+      "ખાંસી",
+      "ઉધરસ",
+      "કફ",
+      "શરદી અને ખાંસી",
+      "ગળામાં ખારાશ",
+      "છાતીમાં કફ ભરાવો",
+      "खांसी",
+      "बलगम वाली खांसी",
+      "सूखी खांसी",
+      "छाती में जकड़न",
+      "गले में खराश"
+    ],
+    assessment_dimensions: [
+      "duration",
+      "type_dry_wet",
+      "sputum_color",
+      "breathlessness",
+      "fever",
+      "chest_pain",
+      "hemoptysis",
+      "night_sweats",
+      "smoking"
+    ],
+    completion_criteria: ["duration", "type_dry_wet", "breathlessness"],
+    questions: [
+      {
+        dimension: "duration",
+        priority: 10,
+        question: {
+          "en-IN": "How long have you had this cough? Is it recent (few days) or ongoing for weeks?",
+          "hi-IN": "यह खांसी आपको कितने समय से है? क्या यह कुछ दिनों से है या कई हफ्तों से?",
+          "gu-IN": "આ ખાંસી/ઉધરસ તમને કેટલા સમયથી છે? થોડા દિવસથી છે કે ઘણા સમયથી ચાલે છે?"
+        },
+        quick_chips: {
+          "en-IN": ["2 to 3 days", "About 5 days", "1 to 2 weeks", "More than 3 weeks", "3 months or more"],
+          "hi-IN": ["2-3 दिन से", "लगभग 5 दिन से", "1-2 हफ्ते से", "3 हफ्ते से अधिक", "3 महीने या ज्यादा"],
+          "gu-IN": ["૨-૩ દિવસથી", "૫ દિવસથી", "૧-૨ અઠવાડિયાથી", "૩ અઠવાડિયાથી વધુ", "૩ મહિનાથી"]
+        }
+      },
+      {
+        dimension: "type_dry_wet",
+        priority: 9,
+        question: {
+          "en-IN": "Is the cough dry and tickling, or are you bringing up phlegm/mucus?",
+          "hi-IN": "क्या खांसी सूखी है, या खांसने पर बलगम/कफ बाहर निकल रहा है?",
+          "gu-IN": "શું ખાંસી સૂકી છે, કે ખાંસતી વખતે કફ/બળગમ નીકળે છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Dry tickling cough", "Productive with phlegm", "Watery mucus", "Severe hacking cough"],
+          "hi-IN": ["सूखी खांसी", "बलगम/कफ के साथ", "पानी जैसा पतला कफ", "लगातार तेज खांसी"],
+          "gu-IN": ["સૂકી ખાંસી", "કફ/બળગમ સાથે", "પાતળો કફ", "સતત આવતી ખાંસી"]
+        }
+      },
+      {
+        dimension: "sputum_color",
+        priority: 8,
+        question: {
+          "en-IN": "What color is the phlegm? Is it clear/white, thick yellow, green, or rust-colored?",
+          "hi-IN": "बलगम का रंग कैसा है? क्या यह सफेद, पीला, हरा या किसी अन्य रंग का है?",
+          "gu-IN": "કફનો રંગ કેવો છે? સફેદ, પીળો કે લીલો?"
+        },
+        quick_chips: {
+          "en-IN": ["Clear / White phlegm", "Yellow / Green phlegm", "Rust / Brownish", "No phlegm / Dry"],
+          "hi-IN": ["सफेद/पारदर्शी कफ", "पीला या हरा बलगम", "कत्थई/भूरा", "बलगम नहीं है"],
+          "gu-IN": ["સફેદ કફ", "પીળો કે લીલો કફ", "ઘાટો લાલાશ પડતો", "કફ નથી / સૂકી"]
+        }
+      },
+      {
+        dimension: "breathlessness",
+        priority: 8,
+        question: {
+          "en-IN": "Are you having any wheezing, chest tightness, or difficulty breathing?",
+          "hi-IN": "क्या सीने में सीटी जैसी आवाज, जकड़न या सांस लेने में परेशानी हो रही है?",
+          "gu-IN": "શું શ્વાસ લેવામાં તકલીફ, સીટી જેવો અવાજ કે છાતીમાં જકડાઈ જવાની તકલીફ થાય છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Wheezing / whistling sound", "Shortness of breath on walking", "Breathless even at rest", "Normal breathing"],
+          "hi-IN": ["सीटी/घरघराहट की आवाज", "चलने पर सांस फूलना", "बैठे-बैठे भी सांस फूलना", "सांस सामान्य है"],
+          "gu-IN": ["સીટી જેવો અવાજ આવે છે", "ચાલતી વખતે શ્વાસ ચડે છે", "બેઠા-બેઠા પણ શ્વાસ ચડે છે", "ના, શ્વાસ સામાન્ય છે"]
+        }
+      },
+      {
+        dimension: "fever_associated",
+        priority: 7,
+        question: {
+          "en-IN": "Do you also have a fever, chills, or body aches along with the cough?",
+          "hi-IN": "क्या खांसी के साथ बुखार, कंपकंपी या बदन दर्द भी है?",
+          "gu-IN": "શું ખાંસી સાથે તાવ, ધ્રુજારી કે શરીરમાં દુખાવો પણ થાય છે?"
+        },
+        quick_chips: {
+          "en-IN": ["High fever with chills", "Mild body ache", "No fever at all"],
+          "hi-IN": ["तेज बुखार और ठंड", "हल्का बदन दर्द", "कोई बुखार नहीं"],
+          "gu-IN": ["તાવ અને ધ્રુજારી છે", "હળવું કળતર છે", "ના, બિલકુલ તાવ નથી"]
+        }
+      },
+      {
+        dimension: "chronic_risk_factors",
+        priority: 8,
+        question: {
+          "en-IN": "Do you smoke or have tobacco exposure, or have you noticed weight loss or night sweats?",
+          "hi-IN": "क्या आप बीड़ी, सिगरेट या तंबाकू का सेवन करते हैं, या वजन घटने/रात में पसीना आने की समस्या है?",
+          "gu-IN": "શું તમે બીડી, સિગારેટ કે તમાકુનું સેવન કરો છો, અથવા વજન ઘટવું કે રાત્રે પરસેવો વળવાની તકલીફ છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Smoke cigarettes / bidi", "Weight loss / night sweats", "History of asthma / allergies", "No smoking or weight loss"],
+          "hi-IN": ["सिगरेट/बीड़ी पीते हैं", "वजन कम हुआ / रात में पसीना", "अस्थमा/एलर्जी की शिकायत", "नहीं, ऐसा कुछ नहीं"],
+          "gu-IN": ["બીડી/સિગારેટ પીવાની ટેવ છે", "વજન ઘટી ગયું છે / પરસેવો", "અસ્થમા કે એલર્જી છે", "ના, એવું કોઈ લક્ષણ નથી"]
+        }
+      },
+      {
+        dimension: "hemoptysis",
+        priority: 9,
+        question: {
+          "en-IN": "Have you noticed any fresh blood or reddish streaks in your cough or sputum?",
+          "hi-IN": "क्या खांसी या बलगम में कभी खून के छींटे या लाल रंग दिखा है?",
+          "gu-IN": "શું કફ કે ઉધરસમાં લોહીના અંશ કે લાલ રંગનું લોહી જણાયું છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Yes, blood in cough", "Dark streaks", "No blood at all"],
+          "hi-IN": ["हाँ, खांसी में खून दिखा", "कत्थई धागे जैसे", "नहीं, बिल्कुल खून नहीं"],
+          "gu-IN": ["હા, ખાંસીમાં લોહી નીકળ્યું", "ઘાટા ડાઘા દેખાયા", "ના, બિલકુલ લોહી નથી"]
+        }
+      }
+    ],
+    red_flag_indicators: [
+      "coughing up blood (hemoptysis)",
+      "severe stridor or inability to speak full sentences",
+      "cough with high fever and sudden pleuritic chest pain",
+      "chronic cough >3 weeks with unexplained weight loss and drenching night sweats"
     ]
   },
 
@@ -746,6 +892,88 @@ export const CLINICAL_KNOWLEDGE_BASE = [
       "dizziness with sudden speech slurring or one-sided arm weakness",
       "dizziness accompanied by severe chest pressure or palpitations",
       "dizziness with severe sudden ataxia (inability to stand or walk)"
+    ]
+  },
+  // 9. ACUTE DIARRHEA & LOOSE MOTIONS
+  {
+    complaint_id: "ckb_diarrhea",
+    complaint: "Acute Diarrhea / Loose Motions",
+    synonyms: [
+      "diarrhea", "loose motions", "watery stool", "watery diarrhea", "gastroenteritis", "stomach upset", "dysentery",
+      "ઝાડા", "પાણી જેવી ટોઈલતે", "પાણી જેવા ઝાડા", "લૂઝ મોશન", "પાતળા ઝાડા", "ઉલટી-ઝાડા", "ટોયલેટ", "ટોઈલતે",
+      "તરસ", "સ્તૂલ", "દસ્ત", "लूज मोशन", "पतले दस्त", "पानी जैसे दस्त", "उल्टी दस्त", "पेट खराब"
+    ],
+    assessment_dimensions: [
+      "frequency",
+      "hydration_status",
+      "blood_in_stool",
+      "associated_symptoms",
+      "duration"
+    ],
+    completion_criteria: ["frequency", "hydration_status", "blood_in_stool"],
+    questions: [
+      {
+        dimension: "frequency",
+        priority: 10,
+        question: {
+          "en-IN": "How many episodes or times have you had loose or watery motions today?",
+          "hi-IN": "आज आपको कितनी बार पानी जैसे पतले दस्त या लूज मोशन हुए हैं?",
+          "gu-IN": "આજે તમને કેટલી વાર પાણી જેવી ટોઈલતે કે ઝાડા થયા છે?"
+        },
+        quick_chips: {
+          "en-IN": ["1 to 2 times", "3 to 5 times", "More than 5 times", "Continuous watery stools"],
+          "hi-IN": ["1 से 2 बार", "3 से 5 बार", "5 से अधिक बार", "लगातार पानी जैसे दस्त"],
+          "gu-IN": ["૧ થી ૨ વાર", "૩ થી ૫ વાર", "૫ થી વધુ વાર", "વારંવાર પાણી જેવી ટોઈલતે"]
+        }
+      },
+      {
+        dimension: "hydration_status",
+        priority: 9,
+        question: {
+          "en-IN": "Are you experiencing extreme thirst, dizziness, dry mouth, or reduced urine output?",
+          "hi-IN": "क्या आपको बहुत ज्यादा प्यास लग रही है, चक्कर आ रहे हैं, मुंह सूख रहा है या पेशाब कम आ रहा है?",
+          "gu-IN": "શું તમને ખૂબ વધારે તરસ લાગે છે, ચક્કર આવે છે, મોં સુકાય છે કે પેશાબ ઓછો થયો છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Extreme thirst & dizziness", "Dry mouth only", "Feeling weak", "No dehydration signs"],
+          "hi-IN": ["बहुत प्यास और चक्कर", "सिर्फ मुंह सूख रहा है", "कमजोरी लग रही है", "डिहाइड्रेशन के कोई लक्षण नहीं"],
+          "gu-IN": ["ખૂબ તરસ અને ચક્કર છે", "માત્ર મોં સુકાય છે", "નબળાઈ લાગે છે", "ના, હાઈડ્રેશન સામાન્ય છે"]
+        }
+      },
+      {
+        dimension: "blood_in_stool",
+        priority: 9,
+        question: {
+          "en-IN": "Have you noticed any blood, black tarry appearance, or mucus in the stools?",
+          "hi-IN": "क्या दस्त में खून, कालापन या आंव (म्यूकस) आ रहा है?",
+          "gu-IN": "શું ટોઈલતે કે ઝાડામાં લોહી, કાળો રંગ કે ચીકાશ (આમ) જોવા મળ્યું છે?"
+        },
+        quick_chips: {
+          "en-IN": ["No blood or mucus", "Yes, blood is present", "Mucus only", "Dark black stool"],
+          "hi-IN": ["कोई खून नहीं", "हाँ, खून आ रहा है", "सिर्फ आंव/म्यूकस है", "काला मल"],
+          "gu-IN": ["ના, લોહી કે ચીકાશ નથી", "હા, લોહી દેખાયું છે", "માત્ર ચીકાશ છે", "કાળા રંગની ટોઈલતે"]
+        }
+      },
+      {
+        dimension: "associated_symptoms",
+        priority: 8,
+        question: {
+          "en-IN": "Do you also have abdominal cramping, vomiting, or fever?",
+          "hi-IN": "क्या पेट में मरोड़/दर्द, उल्टी या बुखार भी है?",
+          "gu-IN": "સાથે પેટમાં ચૂક કે દુખાવો, ઉલટી અથવા તાવ પણ છે?"
+        },
+        quick_chips: {
+          "en-IN": ["Abdominal cramps present", "Vomiting and nausea", "Fever present", "No other symptoms"],
+          "hi-IN": ["पेट में मरोड़ है", "उल्टी और जी मिचलाना", "बुखार है", "कोई अन्य लक्षण नहीं"],
+          "gu-IN": ["પેટમાં ચૂક આવે છે", "ઉલટી થાય છે", "તાવ છે", "ના, માત્ર ઝાડા છે"]
+        }
+      }
+    ],
+    red_flag_indicators: [
+      "blood in stool or black tarry stools (hematochezia/melena)",
+      "severe dehydration signs: sunken eyes, lethargy, unable to drink fluids",
+      "persistent high fever with acute severe diarrhea",
+      "diarrhea with severe unremitting abdominal pain"
     ]
   }
 ];

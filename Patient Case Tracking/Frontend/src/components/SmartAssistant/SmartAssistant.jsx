@@ -3,7 +3,7 @@ import { SmartAssistantButton } from './SmartAssistantButton';
 import { SmartAssistantPanel } from './SmartAssistantPanel';
 import { sendAssistantMessage } from '../../services/smartAssistantService';
 
-const STORAGE_KEY = 'medikiosk_smart_assistant_messages';
+const STORAGE_KEY = 'sehat_smart_assistant_messages';
 
 /**
  * SmartAssistant Master Component
@@ -12,19 +12,19 @@ const STORAGE_KEY = 'medikiosk_smart_assistant_messages';
 export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [language, setLanguage] = useState(() => {
-    return sessionStorage.getItem('medikiosk_language') || 'English';
+    return sessionStorage.getItem('sehat_language') || sessionStorage.getItem('medikiosk_language') || 'English';
   });
 
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const saved = sessionStorage.getItem(STORAGE_KEY) || sessionStorage.getItem('medikiosk_smart_assistant_messages');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
 
     return [
       {
         role: 'assistant',
-        content: 'Hello! I am your **MediKiosk Smart AI Assistant**. How may I assist you with website navigation, medicine details, or nominal symptom guidance today?',
+        content: 'Hello! I am your **Sehat Smart AI Assistant**. How may I assist you with website navigation, medicine details, or nominal symptom guidance today?',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         urgent: false,
         requires_doctor: false,
@@ -45,13 +45,13 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
   // Update initial greeting when language changes
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
-    sessionStorage.setItem('medikiosk_language', newLang);
+    sessionStorage.setItem('sehat_language', newLang);
 
-    let greeting = 'Hello! I am your MediKiosk Smart AI Assistant. How may I help you today?';
+    let greeting = 'Hello! I am your Sehat Smart AI Assistant. How may I help you today?';
     if (newLang === 'Hindi') {
-      greeting = 'नमस्ते! मैं आपका MediKiosk स्मार्ट AI सहायक हूँ। आज मैं वेबसाइट नेविगेशन, दवाइयों की जानकारी या सामान्य स्वास्थ्य सलाह में आपकी क्या मदद कर सकता हूँ?';
+      greeting = 'नमस्ते! मैं आपका Sehat स्मार्ट AI सहायक हूँ। आज मैं वेबसाइट नेविगेशन, दवाइयों की जानकारी या सामान्य स्वास्थ्य सलाह में आपकी क्या मदद कर सकता हूँ?';
     } else if (newLang === 'Gujarati') {
-      greeting = 'નમસ્તે! હું તમારો MediKiosk સ્માર્ટ AI સહાયક છું. આજે હું વેબસાઇટ નેવિગેશન, દવાઓની માહિતી કે સામાન્ય સ્વાસ્થ્ય માર્ગદર્શનમાં તમારી શું મદદ કરી શકું?';
+      greeting = 'નમસ્તે! હું તમારો Sehat સ્માર્ટ AI સહાયક છું. આજે હું વેબસાઇટ નેવિગેશન, દવાઓની માહિતી કે સામાન્ય સ્વાસ્થ્ય માર્ગદર્શનમાં તમારી શું મદદ કરી શકું?';
     }
 
     setMessages((prev) => [
@@ -112,7 +112,7 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
       userContext: {
         user_id: 'web-user',
         role: defaultRole,
-        session_id: 'session-' + (sessionStorage.getItem('medikiosk_patient_phone') || 'global'),
+        session_id: 'session-' + (sessionStorage.getItem('sehat_patient_phone') || sessionStorage.getItem('medikiosk_patient_phone') || 'global'),
       },
       conversationHistory: historyForContext,
     });
@@ -123,10 +123,16 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
       role: 'assistant',
       content: response.message || "I'm sorry, I could not process your query. Please try again.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      urgent: Boolean(response.urgent),
+      urgent: Boolean(response.urgent || response.risk?.level === 'EMERGENCY'),
       requires_doctor: Boolean(response.requires_doctor),
       data: response.data || null,
       intent: response.intent || 'GENERAL',
+      specialty: response.specialty || null,
+      risk: response.risk || null,
+      doctors: response.doctors || response.data?.doctors || [],
+      availability: response.availability || response.data?.availability || [],
+      actions: response.actions || [],
+      sources: response.sources || [],
       animate: true,
     };
 
@@ -134,6 +140,19 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
 
     if (!isOpen) {
       setUnreadCount((c) => c + 1);
+    }
+  };
+
+  const handleActionClick = (action) => {
+    if (!action) return;
+    if (action.type === 'CALL_HOSPITAL') {
+      window.location.href = `tel:${action.phone || '108'}`;
+    } else if (action.type === 'NAVIGATE') {
+      if (action.route) window.location.href = action.route;
+    } else if (action.type === 'VIEW_OPD_QUEUE') {
+      window.location.href = '/opd-queue';
+    } else if (action.label) {
+      handleSendMessage(action.label);
     }
   };
 
@@ -147,6 +166,7 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
         messages={messages}
         isLoading={isLoading}
         onSendMessage={handleSendMessage}
+        onActionClick={handleActionClick}
         onClearChat={handleClearChat}
         language={language}
         onLanguageChange={handleLanguageChange}

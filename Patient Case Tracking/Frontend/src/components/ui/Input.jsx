@@ -28,7 +28,7 @@ export const Input = ({
       {label && (
         <label
           htmlFor={inputId}
-          className="text-xs font-medium text-[var(--text-secondary)] flex items-center justify-between"
+          className="block text-xs font-medium uppercase tracking-wider text-slate-600 flex items-center justify-between mb-0.5"
         >
           <span>
             {label}
@@ -39,7 +39,7 @@ export const Input = ({
 
       <div className="relative flex items-center">
         {Icon && (
-          <div className="absolute left-3.5 text-[var(--text-muted)] pointer-events-none flex items-center justify-center">
+          <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
             <Icon className="w-4 h-4" />
           </div>
         )}
@@ -48,15 +48,15 @@ export const Input = ({
           id={inputId}
           type={resolvedType}
           required={required}
-          className={`w-full text-sm font-normal rounded-xl bg-[var(--surface-input)] border transition-all duration-200 outline-none
-            text-[var(--text-main)] placeholder:text-[var(--text-muted)]
+          className={`w-full text-sm font-normal rounded-xl bg-white border transition-all duration-200 outline-none
+            text-slate-900 placeholder:text-slate-400
             ${Icon ? 'pl-10' : 'pl-3.5'}
             ${isPassword ? 'pr-10' : 'pr-3.5'}
             py-2.5
             ${
               error
-                ? 'border-rose-500/80 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                : 'border-[var(--border-subtle)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]'
+                ? 'border-rose-500/80 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20'
+                : 'border-slate-200 focus:border-slate-400 focus:ring-1 focus:ring-slate-400'
             }`}
           {...props}
         />
@@ -66,7 +66,7 @@ export const Input = ({
             type="button"
             tabIndex={-1}
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-md transition cursor-pointer"
+            className="absolute right-3 text-slate-400 hover:text-slate-700 p-1 rounded-md transition cursor-pointer"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -75,12 +75,12 @@ export const Input = ({
       </div>
 
       {error ? (
-        <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-0.5 animate-fadeIn">
+        <div className="flex items-center gap-1.5 text-xs text-rose-500 mt-0.5 animate-fadeIn">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span>{error}</span>
         </div>
       ) : helperText ? (
-        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{helperText}</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">{helperText}</p>
       ) : null}
     </div>
   );

@@ -68,10 +68,10 @@ export const PatientCheckinView = () => {
 
     const consentText =
       formData.preferredLanguage === 'gu-IN'
-        ? 'નમસ્તે. મેડીકિયોસ્ક પ્લેટફોર્મ તમારા અવાજ અને દસ્તાવેજોનું વિશ્લેષણ કરીને ડૉક્ટર માટે મેડિકલ સમરી તૈયાર કરે છે. તમારો ડેટા સુરક્ષિત છે અને માત્ર આ તપાસ પૂરતો જ ઉપયોગમાં લેવાશે. જો તમે સંમત હોવ તો આગળ વધો.'
+        ? 'નમસ્તે. સેહત પ્લેટફોર્મ તમારા અવાજ અને દસ્તાવેજોનું વિશ્લેષણ કરીને ડૉક્ટર માટે મેડિકલ સમરી તૈયાર કરે છે. તમારો ડેટા સુરક્ષિત છે અને માત્ર આ તપાસ પૂરતો જ ઉપયોગમાં લેવાશે. જો તમે સંમત હોવ તો આગળ વધો.'
         : formData.preferredLanguage === 'hi-IN'
-        ? 'नमस्ते। मेडीकियोस्क आपके वॉइस और मेडिकल रिपोर्ट्स का सुरक्षित विश्लेषण करके डॉक्टर के लिए क्लिनिकल हिस्ट्री तैयार करता है। आपका डेटा पूरी तरह सुरक्षित है। आगे बढ़ने के लिए सहमति दें।'
-        : 'Welcome to MediKiosk. We securely capture your voice history and medical documents to prepare an automated clinical summary for your physician under the DPDP Act 2023.';
+        ? 'नमस्ते। सेहत आपके वॉइस और मेडिकल रिपोर्ट्स का सुरक्षित विश्लेषण करके डॉक्टर के लिए क्लिनिकल हिस्ट्री तैयार करता है। आपका डेटा पूरी तरह सुरक्षित है। आगे बढ़ने के लिए सहमति दें।'
+        : 'Welcome to Sehat. We securely capture your voice history and medical documents to prepare an automated clinical summary for your physician under the DPDP Act 2023.';
 
     const utterance = new SpeechSynthesisUtterance(consentText);
     utterance.lang = formData.preferredLanguage;
@@ -316,7 +316,7 @@ export const PatientCheckinView = () => {
           </div>
 
           <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-            I hereby authorize MediKiosk to process my spoken symptom answers, digitize previous clinical reports, and compile an EHR summary for my treating physician. Temporary audio streams are purged immediately upon session completion.
+            I hereby authorize Sehat to process my spoken symptom answers, digitize previous clinical reports, and compile an EHR summary for my treating physician. Temporary audio streams are purged immediately upon session completion.
           </p>
 
           <div className="space-y-2 pt-1">

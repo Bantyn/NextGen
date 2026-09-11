@@ -47,6 +47,18 @@ const MedicalDocumentSchema = new mongoose.Schema(
       default: 'UPLOADED',
       index: true,
     },
+    confidence_score: {
+      type: Number,
+      default: 0.9,
+    },
+    requires_doctor_verification: {
+      type: Boolean,
+      default: false,
+    },
+    verification_notes: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true }
 );

@@ -173,6 +173,7 @@ export const PatientIntakeView = () => {
               defaultLanguage={patientData.preferredLanguage}
               opdMode={patientData.opdMode}
               onClinicalStateUpdated={(state) => {
+                sessionStorage.setItem('sehat_clinical_state', JSON.stringify(state));
                 sessionStorage.setItem('medikiosk_clinical_state', JSON.stringify(state));
               }}
               onFinishIntake={handleFinishIntake}

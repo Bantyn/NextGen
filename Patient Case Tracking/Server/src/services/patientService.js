@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 import { patientRepository } from '../repositories/patientRepository.js';
 import { consentRepository } from '../repositories/consentRepository.js';
+import { whatsappService } from './whatsappService.js';
 import { buildPaginationMeta } from '../utils/apiResponse.js';
 import { ApiError } from '../utils/apiError.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Patient Service — Pure Domain Business Logic for Patient Identity & Profiles
@@ -30,7 +32,41 @@ export class PatientService {
       current_status: 'CHECKED_IN',
     });
 
-    return patient;
+    const token_number = payload.token_number || `TK-${Math.floor(Math.random() * 80 + 101)}`;
+    const successUrl = process.env.FRONTEND_SUCCESS_URL || 'http://localhost:5173/patient/success';
+
+    // Asynchronously dispatch WhatsApp registration & OPD check-in notification via OpenWA
+    if (patient.phone) {
+      whatsappService
+        .sendPatientRegistrationSuccess({
+          phone: patient.phone,
+          patient_id: patient.patient_id,
+          first_name: patient.first_name,
+          last_name: patient.last_name,
+          token_number,
+          session_id: payload.session_id,
+          opd_mode: payload.opd_mode || 'AYUSH',
+          abha_id: payload.abha_id,
+          language: payload.language || 'gu-IN',
+        })
+        .then((res) => {
+          if (res?.sent) {
+            logger.info(`[WhatsApp Notification]: Sent registration details to ${patient.phone}`);
+          } else {
+            logger.warn(`[WhatsApp Notification Notice]: Dispatch status for ${patient.phone}: ${res?.error || 'Preserved'}`);
+          }
+        })
+        .catch((err) => {
+          logger.warn(`[WhatsApp Notification Error]: Could not send to ${patient.phone}: ${err.message}`);
+        });
+    }
+
+    const patientObj = patient.toObject ? patient.toObject() : patient;
+    return {
+      ...patientObj,
+      token_number,
+      status_url: successUrl,
+    };
   }
 
   async searchPatients({ search, page = 1, limit = 20 } = {}) {

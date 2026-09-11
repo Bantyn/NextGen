@@ -31,15 +31,34 @@ import {
 } from "../../services/clinicalConversationEngine";
 
 // ============================================================================
-// MediKiosk TTS Configuration
+// Sehat TTS Configuration
 // ============================================================================
+const PREFERRED_TTS_ENGINE = import.meta.env.VITE_TTS_ENGINE || "openrouter";
 const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
-const FISH_AUDIO_MODEL = "fish-audio/s2.1-pro-free:free";
+const FISH_AUDIO_MODEL = import.meta.env.VITE_FISH_AUDIO_MODEL || "fish-audio/s2.1-pro";
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 
-export const MEDIKIOSK_FISH_VOICE_ID =
+// Circuit breaker helper to prevent repeated 429 network requests
+function isOpenRouterRateLimited() {
+  try {
+    const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
+    return until && Date.now() < Number(until);
+  } catch {
+    return false;
+  }
+}
+
+function markOpenRouterRateLimited() {
+  try {
+    sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 60 * 60 * 1000));
+  } catch {}
+}
+
+export const SEHAT_FISH_VOICE_ID =
+  import.meta.env.VITE_SEHAT_FISH_VOICE_ID ||
   import.meta.env.VITE_MEDIKIOSK_FISH_VOICE_ID ||
   "7f92f8afb8ec43bf81429cc1c9199cb1";
+export const MEDIKIOSK_FISH_VOICE_ID = SEHAT_FISH_VOICE_ID;
 
 const LANGUAGE_MAP = {
   "gu-IN": { name: "Gujarati", bcp47: "gu-IN" },
@@ -116,14 +135,16 @@ export const VoiceRecorder = ({
   const [isCallActive, setIsCallActive] = useState(false);
   const [isSpeakingTTS, setIsSpeakingTTS] = useState(false);
   const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState(null);
-  const [ttsSource, setTtsSource] = useState("OpenRouter Neural");
+  const [ttsSource, setTtsSource] = useState(
+    PREFERRED_TTS_ENGINE === "browser" ? "Browser Web Speech" : "OpenRouter Neural"
+  );
 
   // Dynamic Clinical State Memory
   const [clinicalState, setClinicalState] = useState(INITIAL_CLINICAL_STATE);
   const [redFlagAlert, setRedFlagAlert] = useState(null);
   const [sessionStatus, setSessionStatus] = useState("IN_PROGRESS");
   const [historyCompleted, setHistoryCompleted] = useState(false);
+      const [apiError, setApiError] = useState(null);
 
   const availableVoicesRef = useRef([]);
 
@@ -176,8 +197,11 @@ export const VoiceRecorder = ({
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
 
-  // Preload and cache browser voices for fallback
+  // Preload and cache browser voices for fallback, and clear legacy rate-limit cache
   useEffect(() => {
+    try {
+      sessionStorage.removeItem("sehat_openrouter_rate_limit_until");
+    } catch {}
     const loadVoices = () => {
       if ("speechSynthesis" in window) {
         availableVoicesRef.current = window.speechSynthesis.getVoices();
@@ -367,7 +391,7 @@ export const VoiceRecorder = ({
     }
   }, [resetTranscript, stopAudio, sessionStatus, historyCompleted]);
 
-  // Web Speech Synthesis Fallback
+  // Web Speech Synthesis Fallback with Intelligent Locale Matching
   const fallbackTTS = useCallback(
     (text) => {
       const cleanText = cleanAndTuneSpeech(text);
@@ -383,38 +407,50 @@ export const VoiceRecorder = ({
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       const targetLang = selectedLanguageRef.current || "gu-IN";
-      utterance.lang = LANGUAGE_MAP[targetLang]?.bcp47 || "gu-IN";
-      utterance.rate = 0.92;
-      utterance.pitch = 1.18;
+      const bcp47 = LANGUAGE_MAP[targetLang]?.bcp47 || targetLang || "gu-IN";
+      utterance.lang = bcp47;
+      utterance.rate = 0.94;
+      utterance.pitch = 0.90; // Deep, mature male clinical voice pitch
 
       const voices =
-        availableVoicesRef.current.length > 0
+        availableVoicesRef.current && availableVoicesRef.current.length > 0
           ? availableVoicesRef.current
           : window.speechSynthesis.getVoices();
 
-      const femaleVoice =
-        voices.find(
-          (v) =>
-            v.lang.startsWith(utterance.lang.substring(0, 2)) &&
-            (v.name.toLowerCase().includes("female") ||
-              v.name.toLowerCase().includes("kalpana") ||
-              v.name.toLowerCase().includes("zira") ||
-              v.name.toLowerCase().includes("swara") ||
-              v.name.toLowerCase().includes("samantha") ||
-              v.name.toLowerCase().includes("heera") ||
-              v.name.toLowerCase().includes("kavya") ||
-              v.name.toLowerCase().includes("shruti") ||
-              v.name.toLowerCase().includes("google")),
-        ) ||
-        voices.find(
-          (v) =>
-            v.name.toLowerCase().includes("female") ||
-            v.name.toLowerCase().includes("zira") ||
-            v.name.toLowerCase().includes("kalpana") ||
-            v.name.toLowerCase().includes("samantha"),
-        );
+      // Priority 1: Match exact locale (e.g., gu-IN, hi-IN, en-IN)
+      // Priority 2: Match language prefix (e.g., gu, hi, en)
+      const langPrefix = bcp47.split("-")[0].toLowerCase();
+      const langFull = bcp47.toLowerCase();
 
-      if (femaleVoice) utterance.voice = femaleVoice;
+      const matchingVoices = voices.filter((v) => {
+        const vLang = (v.lang || "").toLowerCase().replace("_", "-");
+        return vLang === langFull || vLang.startsWith(langPrefix);
+      });
+
+      // Dedicated Male Voice Filter
+      const isExplicitMale = (v) =>
+        /male|madhur|prabhat|niranjan|mohan|rohit|ravi|david|mark|george|guy|james|richard/i.test(v.name);
+      const isNotFemale = (v) =>
+        !/female|kalpana|zira|swara|samantha|heera|kavya|shruti|veena|neerja|anjali|priya/i.test(v.name);
+
+      let chosenVoice = null;
+      if (matchingVoices.length > 0) {
+        // Priority 1: Explicit male voice in target language (e.g., Madhur, Niranjan, Prabhat)
+        chosenVoice =
+          matchingVoices.find(isExplicitMale) ||
+          // Priority 2: Non-female voice in target language
+          matchingVoices.find(isNotFemale) ||
+          matchingVoices[0];
+      }
+
+      // If no language-matched voice, fallback to any system male voice
+      if (!chosenVoice) {
+        chosenVoice = voices.find(isExplicitMale);
+      }
+
+      if (chosenVoice) {
+        utterance.voice = chosenVoice;
+      }
 
       utterance.onstart = () => {
         setIsSpeakingTTS(true);
@@ -426,7 +462,7 @@ export const VoiceRecorder = ({
       };
 
       utterance.onerror = (err) => {
-        console.warn("Web Speech Synthesis error:", err);
+        console.warn("Web Speech Synthesis event notice:", err);
         resumeListeningSafe();
       };
 
@@ -436,7 +472,7 @@ export const VoiceRecorder = ({
   );
 
   /**
-   * Play Neural Speech via OpenRouter Fish Audio TTS Engine with Web Speech Fallback
+   * Play Neural Speech via OpenRouter Fish Audio TTS Engine with Instant Web Speech Fallback & Circuit Breaker
    */
   const speakAI = useCallback(
     async (text) => {
@@ -460,7 +496,12 @@ export const VoiceRecorder = ({
         }
       }, 16000);
 
-      if (!OPENROUTER_API_KEY) {
+      // Fast-path to Browser Speech if configured, key missing, or OpenRouter is rate-limited (HTTP 429)
+      if (
+        PREFERRED_TTS_ENGINE === "browser" ||
+        !OPENROUTER_API_KEY ||
+        isOpenRouterRateLimited()
+      ) {
         fallbackTTS(tunedText);
         return;
       }
@@ -469,7 +510,7 @@ export const VoiceRecorder = ({
         const payload = {
           model: FISH_AUDIO_MODEL,
           input: tunedText,
-          voice: "alloy",
+          voice: SEHAT_FISH_VOICE_ID || "7f92f8afb8ec43bf81429cc1c9199cb1",
           response_format: "mp3",
         };
 
@@ -479,12 +520,18 @@ export const VoiceRecorder = ({
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
             "HTTP-Referer": window.location.origin || "http://localhost:5173",
-            "X-Title": "MediKiosk Voice Assistant",
+            "X-Title": "Sehat Voice Assistant",
           },
           body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
+          if (response.status === 429 || response.status === 402) {
+            markOpenRouterRateLimited();
+            console.warn(
+              `[TTS Circuit Breaker] OpenRouter returned HTTP ${response.status} (Rate limit exceeded). Fast-switching to Browser Web Speech API.`
+            );
+          }
           throw new Error(`OpenRouter TTS status ${response.status}`);
         }
 
@@ -530,7 +577,7 @@ export const VoiceRecorder = ({
           resumeListeningSafe();
         };
 
-        audio.onerror = (e) => {
+        audio.onerror = () => {
           URL.revokeObjectURL(audioUrl);
           fallbackTTS(tunedText);
         };
@@ -544,19 +591,29 @@ export const VoiceRecorder = ({
   );
 
   /**
-   * Unified Hands-Free Auto-Submit (Voice, Text, and Touch Chips)
+   * Unified Hands-Free Auto-Submit (Voice, Text, and Touch Chips) with Strict Idempotency
    */
   const handleAutoSubmit = async (patientAnswerText) => {
-    if (!patientAnswerText || apiLoadingRef.current) return;
+    const trimmed = (patientAnswerText || "").trim();
+    if (!trimmed || apiLoadingRef.current) return;
+
+    // Immediate lock before any async gap to prevent multiple rapid clicks / duplicate voice events
+    apiLoadingRef.current = true;
+    setApiLoading(true);
 
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     SpeechRecognition.stopListening();
     resetTranscript();
 
+    const turnCount = messages.filter((m) => m.role === "patient").length + 1;
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const turnId = `turn_${turnCount}`;
+
     // 1. Add patient answer to chat stream
     const userMsg = {
+      id: messageId,
       role: "patient",
-      text: patientAnswerText,
+      text: trimmed,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -565,17 +622,12 @@ export const VoiceRecorder = ({
 
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
-
-    setApiLoading(true);
-    apiLoadingRef.current = true;
     setApiError(null);
 
-    const turnCount = updatedMessages.filter((m) => m.role === "patient").length;
-
     try {
-      // 2. Process via ClinicalConversationEngine
+      // 2. Process via ClinicalConversationEngine with unique Turn ID and Message ID
       const engineResult = await processPatientClinicalResponse({
-        patientText: patientAnswerText,
+        patientText: trimmed,
         clinicalState: clinicalStateRef.current,
         language: selectedLanguageRef.current,
         opdMode,
@@ -584,9 +636,12 @@ export const VoiceRecorder = ({
           content: m.text,
         })),
         turnCount,
+        sessionId,
+        messageId,
+        turnId,
       });
 
-      console.log("[ClinicalConversationEngine Result]:", engineResult);
+    //   console.log("[ClinicalConversationEngine Result]:", engineResult);
 
       if (engineResult.success) {
         const nextState = engineResult.clinical_state_update || clinicalStateRef.current;
@@ -605,12 +660,17 @@ export const VoiceRecorder = ({
 
           if (engineResult.doctor_alert) {
             sessionStorage.setItem(
+              "sehat_doctor_alert",
+              JSON.stringify(engineResult.doctor_alert)
+            );
+            sessionStorage.setItem(
               "medikiosk_doctor_alert",
               JSON.stringify(engineResult.doctor_alert)
             );
           }
 
           const aiMsg = {
+            id: `ai_${messageId}`,
             role: "assistant",
             text: engineResult.assistant_message,
             time: new Date().toLocaleTimeString([], {
@@ -619,7 +679,13 @@ export const VoiceRecorder = ({
             }),
             isRedFlag: true,
           };
-          setMessages((prev) => [...prev, aiMsg]);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "assistant" && last.text === engineResult.assistant_message) {
+              return prev;
+            }
+            return [...prev, aiMsg];
+          });
           speakAI(engineResult.assistant_message);
           return;
         }
@@ -631,6 +697,7 @@ export const VoiceRecorder = ({
           setDynamicChips([]);
 
           const aiMsg = {
+            id: `ai_${messageId}`,
             role: "assistant",
             text: engineResult.assistant_message,
             time: new Date().toLocaleTimeString([], {
@@ -639,7 +706,13 @@ export const VoiceRecorder = ({
             }),
             isComplete: true,
           };
-          setMessages((prev) => [...prev, aiMsg]);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "assistant" && last.text === engineResult.assistant_message) {
+              return prev;
+            }
+            return [...prev, aiMsg];
+          });
           speakAI(engineResult.assistant_message);
           return;
         }
@@ -650,6 +723,7 @@ export const VoiceRecorder = ({
         }
 
         const aiMsg = {
+          id: `ai_${messageId}`,
           role: "assistant",
           text: engineResult.assistant_message,
           time: new Date().toLocaleTimeString([], {
@@ -657,7 +731,13 @@ export const VoiceRecorder = ({
             minute: "2-digit",
           }),
         };
-        setMessages((prev) => [...prev, aiMsg]);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === "assistant" && last.text === engineResult.assistant_message) {
+            return prev;
+          }
+          return [...prev, aiMsg];
+        });
         speakAI(engineResult.assistant_message);
       }
     } catch (err) {

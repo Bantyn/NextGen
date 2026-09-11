@@ -35,3 +35,18 @@
   animation: gptWordFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Global Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: var(--r-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}

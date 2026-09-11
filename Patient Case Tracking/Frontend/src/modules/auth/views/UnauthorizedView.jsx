@@ -25,9 +25,9 @@ export const UnauthorizedView = () => {
 
   return (
     <div className="w-full min-h-[calc(100vh-160px)] flex items-center justify-center py-12 px-4 text-center">
-      <div className="max-w-md w-full rounded-[28px] bg-[var(--surface-card)] border border-rose-500/20 shadow-2xl backdrop-blur-2xl p-8 space-y-6">
+      <div className="max-w-md w-full rounded-[28px] bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-[0_8px_30px_-10px_rgba(0,0,0,0.04)] p-8 space-y-6">
         {/* Shield Alert Icon */}
-        <div className="w-16 h-16 rounded-3xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto shadow-lg">
+        <div className="w-16 h-16 rounded-3xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
           <ShieldAlert className="w-8 h-8" />
         </div>
 
@@ -35,22 +35,22 @@ export const UnauthorizedView = () => {
           <Badge variant="danger" size="sm" className="mb-2">
             403 • Access Restricted
           </Badge>
-          <h1 className="text-2xl font-normal text-[var(--text-main)] tracking-tight">
+          <h1 className="text-2xl font-normal text-slate-950 tracking-tight">
             Role Authorization Required
           </h1>
-          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-2 font-normal leading-relaxed">
-            Your current account (<span className="text-[var(--text-main)] font-medium">{user?.name || 'Staff User'}</span>) has role{' '}
-            <strong className="text-sky-400">{userRoleConfig.label || role}</strong>, which does not have permission to view this clinical module.
+          <p className="text-xs sm:text-sm text-slate-500 mt-2 font-normal leading-relaxed">
+            Your current account (<span className="text-slate-900 font-medium">{user?.name || 'Staff User'}</span>) has role{' '}
+            <strong className="text-sky-700 font-semibold">{userRoleConfig.label || role}</strong>, which does not have permission to view this clinical module.
           </p>
         </div>
 
         {/* Evaluator Quick Role Switch Box */}
-        <div className="p-4 rounded-2xl bg-[var(--surface-input)] border border-[var(--border-subtle)] text-left space-y-2">
-          <span className="text-[11px] font-medium text-amber-400 flex items-center gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5" />
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 text-left space-y-2">
+          <span className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-sky-600" />
             <span>Hackathon Evaluator Quick-Switch</span>
           </span>
-          <p className="text-[11px] text-[var(--text-muted)] leading-normal">
+          <p className="text-[11px] text-slate-500 leading-normal font-normal">
             Switch your active profile to Physician / Doctor to preview clinical case review & prescription features:
           </p>
           <Button
