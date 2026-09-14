@@ -2,7 +2,7 @@
 
 ## 1. Document Information
 
-- **Product Name**: MediKiosk — AI-Powered Patient-Facing Clinical History-Taking Platform
+- **Product Name**: Sehat — AI-Powered Patient-Facing Clinical History-Taking Platform
 - **Team Name**: NextGen
 - **Organization**: Ministry of Ayush
 - **Department**: All India Institute of Ayurveda (AIIA)
@@ -16,9 +16,9 @@
 
 ## 2. Product Overview
 
-**MediKiosk** is an intelligent, patient-facing clinical history-taking software platform designed to eliminate the diagnostic history bottleneck in busy Indian hospitals and AYUSH clinical institutions.
+**Sehat** is an intelligent, patient-facing clinical history-taking software platform designed to eliminate the diagnostic history bottleneck in busy Indian hospitals and AYUSH clinical institutions.
 
-By engaging patients in an autonomous, multilingual, voice-and-touch-guided interview prior to their doctor consultation, MediKiosk transforms raw patient symptoms and uploaded medical documents (prescriptions, lab reports, discharge summaries) into a structured, physician-ready clinical summary.
+By engaging patients in an autonomous, multilingual, voice-and-touch-guided interview prior to their doctor consultation, Sehat transforms raw patient symptoms and uploaded medical documents (prescriptions, lab reports, discharge summaries) into a structured, physician-ready clinical summary.
 
 The system acts purely as a **decision-support and information-structuring assistant**. It never provides autonomous medical diagnoses, prescribes treatment, or replaces the physician. Final clinical authority and record validation remain strictly with qualified healthcare professionals.
 
@@ -45,7 +45,7 @@ How might we enable patients entering crowded hospital OPDs to autonomously prov
 
 ## 5. Proposed Solution
 
-**MediKiosk** provides an intuitive kiosk/mobile interface that:
+**Sehat** provides an intuitive kiosk/mobile interface that:
 1. Identifies or registers the patient (with local demo ID or ABHA reference).
 2. Obtains explicit, granular consent for AI processing and data storage.
 3. Conducts a conversational, adaptive voice and touch-based clinical interview in the patient's preferred language.
@@ -67,12 +67,12 @@ How might we enable patients entering crowded hospital OPDs to autonomously prov
 
 ## 7. Non-Goals
 
-The following boundaries strictly define what the MediKiosk Hackathon MVP will **NOT** do:
+The following boundaries strictly define what the Sehat Hackathon MVP will **NOT** do:
 
-- ❌ **Autonomous Medical Diagnosis**: MediKiosk will NOT output diagnostic conclusions, disease probability scores, or treatment recommendations to the patient.
-- ❌ **Doctor Replacement**: MediKiosk does NOT replace physician judgment, physical examination, or clinical signoff.
+- ❌ **Autonomous Medical Diagnosis**: Sehat will NOT output diagnostic conclusions, disease probability scores, or treatment recommendations to the patient.
+- ❌ **Doctor Replacement**: Sehat does NOT replace physician judgment, physical examination, or clinical signoff.
 - ❌ **Live Production ABDM / Aadhaar Authorization**: The MVP will NOT perform live government API authentication against real Aadhaar/ABDM production servers. All identity flows utilize local demo tokens and sandbox reference IDs.
-- ❌ **E-Prescription Execution**: MediKiosk does NOT issue legal digital prescriptions or fulfill pharmacy orders directly.
+- ❌ **E-Prescription Execution**: Sehat does NOT issue legal digital prescriptions or fulfill pharmacy orders directly.
 
 ---
 

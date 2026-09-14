@@ -9,7 +9,7 @@
 
 ## 1. Executive Purpose
 
-The **MediKiosk Smart AI Assistant** is an enterprise-grade, secure, context-aware digital health assistant available globally across every page of the MediKiosk web application. It assists patients, visitors, and medical staff with:
+The **Sehat Smart AI Assistant** is an enterprise-grade, secure, context-aware digital health assistant available globally across every page of the Sehat web application. It assists patients, visitors, and medical staff with:
 
 1. **Website Navigation & Feature Guidance** (Kiosk Check-in, Voice Intake, Document OCR, Doctor Consultation Portal, Live Queue Tracking).
 2. **Approved Medicine Helper** (Querying structured therapeutic purpose, dosage forms, precautions, contraindications, side effects, and storage from MongoDB).
