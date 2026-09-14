@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw, Inbox } from 'lucide-react';
 import { PatientQueueRow } from './PatientQueueRow';
+import { Skeleton } from '../../../components/ui';
 
 /**
  * OPDQueueTable Component
@@ -47,7 +48,36 @@ export const OPDQueueTable = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {patients.length > 0 ? (
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={idx} className="animate-fadeIn">
+                  <td className="px-6 py-4">
+                    <Skeleton variant="text" className="w-16 h-5 rounded-lg" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-1.5">
+                      <Skeleton variant="text" className="w-32 h-4" />
+                      <Skeleton variant="text" className="w-24 h-3" />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton variant="text" className="w-20 h-4 rounded-full" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton variant="text" className="w-48 h-4" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton variant="text" className="w-16 h-5 rounded-full" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton variant="text" className="w-20 h-5 rounded-full" />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <Skeleton variant="text" className="w-20 h-8 rounded-full ml-auto" />
+                  </td>
+                </tr>
+              ))
+            ) : patients.length > 0 ? (
               patients.map((patient) => (
                 <PatientQueueRow
                   key={patient.sessionId || patient.id}

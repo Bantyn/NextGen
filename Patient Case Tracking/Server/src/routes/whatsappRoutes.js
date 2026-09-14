@@ -4,6 +4,7 @@ import {
   handleGetAuthorizedRecords,
   handleTriageAlert,
   handleSendRegistrationSuccess,
+  handleSendLoginOtp,
 } from '../controllers/whatsappController.js';
 
 const router = express.Router();
@@ -19,5 +20,8 @@ router.post('/triage-alert', handleTriageAlert);
 
 // 4. Patient registration & OPD check-in success notification with token & status url
 router.post('/send-registration-success', handleSendRegistrationSuccess);
+
+// 5. Send login OTP via WhatsApp
+router.post('/send-otp', handleSendLoginOtp);
 
 export default router;

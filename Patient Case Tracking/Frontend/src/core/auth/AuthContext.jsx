@@ -145,7 +145,8 @@ export const AuthProvider = ({ children }) => {
   const switchDemoRole = useCallback((role) => {
     const demo = DEMO_USERS.find((u) => u.role === role) || DEMO_USERS[0];
     const newUser = {
-      id: `usr_demo_${demo.role.toLowerCase()}`,
+      id: demo.patient_id || demo.id || `usr_demo_${demo.role.toLowerCase()}`,
+      patient_id: demo.patient_id || demo.id,
       name: demo.name,
       email: demo.email,
       role: demo.role,
@@ -161,15 +162,17 @@ export const AuthProvider = ({ children }) => {
    * Dedicated Patient Login (ABHA / Phone / Demo Profile)
    */
   const loginAsPatient = useCallback((patientData) => {
+    const pId = patientData?.patient_id || patientData?.id || 'PAT-146A5F03';
     const patientUser = {
-      id: patientData?.id || 'usr_patient_9011',
-      name: patientData?.name || 'Ramesh Patel',
-      email: patientData?.email || 'ramesh.patel@gmail.com',
-      phone: patientData?.phone || '+91 98765 43210',
-      abhaId: patientData?.abhaId || '91-4432-8812-9901',
+      id: pId,
+      patient_id: pId,
+      name: patientData?.name || 'Rajesh Patel',
+      email: patientData?.email || `${pId.toLowerCase()}@sehat.org`,
+      phone: patientData?.phone || '+91 98250 12345',
+      abhaId: patientData?.abhaId || `91-${pId.slice(-4)}-8812-9901`,
       role: ROLES.PATIENT,
       department: 'Patient Portal',
-      license: patientData?.abhaId || 'ABHA-9011',
+      license: patientData?.abhaId || `ABHA-${pId.slice(-4)}`,
     };
     const token = `jwt_patient_${patientUser.id}_${Date.now()}`;
     saveSession(token, patientUser);

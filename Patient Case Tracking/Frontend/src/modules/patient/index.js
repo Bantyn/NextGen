@@ -4,5 +4,11 @@ export { PatientSuccessView } from './views/PatientSuccessView';
 export { PatientDashboardView } from './views/PatientDashboardView';
 export { PatientLoginView } from './views/PatientLoginView';
 export { DocumentUploadZone } from './components/DocumentUploadZone';
+export {
+  fetchRegisteredPatients,
+  fetchPatientDashboardBundle,
+  registerAndCheckinPatient,
+  default as patientDashboardService,
+} from './services/patientDashboardService';
 
 

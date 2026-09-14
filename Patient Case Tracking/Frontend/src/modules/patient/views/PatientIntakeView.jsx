@@ -71,7 +71,7 @@ export const PatientIntakeView = () => {
     }));
   };
 
-  const handleFinishIntake = () => {
+  const handleFinishIntake = async () => {
     const structuredSummary = {
       ...patientData,
       uploadedCount: uploadedFiles.length,
@@ -79,6 +79,26 @@ export const PatientIntakeView = () => {
       ayushAssessments: patientData.opdMode === 'AYUSH' ? ayushAssessments : null,
       intakeTime: new Date().toLocaleTimeString(),
     };
+
+    try {
+      await fetch('http://localhost:5000/api/v1/whatsapp/send-registration-success', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: patientData.phone,
+          patient_id: patientData.patientId || patientData.id,
+          first_name: patientData.fullName,
+          last_name: '',
+          token_number: patientData.tokenNumber || `TK-${Math.floor(Math.random() * 80 + 101)}`,
+          session_id: patientData.sessionId,
+          opd_mode: patientData.opdMode,
+          abha_id: patientData.abhaId,
+          language: patientData.preferredLanguage
+        })
+      });
+    } catch (err) {
+      console.warn('Failed to dispatch whatsapp success', err);
+    }
 
     sessionStorage.setItem('patient_summary', JSON.stringify(structuredSummary));
     navigate('/patient/success');

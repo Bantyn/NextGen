@@ -1,16 +1,21 @@
 import React from 'react';
 import { Users, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { SkeletonStats } from '../../../components/ui';
 
 /**
  * DashboardStats Component
  * Displays the 4 primary clinical KPI cards.
  */
-export const DashboardStats = ({ stats, onTriageClick, onPendingClick, onCompletedClick }) => {
+export const DashboardStats = ({ stats, isLoading = false, onTriageClick, onPendingClick, onCompletedClick }) => {
+  if (isLoading) {
+    return <SkeletonStats count={4} />;
+  }
+
   const {
-    totalOPD = 28,
-    awaitingReview = 3,
-    emergencyTriage = 1,
-    completedToday = 24,
+    totalOPD = 0,
+    awaitingReview = 0,
+    emergencyTriage = 0,
+    completedToday = 0,
   } = stats || {};
 
   return (

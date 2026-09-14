@@ -14,6 +14,9 @@ import {
 import {
   DoctorDashboardView,
   DoctorCaseDetailView,
+  DoctorArchiveView,
+  DoctorAnalyticsView,
+  DoctorTemplatesView,
 } from '../modules/doctor';
 import {
   LoginView,
@@ -128,6 +131,36 @@ export const AppRoutes = () => {
               <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
                 <DoctorLayout>
                   <DoctorDashboardView />
+                </DoctorLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/archive"
+            element={
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
+                <DoctorLayout>
+                  <DoctorArchiveView />
+                </DoctorLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
+                <DoctorLayout>
+                  <DoctorAnalyticsView />
+                </DoctorLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/templates"
+            element={
+              <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
+                <DoctorLayout>
+                  <DoctorTemplatesView />
                 </DoctorLayout>
               </ProtectedRoute>
             }

@@ -197,44 +197,7 @@ export const Navbar = () => {
                       </div>
                     )}
 
-                    {/* Quick Role Switch for Testing */}
-                    <div className="p-2 border-b border-slate-100">
-                      <div className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 px-2 py-1">
-                        Switch Demo Persona:
-                      </div>
-                      <div className="space-y-1 mt-1">
-                        {DEMO_USERS.map((demo) => {
-                          const Icon =
-                            demo.role === ROLES.ADMIN
-                              ? ShieldCheck
-                              : demo.role === ROLES.PATIENT
-                              ? User
-                              : Stethoscope;
 
-                          return (
-                            <button
-                              key={demo.role}
-                              onClick={() => handleSwitchRole(demo.role)}
-                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition cursor-pointer ${
-                                role === demo.role
-                                  ? 'bg-slate-950 text-white font-medium'
-                                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <Icon className="w-3.5 h-3.5 shrink-0" />
-                                <span>
-                                  {demo.role.charAt(0) + demo.role.slice(1).toLowerCase()} ({demo.name.split(' ')[0]})
-                                </span>
-                              </div>
-                              {role === demo.role && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
 
                     <div className="pt-1">
                       <button
@@ -297,8 +260,7 @@ export const Navbar = () => {
                     <button
                       onClick={() => {
                         setLoginDropdownOpen(false);
-                        switchDemoRole(ROLES.DOCTOR);
-                        navigate('/doctor');
+                        navigate('/login');
                       }}
                       className="w-full flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-sky-50 text-left transition cursor-pointer group"
                     >
@@ -319,8 +281,7 @@ export const Navbar = () => {
                     <button
                       onClick={() => {
                         setLoginDropdownOpen(false);
-                        switchDemoRole(ROLES.ADMIN);
-                        navigate('/doctor');
+                        navigate('/login');
                       }}
                       className="w-full flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-purple-50 text-left transition cursor-pointer group"
                     >
@@ -336,18 +297,6 @@ export const Navbar = () => {
                         </p>
                       </div>
                     </button>
-
-                    {/* Standard Password Login Link */}
-                    <div className="pt-2 border-t border-slate-100 px-2 pb-1">
-                      <Link
-                        to="/login"
-                        onClick={() => setLoginDropdownOpen(false)}
-                        className="text-[11px] text-slate-500 hover:text-slate-900 flex items-center justify-between py-1"
-                      >
-                        <span>Staff Password Login Page</span>
-                        <ArrowRight className="w-3 h-3 text-slate-400" />
-                      </Link>
-                    </div>
                   </div>
                 )}
               </div>
@@ -414,26 +363,16 @@ export const Navbar = () => {
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    switchDemoRole(ROLES.DOCTOR);
-                    navigate('/doctor');
+                    navigate('/login');
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-800 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-2xs text-left"
                 >
                   <Stethoscope className="w-4 h-4 text-sky-600" />
                   <div className="space-y-0.5">
-                    <div>Doctor OPD Portal</div>
-                    <div className="text-[10px] text-slate-500 font-normal">Consultation & triage</div>
+                    <div>Staff Portal Login</div>
+                    <div className="text-[10px] text-slate-500 font-normal">Doctor & Administrator Access</div>
                   </div>
                 </button>
-
-                <Link
-                  to="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 hover:text-slate-900 border-t border-slate-100 pt-2"
-                >
-                  <span>Staff Password Login Page</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                </Link>
               </div>
             )}
 

@@ -15,21 +15,11 @@ export const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
-  const [selectedDemoRole, setSelectedDemoRole] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Destination redirect path
   const from = location.state?.from?.pathname || null;
-
-  // Handle Quick Demo Role Pill Click
-  const handleSelectDemo = (demoUser) => {
-    setEmail(demoUser.email);
-    setPassword(demoUser.password);
-    setSelectedDemoRole(demoUser.role);
-    setErrorMessage('');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -54,39 +44,7 @@ export const LoginForm = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1-Click Quick Demo Access Bar for Fast Review */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50/70 to-slate-50 border border-sky-100 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-            <span>Instant Demo Logins (Click to Autofill):</span>
-          </span>
-          <span className="text-[11px] text-slate-500 font-normal">1-Click Fast Track</span>
-        </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          {DEMO_USERS.map((demo) => {
-            const isSelected = selectedDemoRole === demo.role || email === demo.email;
-            const DemoIcon = demo.role === ROLES.ADMIN ? ShieldCheck : Stethoscope;
-
-            return (
-              <button
-                key={demo.role}
-                type="button"
-                onClick={() => handleSelectDemo(demo)}
-                className={`px-3.5 py-2.5 rounded-xl text-xs font-normal transition-all flex items-center justify-center gap-2 cursor-pointer border ${
-                  isSelected
-                    ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <DemoIcon className="w-4 h-4 shrink-0 text-current" />
-                <span>{demo.role.charAt(0) + demo.role.slice(1).toLowerCase()}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Error Alert */}
       {errorMessage && (

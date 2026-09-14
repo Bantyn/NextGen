@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { documentService } from '../services/documentService.js';
+import { documentRepository } from '../repositories/documentRepository.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -11,7 +12,17 @@ export const processDocumentUpload = async (req, res) => {
   try {
     let fileBuffer = null;
     let fileName = 'prescription_photo.jpg';
-    let docType = req.body.document_type || 'PRESCRIPTION';
+    const normalizeDocType = (type) => {
+      if (!type) return 'LAB_REPORT';
+      const t = String(type).toUpperCase();
+      if (t.includes('LAB') || t.includes('DIAGNOSTIC') || t.includes('REPORT') || t.includes('PATHOLOGY')) return 'LAB_REPORT';
+      if (t.includes('PRESCRIPTION') || t.includes('MEDICINE') || t.includes('RX')) return 'PRESCRIPTION';
+      if (t.includes('DISCHARGE') || t.includes('SUMMARY')) return 'DISCHARGE_SUMMARY';
+      return 'OTHER';
+    };
+
+    let docType = normalizeDocType(req.body.document_type);
+    let title = req.body.title || req.body.test_name || null;
     let patientId = req.body.patient_id || null;
     let sessionId = req.body.session_id || null;
     let savedFilePath = null;
@@ -55,6 +66,7 @@ export const processDocumentUpload = async (req, res) => {
       patientId,
       sessionId,
       directText,
+      title,
     });
 
     return res.status(200).json(result);
@@ -68,4 +80,25 @@ export const processDocumentUpload = async (req, res) => {
   }
 };
 
-export default { processDocumentUpload };
+/**
+ * Retrieve all uploaded medical documents for a specific patient
+ */
+export const getDocumentsByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    if (!patientId) {
+      return res.status(400).json({ status: 'error', message: 'patientId is required' });
+    }
+    const docs = await documentRepository.findByPatientId(patientId);
+    return res.status(200).json({ status: 'success', data: docs });
+  } catch (error) {
+    logger.error('[Get Documents By Patient Error]: ' + error.message);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve patient medical documents',
+      error: error.message,
+    });
+  }
+};
+
+export default { processDocumentUpload, getDocumentsByPatient };

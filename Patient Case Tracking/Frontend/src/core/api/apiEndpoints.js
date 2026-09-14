@@ -41,6 +41,7 @@ export const API_ENDPOINTS = {
 
   // Documents & OCR
   DOCUMENTS_UPLOAD: '/documents/upload',
+  DOCUMENTS_BY_PATIENT: (patientId) => `/documents/patient/${patientId}`,
   DOCUMENTS_BY_SESSION: (sessionId) => `/documents/${sessionId}`,
   DOCUMENTS_OCR: (id) => `/documents/${id}/ocr`,
 
@@ -67,7 +68,27 @@ export const API_ENDPOINTS = {
   ADMIN_ASSISTANT_CONFIG: '/admin/assistant/config',
   ADMIN_SYSTEM_HEALTH: '/admin/system/health',
   ADMIN_AUDIT_LOGS: '/admin/audit-logs',
+
+  // Doctor Clinical Workspace Endpoints
+  DOCTOR_DASHBOARD: '/doctor/dashboard',
+  DOCTOR_QUEUE: '/doctor/queue',
+  DOCTOR_CASE_BUNDLE: (id) => `/doctor/cases/${id}`,
+  DOCTOR_CONSULTATION_NOTES: (id) => `/doctor/cases/${id}/notes`,
+  DOCTOR_PRESCRIBE: (id) => `/doctor/cases/${id}/prescribe`,
+  DOCTOR_COMPLETE: (id) => `/doctor/cases/${id}/complete`,
+  DOCTOR_AVAILABILITY: '/doctor/availability',
+  DOCTOR_TEMPLATES: '/doctor/templates',
+  DOCTOR_TEMPLATE_BY_ID: (id) => `/doctor/templates/${id}`,
+  DOCTOR_ANALYTICS: '/doctor/analytics',
+  DOCTOR_COLLEAGUES: '/doctor/colleagues',
+
+  // Clinical Red-Flag Case Alert & Handoff Endpoints
+  CLINICAL_CASES_EMERGENCY: '/clinical-cases/emergency',
+  CLINICAL_CASE_ACCEPT: (id) => `/clinical-cases/${id}/accept`,
+  CLINICAL_CASE_DECLINE: (id) => `/clinical-cases/${id}/decline`,
+  CLINICAL_CASE_TRANSFER: (id) => `/clinical-cases/${id}/transfer`,
 };
 
 export default API_ENDPOINTS;
+
 

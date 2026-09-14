@@ -13,7 +13,8 @@ import {
   HeartPulse,
 } from 'lucide-react';
 import { useAuth } from '../../core/auth/useAuth';
-import { DUMMY_PATIENTS } from '../../data/patientDashboardData';
+import { fetchRegisteredPatients, sendLoginOtp } from '../../modules/patient/services/patientDashboardService';
+import { Skeleton } from '../ui';
 
 /**
  * PatientLoginModal Component
@@ -27,27 +28,80 @@ export const PatientLoginModal = ({ isOpen, onClose }) => {
   const [loginMethod, setLoginMethod] = useState('ABHA'); // 'ABHA' | 'PHONE'
   const [identifier, setIdentifier] = useState('91-4432-8812-9901');
   const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('123456');
+  const [otpCode, setOtpCode] = useState('');
+  const [expectedOtp, setExpectedOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedDemoIndex, setSelectedDemoIndex] = useState(0);
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [patientsList, setPatientsList] = useState([]);
+
+  const [errorMessage, setErrorMessage] = useState('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLoadingPatients(true);
+      fetchRegisteredPatients()
+        .then((list) => {
+          if (list && list.length > 0) {
+            setPatientsList(list);
+            if (list[0].abhaId) setIdentifier(list[0].abhaId);
+          }
+        })
+        .finally(() => setLoadingPatients(false));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     if (!identifier.trim()) return;
+    
+    const cleanInput = identifier.replace(/[^0-9]/g, '');
+    const patientRecord = patientsList.find(p => {
+      const cleanAbha = (p.abhaId || '').replace(/[^0-9]/g, '');
+      const cleanPhone = (p.phone || '').replace(/[^0-9]/g, '');
+      return (cleanAbha === cleanInput) || (cleanPhone === cleanInput || cleanPhone.endsWith(cleanInput));
+    });
+    
+    if (!patientRecord) {
+      setErrorMessage('Patient not registered. Please register first at the Patient Kiosk.');
+      return;
+    }
+
+    setErrorMessage('');
     setIsSubmitting(true);
-    setTimeout(() => {
+    
+    try {
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      setExpectedOtp(generatedOtp);
+      setOtpCode(''); // Clear any previous OTP
+      await sendLoginOtp(patientRecord.phone, patientRecord.name, generatedOtp);
+      
       setIsSubmitting(false);
       setOtpSent(true);
-    }, 400);
+    } catch (err) {
+      console.warn('Failed to send WhatsApp OTP:', err);
+      // Fallback to simulated UI flow even if WhatsApp fails, so demo still works
+      setIsSubmitting(false);
+      setOtpSent(true);
+    }
   };
 
   const handleVerifyAndLogin = (e) => {
     e.preventDefault();
+    if (otpCode !== expectedOtp) {
+      setErrorMessage('Invalid OTP code. Please check your WhatsApp messages.');
+      return;
+    }
+    setErrorMessage('');
     setIsSubmitting(true);
     setTimeout(() => {
-      const selectedPatient = DUMMY_PATIENTS[selectedDemoIndex] || DUMMY_PATIENTS[0];
+      const selectedPatient = patientsList.find(p => p.abhaId === identifier || p.phone === identifier) || patientsList[0] || {
+        id: 'PAT-146A5F03',
+        name: 'Patient User',
+        phone: '+91 98250 12345',
+        abhaId: identifier,
+      };
       loginAsPatient({
         id: selectedPatient.id,
         name: selectedPatient.name,
@@ -61,17 +115,7 @@ export const PatientLoginModal = ({ isOpen, onClose }) => {
     }, 400);
   };
 
-  const handleFastTrackDemo = (patient) => {
-    loginAsPatient({
-      id: patient.id,
-      name: patient.name,
-      email: patient.email,
-      phone: patient.phone,
-      abhaId: patient.abhaId,
-    });
-    onClose();
-    navigate('/patient/dashboard');
-  };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif]">
@@ -103,49 +147,14 @@ export const PatientLoginModal = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Fast-Track 1-Click Demo Patient Profiles */}
-        <div className="space-y-2 relative z-10">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
-              Fast-Track Demo Patient:
-            </span>
-            <span className="text-[11px] text-sky-600 font-medium">1-Click Sign-In</span>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {DUMMY_PATIENTS.map((p, idx) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleFastTrackDemo(p)}
-                className="p-3 rounded-2xl border border-slate-200/90 hover:border-sky-400 hover:bg-sky-50/50 bg-slate-50/60 transition text-left space-y-1 cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-800 text-[11px] font-bold flex items-center justify-center">
-                    {p.name.charAt(0)}
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400 group-hover:text-sky-600">
-                    {p.currentToken.token}
-                  </span>
-                </div>
-                <div className="text-xs font-semibold text-slate-900 group-hover:text-sky-950 truncate">
-                  {p.name}
-                </div>
-                <div className="text-[10px] text-slate-500 truncate">
-                  {p.currentToken.department.split('&')[0]}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
 
-        {/* Divider */}
-        <div className="relative flex items-center justify-center my-1">
-          <div className="border-t border-slate-200 w-full" />
-          <span className="bg-white px-3 text-[11px] text-slate-400 uppercase font-medium absolute">
-            Or Login with Credentials
-          </span>
-        </div>
+        {/* Error Message */}
+        {errorMessage && (
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium relative z-10 animate-fadeIn">
+            {errorMessage}
+          </div>
+        )}
 
         {/* Standard Credentials Form */}
         <form onSubmit={otpSent ? handleVerifyAndLogin : handleSendOtp} className="space-y-3.5 relative z-10">
@@ -200,8 +209,8 @@ export const PatientLoginModal = ({ isOpen, onClose }) => {
           {otpSent && (
             <div className="space-y-1 animate-fadeIn">
               <div className="flex items-center justify-between text-xs">
-                <label className="font-medium text-slate-700">Enter OTP Code (Simulated)</label>
-                <span className="text-[11px] text-emerald-600">Auto-filled: 123456</span>
+                <label className="font-medium text-slate-700">Enter WhatsApp OTP</label>
+                <span className="text-[11px] text-sky-600">Sent to your number</span>
               </div>
               <input
                 type="text"

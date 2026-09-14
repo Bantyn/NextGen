@@ -36,7 +36,7 @@ export const PatientSuccessView = () => {
   const [isPlayingAudioSummary, setIsPlayingAudioSummary] = useState(false);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('patient_summary');
+    const saved = sessionStorage.getItem('patient_summary') || sessionStorage.getItem('patient_session');
     if (saved) {
       try {
         setSummary(JSON.parse(saved));
@@ -46,7 +46,7 @@ export const PatientSuccessView = () => {
     }
   }, []);
 
-  const tokenNumber = `TK-${Math.floor(Math.random() * 80 + 101)}`;
+  const tokenNumber = summary.tokenNumber || `TK-${Math.floor(Math.random() * 80 + 101)}`;
 
   const playAudioSummary = () => {
     if (!('speechSynthesis' in window)) return;
@@ -169,7 +169,12 @@ export const PatientSuccessView = () => {
       {/* Action Buttons */}
       <div className="flex items-center justify-center gap-4 flex-wrap">
         <button
-          onClick={() => navigate('/patient/dashboard')}
+          onClick={() => {
+            if (summary.patientId || summary.id) {
+              sessionStorage.setItem('selected_patient_id', summary.patientId || summary.id);
+            }
+            navigate('/patient/dashboard');
+          }}
           className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-medium text-white bg-sky-600 hover:bg-sky-500 active:scale-95 transition cursor-pointer shadow-sm"
         >
           <span>View Patient Dashboard & Reports</span>

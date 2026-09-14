@@ -1,5 +1,9 @@
+// Views
 export { DoctorDashboardView } from './views/DoctorDashboardView';
 export { DoctorCaseDetailView } from './views/DoctorCaseDetailView';
+export { DoctorArchiveView } from './views/DoctorArchiveView';
+export { DoctorAnalyticsView } from './views/DoctorAnalyticsView';
+export { DoctorTemplatesView } from './views/DoctorTemplatesView';
 
 // Components
 export { DashboardHeader } from './components/DashboardHeader';
@@ -16,6 +20,9 @@ export { MedicalDocuments } from './components/MedicalDocuments';
 export { ClinicalSummary } from './components/ClinicalSummary';
 export { DoctorActions } from './components/DoctorActions';
 export { ClinicalEditor } from './components/ClinicalEditor';
+export { ConversationHistory } from './components/ConversationHistory';
+export { PrescriptionBuilder } from './components/PrescriptionBuilder';
+export { CaseTransferModal } from './components/CaseTransferModal';
 
 // Services
 export * from './services/doctorDashboardService';

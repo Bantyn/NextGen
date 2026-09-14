@@ -17,3 +17,5 @@ export {
   AssistantWebsiteHelp,
   AssistantContact,
 } from './AssistantKnowledge.js';
+export { PrescriptionTemplate } from './PrescriptionTemplate.js';
+

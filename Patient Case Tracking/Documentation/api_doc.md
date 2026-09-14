@@ -1124,4 +1124,90 @@ Central administrative control layer for hospital operations, live queue managem
 - **Description**: Paginated stream of security and administrative audit logs with filter by action, resource, or actor.
 - **Access Control**: Authenticated (`ADMIN`)
 
+---
+
+## 16. 🩺 Doctor Workspace & Clinical Consultation APIs (`/api/v1/doctor`)
+
+Central authenticated clinical workspace providing live OPD queue access, patient case bundle assembly, consultation notes and prescription management, prescription templates, and availability toggles.
+
+### `GET /api/v1/doctor/dashboard`
+- **Description**: Real-time summary statistics for the authenticated doctor's OPD session.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Headers**: `Authorization: Bearer <token>`
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalOPD": 28,
+    "awaitingReview": 2,
+    "emergencyTriage": 0,
+    "completedToday": 24,
+    "averageWaitMins": 12,
+    "timestamp": "2026-09-10T16:09:08.685Z"
+  }
+}
+```
+
+### `GET /api/v1/doctor/queue`
+- **Description**: Live OPD patient queue with demographic details, token, priority level, and session status.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Query Params**: `tab` (`ALL`, `PENDING`, `RED_FLAG`, `APPROVED`), `search`
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "sessionId": "SES-3DB65058",
+      "patientId": "PAT-AD16808B",
+      "token": "TK-101",
+      "patientName": "Ramesh Patel",
+      "age": 46,
+      "gender": "MALE",
+      "chiefComplaint": "Chest discomfort and persistent dry cough",
+      "language": "gu-IN",
+      "triageLevel": "ROUTINE",
+      "status": "PENDING_REVIEW",
+      "checkInTime": "09:15 AM",
+      "waitTime": "12 mins"
+    }
+  ]
+}
+```
+
+### `GET /api/v1/doctor/cases/:sessionId`
+- **Description**: Full authorized clinical case workspace bundle (Patient demographics, AI clinical summary, turn-by-turn conversation messages, medical documents, structured history).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/notes`
+- **Description**: Save physician's clinical notes, assessment, treatment plan, and follow-up.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/prescribe`
+- **Description**: Attach structured physician prescription to the patient encounter.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/complete`
+- **Description**: Finalize and digitally sign consultation encounter. Sets review status to `APPROVED` and marks session `COMPLETED`.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `PATCH /api/v1/doctor/availability`
+- **Description**: Update doctor's live duty state and availability (`AVAILABLE`, `IN_CONSULTATION`, `ON_BREAK`, `OFF_DUTY`).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/templates` & `POST /api/v1/doctor/templates`
+- **Description**: Prescription templates CRUD for rapid standard regimen prescribing.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/analytics`
+- **Description**: Physician clinical telemetry (Cases handled, consultation duration, specialty breakdown).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/colleagues`
+- **Description**: List available on-duty hospital specialists and colleagues for clinical case transfer or escalation.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+
+
 

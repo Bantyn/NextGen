@@ -111,9 +111,29 @@ export async function handleSendRegistrationSuccess(req, res, next) {
   }
 }
 
+/**
+ * POST /api/v1/whatsapp/send-otp
+ * Send a 6-digit OTP to the patient's registered phone number via WhatsApp
+ */
+export async function handleSendLoginOtp(req, res, next) {
+  try {
+    const { phone, name, otp } = req.body;
+    const result = await whatsappService.sendPatientLoginOtp({ phone, name, otp });
+    
+    if (!result.sent) {
+      return sendSuccess(res, 400, 'Failed to send OTP via WhatsApp', result);
+    }
+    
+    return sendSuccess(res, 200, 'OTP sent via WhatsApp successfully', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export default {
   handleAuthCheck,
   handleGetAuthorizedRecords,
   handleTriageAlert,
   handleSendRegistrationSuccess,
+  handleSendLoginOtp,
 };

@@ -18,7 +18,14 @@ export class DocumentRepository {
   }
 
   async findByPatientId(patientId) {
-    return MedicalDocument.find({ patient_id: patientId.toUpperCase() }).sort({ createdAt: -1 });
+    if (!patientId) return [];
+    return MedicalDocument.find({
+      $or: [
+        { patient_id: patientId },
+        { patient_id: String(patientId).toUpperCase() },
+        { patient_id: String(patientId).toLowerCase() },
+      ],
+    }).sort({ createdAt: -1 });
   }
 
   async updateExtraction(id, { extracted_text, structured_data, processing_status }) {

@@ -266,6 +266,7 @@ export class DocumentService {
     patientId = null,
     sessionId = null,
     directText = null,
+    title = null,
   }) {
     const docId = `doc-${Date.now()}`;
     let rawExtractedText = directText || '';
@@ -334,6 +335,11 @@ export class DocumentService {
 
     // 6. Persist to MongoDB MedicalDocument collection
     let savedDocumentDoc = null;
+    const resolvedStructuredData = {
+      ...(extractedClinicalData || {}),
+      document_title: title || extractedClinicalData?.document_title || fileName,
+    };
+
     try {
       savedDocumentDoc = await documentRepository.create({
         patient_id: patientId || 'PAT-DEMO',
@@ -343,7 +349,7 @@ export class DocumentService {
         file_name: fileName,
         file_size: fileSize,
         extracted_text: rawExtractedText,
-        structured_data: extractedClinicalData || {},
+        structured_data: resolvedStructuredData,
         processing_status: 'COMPLETED',
         confidence_score: confidenceScore,
         requires_doctor_verification: requiresDoctorVerification,
@@ -405,18 +411,25 @@ export class DocumentService {
       }
     }
 
+    const docResultId = (savedDocumentDoc && savedDocumentDoc._id) ? String(savedDocumentDoc._id) : docId;
+
     return {
       status: 'success',
-      document_id: (savedDocumentDoc && savedDocumentDoc._id) ? String(savedDocumentDoc._id) : docId,
+      document_id: docResultId,
+      _id: docResultId,
+      patient_id: patientId,
+      document_type: documentType,
       file_name: fileName,
       file_size: fileSize,
       file_url: fileUrl,
       ocr_engine: 'tesseract.js',
       ocr_raw_text: rawExtractedText,
-      extracted_data: extractedClinicalData,
+      extracted_data: resolvedStructuredData,
+      structured_data: resolvedStructuredData,
       raw_n8n_response: responseData,
       confidence_score: confidenceScore,
       requires_doctor_verification: requiresDoctorVerification,
+      createdAt: savedDocumentDoc?.createdAt || new Date().toISOString(),
     };
   }
 }
