@@ -1,68 +1,74 @@
 /**
  * patientDashboardData.js
  * 
- * Cleaned Clinical Data Contracts for Sehat / MediKiosk Patient Portal.
- * Hardcoded mock dummy records have been completely cleared.
- * All real registered patients, ABHA credentials, diagnostic lab reports,
+ * Clean Baseline Clinical Data Contracts for Sehat Patient Portal.
+ * All dummy records and hardcoded fallback metrics have been completely cleared.
+ * Genuine clinical records, ABHA credentials, diagnostic lab reports, vitals,
  * active prescriptions, and OPD status are dynamically retrieved from the live backend APIs.
  */
 
 /**
- * Clean baseline template for an uninitialized or loading patient profile
+ * Baseline contract for uninitialized or loading patient profile
+ * Strict zero fake fallback values
  */
 export const INITIAL_EMPTY_PATIENT = {
   id: '',
-  name: 'Patient',
-  gender: 'Unknown',
-  age: 0,
-  bloodGroup: '--',
+  patientId: '',
+  name: '',
+  firstName: '',
+  lastName: '',
+  gender: '',
+  age: null,
+  dateOfBirth: null,
+  bloodGroup: '',
   phone: '',
   email: '',
-  abhaId: '',
-  abhaAddress: '',
+  abhaId: null,
+  isAbhaLinked: false,
   address: '',
-  emergencyContact: {
-    name: '',
-    phone: '',
+  emergencyContact: null,
+  opdType: 'GENERAL',
+  opdSystem: 'GENERAL_MEDICINE',
+  medicalSpecialization: 'General Medicine',
+  opdDisplay: 'General OPD',
+  registrationDate: null,
+  currentStatus: null,
+  currentToken: null, // Null when no active checkin exists
+  health: {
+    risk: null,
+    lastUpdated: null,
   },
-  language: 'gu-IN',
-  insurance: 'Pradhan Mantri Jan Arogya Yojana (PM-JAY)',
-  currentToken: {
-    token: 'TK-000',
-    room: 'OPD Reception',
-    department: 'General OPD',
-    doctor: 'Attending Physician',
-    status: 'CHECKED_IN',
-    statusLabel: 'Checked In',
-    queuePosition: 1,
-    estimatedWait: 'Under Review',
-    checkinTime: 'Today',
-  },
-  vitals: {
-    bp: '120/80',
-    pulse: 74,
-    spO2: 99,
-    temp: 98.4,
-    weight: 68,
-    height: 168,
-    bmi: 24.1,
-    recordedAt: 'Today',
-  },
+  vitals: null, // Null when no vitals have been recorded yet
+  vitalsHistory: [],
   reports: [],
+  documents: {
+    total: 0,
+    items: [],
+  },
   prescriptions: [],
   consultedDoctors: [],
   allergies: [],
   chronicConditions: [],
   timeline: [],
-  vitalsHistory: [],
+  appointments: {
+    upcoming: [],
+    all: [],
+  },
+  notifications: {
+    unreadCount: 0,
+    items: [],
+  },
+  counters: {
+    totalReports: 0,
+    upcomingAppointments: 0,
+    totalPrescriptions: 0,
+    unreadNotifications: 0,
+    completedVisits: 0,
+  },
   historyOfPresentIllness: null,
   doctorNotes: null,
 };
 
-/**
- * Cleaned empty patients collection.
- * Real registered patients are retrieved via fetchRegisteredPatients() from /api/v1/patients.
- */
 export const DUMMY_PATIENTS = [];
 
 export default {

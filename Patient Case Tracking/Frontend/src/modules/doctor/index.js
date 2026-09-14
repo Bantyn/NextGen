@@ -4,6 +4,15 @@ export { DoctorCaseDetailView } from './views/DoctorCaseDetailView';
 export { DoctorArchiveView } from './views/DoctorArchiveView';
 export { DoctorAnalyticsView } from './views/DoctorAnalyticsView';
 export { DoctorTemplatesView } from './views/DoctorTemplatesView';
+export { DoctorLiveOPDView } from './views/DoctorLiveOPDView';
+export { DoctorAppointmentsView } from './views/DoctorAppointmentsView';
+export { DoctorTriageView } from './views/DoctorTriageView';
+export { DoctorPatientsView } from './views/DoctorPatientsView';
+export { DoctorConsultationsView } from './views/DoctorConsultationsView';
+export { DoctorPrescriptionsView } from './views/DoctorPrescriptionsView';
+export { DoctorReportsView } from './views/DoctorReportsView';
+export { DoctorNotificationsView } from './views/DoctorNotificationsView';
+export { DoctorSettingsView } from './views/DoctorSettingsView';
 
 // Components
 export { DashboardHeader } from './components/DashboardHeader';

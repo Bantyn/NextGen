@@ -4,10 +4,14 @@ import { ROLES, ROLE_CONFIGS } from '../../../core/config/roles';
 
 const ROLE_ICONS = {
   [ROLES.DOCTOR]: Stethoscope,
-  [ROLES.ADMIN]: ShieldCheck,
+  // [ROLES.ADMIN]: ShieldCheck,
 };
 
-const ALLOWED_REGISTRATION_ROLES = [ROLES.DOCTOR, ROLES.ADMIN];
+const ALLOWED_REGISTRATION_ROLES = [
+  ROLES.DOCTOR
+  ,ROLES.ADMIN
+
+];
 
 /**
  * RoleCardSelector Component
@@ -15,7 +19,7 @@ const ALLOWED_REGISTRATION_ROLES = [ROLES.DOCTOR, ROLES.ADMIN];
  */
 export const RoleCardSelector = ({ selectedRole, onSelectRole, className = '' }) => {
   return (
-    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${className}`}>
+    <div className={`grid grid-cols-1 sm:grid-cols-1 gap-2.5 ${className}`}>
       {ALLOWED_REGISTRATION_ROLES.map((roleKey) => {
         const config = ROLE_CONFIGS[roleKey] || {};
         const Icon = ROLE_ICONS[roleKey] || Stethoscope;

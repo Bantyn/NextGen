@@ -159,20 +159,23 @@ export const AuthProvider = ({ children }) => {
   }, [saveSession]);
 
   /**
-   * Dedicated Patient Login (ABHA / Phone / Demo Profile)
+   * Dedicated Patient Login (ABHA / Phone / Registered Profile)
    */
   const loginAsPatient = useCallback((patientData) => {
-    const pId = patientData?.patient_id || patientData?.id || 'PAT-146A5F03';
+    if (!patientData) return { success: false, error: 'Patient data required' };
+    const pId = patientData.patient_id || patientData.id;
+    if (!pId) return { success: false, error: 'Patient ID missing' };
+
     const patientUser = {
       id: pId,
       patient_id: pId,
-      name: patientData?.name || 'Rajesh Patel',
-      email: patientData?.email || `${pId.toLowerCase()}@sehat.org`,
-      phone: patientData?.phone || '+91 98250 12345',
-      abhaId: patientData?.abhaId || `91-${pId.slice(-4)}-8812-9901`,
+      name: patientData.name || `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim() || 'Patient',
+      email: patientData.email || `${pId.toLowerCase()}@sehat.org`,
+      phone: patientData.phone || '',
+      abhaId: patientData.abhaId || null,
       role: ROLES.PATIENT,
       department: 'Patient Portal',
-      license: patientData?.abhaId || `ABHA-${pId.slice(-4)}`,
+      license: patientData.abhaId || null,
     };
     const token = `jwt_patient_${patientUser.id}_${Date.now()}`;
     saveSession(token, patientUser);

@@ -13,6 +13,14 @@ export class DocumentRepository {
     return MedicalDocument.findById(id);
   }
 
+  async findByDocumentId(docId) {
+    if (!docId) return null;
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(String(docId));
+    const conditions = [{ document_id: docId }];
+    if (isObjectId) conditions.push({ _id: docId });
+    return MedicalDocument.findOne({ $or: conditions });
+  }
+
   async findBySessionId(sessionId) {
     return MedicalDocument.find({ session_id: sessionId }).sort({ createdAt: -1 });
   }

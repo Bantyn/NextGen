@@ -5,7 +5,7 @@ import { detectMedicineIntentAndExtract, queryMedicineKnowledge } from './assist
 
 /**
  * ============================================================================
- * MEDIKIOSK CLINICAL INTELLIGENCE & REASONING ENGINE
+ * Sehat CLINICAL INTELLIGENCE & REASONING ENGINE
  * ============================================================================
  * An enterprise, live-data-driven clinical intelligence service.
  * Translates conversational inputs into semantic intents, clinical entity extraction,
@@ -99,10 +99,24 @@ export function classifySemanticIntent(rawText) {
     return 'EMERGENCY_HELP';
   }
 
-  // D. Doctor Recommendation, Specialist Finding, or OPD Availability
-  const hasDoctorKeyword = /(doctor|specialist|physician|dermatologist|cardiologist|neurologist|orthopedic|pediatrician|ent|dentist|psychiatrist|opd|appointment|consult|clinic|ડોક્ટર|डॉक्टर)/i.test(text);
+  // D. Website Navigation & Kiosk Tools (Prioritized for clear user instructions)
+  if (
+    /(?:how\s+(?:to|do\s+i)|start|begin|open|where)\s+.*(?:intake|register|checkin|session|kiosk|portal|appointment)/i.test(text) ||
+    /\b(?:register|checkin|intake|ocr|upload|kiosk|portal|login|abha)\b/i.test(text)
+  ) {
+    if (!/(?:book|schedule|take|get|make)\s*(?:an?)?\s*(?:appointment|slot|token)/i.test(text)) {
+      return 'WEBSITE_NAVIGATION';
+    }
+  }
+
+  // E. Doctor Recommendation, Specialist Finding, or OPD Availability
+  const hasDoctorKeyword = /(doctor|specialist|physician|dermatologist|cardiologist|neurologist|orthopedic|pediatrician|\bent\b|dentist|psychiatrist|opd|appointment|consult|clinic|ડોક્ટર|डॉक्टर)/i.test(text);
   const hasAvailabilityKeyword = /(available|availability|today|timing|schedule|free\s+slot|token|queue|wait\s+time|now|5\s*pm|10\s*am|હાજર|उपलब्ध)/i.test(text);
   const hasWhichDoctorPhrasing = /(which\s+doctor|who\s+treats|who\s+should\s+i\s+see|recommend\s+a\s+doctor|doctor\s+for|specialist\s+for|can\s+i\s+see\s+a)/i.test(text);
+
+  if (/(?:book|schedule|take|get|make)\s*(?:an?)?\s*(?:appointment|slot|token)/i.test(text) || /\bappointment\s+(?:with|for)\b/i.test(text)) {
+    return 'APPOINTMENT_HELP';
+  }
 
   if (hasWhichDoctorPhrasing || (hasDoctorKeyword && hasAvailabilityKeyword)) {
     if (hasAvailabilityKeyword && !hasWhichDoctorPhrasing) {
@@ -111,15 +125,11 @@ export function classifySemanticIntent(rawText) {
     return 'FIND_SPECIALIST';
   }
 
-  if (hasDoctorKeyword && /(book|schedule|take|get)\s*(an)?\s*(appointment|slot|token)/i.test(text)) {
-    return 'APPOINTMENT_HELP';
-  }
-
   if (hasDoctorKeyword) {
     return 'FIND_DOCTOR';
   }
 
-  // E. Common Symptoms & Health Advice
+  // F. Common Symptoms & Health Advice
   if (/cold|runny\s+nose|sore\s+throat|sneezing|छींक|શરદી/i.test(text)) {
     return 'COLD_CARE';
   }
@@ -142,19 +152,14 @@ export function classifySemanticIntent(rawText) {
     return 'FIRST_AID';
   }
 
-  // F. AYUSH & Traditional Medicine
+  // G. AYUSH & Traditional Medicine
   if (/ayush|ayurveda|ayurvedic|kadha|dosha|vata|pitta|kapha|herbal/i.test(text)) {
     return 'AYUSH_INFORMATION';
   }
 
-  // G. Hospital & Contact Information
+  // H. Hospital & Contact Information
   if (/contact|phone|helpline|emergency\s+number|ambulance|address|location|નંબર|फोन|संपर्क/i.test(text)) {
     return 'HOSPITAL_INFORMATION';
-  }
-
-  // H. Website Navigation & Kiosk Tools
-  if (/register|checkin|intake|ocr|upload|kiosk|portal|login|abha/i.test(text)) {
-    return 'WEBSITE_NAVIGATION';
   }
 
   // I. Ambiguous / Generic greeting
@@ -205,7 +210,7 @@ export function extractClinicalEntities(rawText, existingEntities = {}) {
   else if (/pediatric|child/i.test(lower)) entities.specialty = 'Pediatrics';
   else if (/dentist|dental|teeth|tooth/i.test(lower)) entities.specialty = 'Dentistry';
   else if (/ophthalmolog|eye/i.test(lower)) entities.specialty = 'Ophthalmology';
-  else if (/ent|ear|nose|throat/i.test(lower)) entities.specialty = 'ENT';
+  else if (/\bent\b|ear|nose|throat/i.test(lower)) entities.specialty = 'ENT';
   else if (/gastroenterolog|stomach|digest/i.test(lower)) entities.specialty = 'Gastroenterology';
   else if (/psychiatr|mental\s+health|depression|anxiety/i.test(lower)) entities.specialty = 'Psychiatry';
   else if (/ayush|ayurved/i.test(lower)) entities.specialty = 'AYUSH';
@@ -410,7 +415,7 @@ export function matchSpecialtyFromSymptoms(symptomText, queryText) {
     };
   }
 
-  if (/ear|nose|throat|sinus|tonsil|hearing|ent/i.test(combined)) {
+  if (/ear|nose|throat|sinus|tonsil|hearing|\bent\b/i.test(combined)) {
     return {
       primary: 'ENT',
       candidates: ['ENT', 'General Medicine'],
@@ -460,7 +465,7 @@ export function matchSpecialtyFromSymptoms(symptomText, queryText) {
 export const VERIFIED_CLINICAL_KNOWLEDGE = {
   HEATWAVE_CARE: {
     title: 'Heatwave Care & Sun Protection Guidelines',
-    source: 'National Public Health & MediKiosk Clinical Advisory',
+    source: 'National Public Health & Sehat Clinical Advisory',
     source_type: 'CLINICAL_KB',
     recommendations: [
       'Stay consistently hydrated: Drink adequate water at regular intervals, even before you feel thirsty. Consume ORS, lemon water (Nimbu Pani), coconut water, or buttermilk to replenish electrolytes.',
@@ -477,7 +482,7 @@ export const VERIFIED_CLINICAL_KNOWLEDGE = {
   },
   COLD_CARE: {
     title: 'Nominal Home Care for Mild Common Cold',
-    source: 'MediKiosk Clinical Standard Operating Procedures',
+    source: 'Sehat Clinical Standard Operating Procedures',
     source_type: 'CLINICAL_KB',
     recommendations: [
       'Adequate Rest: Rest allows the immune system to recover; avoid intense physical exertion.',
@@ -561,7 +566,7 @@ export async function processClinicalAssistantTurn({
       `The symptoms you described (${entities.symptom || 'acute chest/breathing distress'}) indicate potential emergency medical concern.\n\n` +
       `• **Action Required:** Please immediately call Emergency Services at **108** or proceed to the nearest Emergency Trauma Center without delay.\n` +
       `• **Do NOT drive yourself.** Have someone accompany you or await the ambulance team.\n` +
-      `• MediKiosk Emergency Desk: **+91 79 2324 0000** (Open 24/7).`;
+      `• Sehat Emergency Desk: **+91 79 2324 0000** (Open 24/7).`;
 
     responsePayload.message = emergencyMsg;
     responsePayload.urgent = true;
@@ -569,7 +574,7 @@ export async function processClinicalAssistantTurn({
     responsePayload.sources.push({
       type: 'CLINICAL_KB',
       id: 'EMERGENCY_TRIAGE_PROTOCOL',
-      name: 'MediKiosk Clinical Triage Rules',
+      name: 'Sehat Clinical Triage Rules',
     });
     responsePayload.actions.push(
       { type: 'CALL_HOSPITAL', label: 'Call Emergency (108)', phone: '108' },
@@ -693,7 +698,7 @@ export async function processClinicalAssistantTurn({
     }));
     responsePayload.sources.push(
       { type: 'CLINICAL_KB', id: 'CARDIAC_SAFETY_TRIAGE', name: 'Clinical Triage Rules' },
-      { type: 'DOCTOR_DB', id: 'VERIFIED_ROSTER', name: 'MediKiosk Doctor Roster' }
+      { type: 'DOCTOR_DB', id: 'VERIFIED_ROSTER', name: 'Sehat Doctor Roster' }
     );
     return responsePayload;
   }
@@ -707,6 +712,48 @@ export async function processClinicalAssistantTurn({
     intent === 'FIND_DOCTOR' ||
     intent === 'APPOINTMENT_HELP'
   ) {
+    // Check if user specifically requested a named doctor (e.g. "Dr. Nidhi Shah")
+    const specificDoc = await doctorService.findDoctorByName(rawText);
+    if (specificDoc) {
+      console.log(`[DoctorMatching] specific_doctor=${specificDoc.doctor_name}`);
+      let msg =
+        `### 🩺 Appointment Details: ${specificDoc.doctor_name}\n\n` +
+        `Verified schedule for **${specificDoc.doctor_name}** (${specificDoc.qualification}):\n\n` +
+        `• **Department:** ${specificDoc.department} (${specificDoc.specialty})\n` +
+        `• **OPD Location:** ${specificDoc.room}\n` +
+        `• **Availability Today:** ${specificDoc.available_today ? '✅ Yes' : '❌ Shift off'}\n` +
+        `• **Next Available Slot:** \`${specificDoc.next_available_slot}\`\n` +
+        `• **Live OPD Queue:** ${specificDoc.queue_position} waiting (~${specificDoc.estimated_wait_time} wait)\n\n` +
+        `Please confirm your appointment booking or view current OPD queue status:`;
+
+      responsePayload.message = msg;
+      responsePayload.specialty = specificDoc.specialty;
+      responsePayload.doctors = [specificDoc];
+      responsePayload.availability = [{
+        doctor_id: specificDoc.doctor_id,
+        doctor_name: specificDoc.doctor_name,
+        available_today: specificDoc.available_today,
+        available_now: specificDoc.available_now,
+        next_available_slot: specificDoc.next_available_slot,
+        queue_position: specificDoc.queue_position,
+        estimated_wait_time: specificDoc.estimated_wait_time,
+      }];
+      responsePayload.actions = [
+        {
+          type: 'BOOK_APPOINTMENT',
+          doctor_id: specificDoc.doctor_id,
+          doctor_name: specificDoc.doctor_name,
+          label: `Book appointment with ${specificDoc.doctor_name}`,
+        },
+        {
+          type: 'VIEW_OPD_QUEUE',
+          department: specificDoc.department,
+          label: `View ${specificDoc.specialty} Queue`,
+        },
+      ];
+      return responsePayload;
+    }
+
     const specialtyMatch = matchSpecialtyFromSymptoms(entities.symptom, rawText);
     const targetSpecialty = entities.specialty || specialtyMatch.primary;
 
@@ -755,8 +802,8 @@ export async function processClinicalAssistantTurn({
       estimated_wait_time: d.estimated_wait_time,
     }));
     responsePayload.sources.push(
-      { type: 'DOCTOR_DB', id: 'VERIFIED_ROSTER', name: 'MediKiosk Verified Doctor Roster' },
-      { type: 'OPD_DB', id: 'LIVE_CLINICAL_SESSIONS', name: 'MediKiosk Live Queue Sessions' }
+      { type: 'DOCTOR_DB', id: 'VERIFIED_ROSTER', name: 'Sehat Verified Doctor Roster' },
+      { type: 'OPD_DB', id: 'LIVE_CLINICAL_SESSIONS', name: 'Sehat Live Queue Sessions' }
     );
     responsePayload.actions = availableDoctors.map((d) => ({
       type: 'BOOK_APPOINTMENT',
@@ -770,6 +817,27 @@ export async function processClinicalAssistantTurn({
       label: 'View Live OPD Queue',
     });
 
+    return responsePayload;
+  }
+
+  // --------------------------------------------------------------------------
+  // PATHWAY E2: WEBSITE NAVIGATION & KIOSK INTAKE HELP
+  // --------------------------------------------------------------------------
+  if (intent === 'WEBSITE_NAVIGATION') {
+    let msg =
+      `### 📋 Patient Intake & Kiosk Navigation\n\n` +
+      `Starting an OPD intake session on Sehat is quick and paperless:\n\n` +
+      `1. **Start Intake:** Tap **"Start Patient Intake"** below or click the intake button on the kiosk screen.\n` +
+      `2. **OPD Category:** Choose between **General OPD** (common ailments, primary care) or **AYUSH OPD** (Ayurveda, Yoga, Unani, Siddha, Homeopathy).\n` +
+      `3. **Clinical Case-Taking:** Speak your symptoms naturally using our **AI Voice Intake**, or scan existing paper reports using **Document OCR**.\n` +
+      `4. **Token Generation:** Receive your digital OPD queue token and track live wait times on the patient dashboard.`;
+
+    responsePayload.message = msg;
+    responsePayload.actions = [
+      { type: 'NAVIGATE', label: 'Start Patient Intake', route: '/patient/register' },
+      { type: 'VIEW_OPD_QUEUE', label: 'View Live OPD Queue', route: '/opd-queue' },
+      { type: 'NAVIGATE', label: 'Patient Dashboard', route: '/patient/dashboard' },
+    ];
     return responsePayload;
   }
 
@@ -832,7 +900,7 @@ export async function processClinicalAssistantTurn({
   console.log(`[Response] generated=true`);
 
   let genericMsg =
-    `Hello! I am your MediKiosk Smart AI Assistant.\n\n` +
+    `Hello! I am your Sehat Smart AI Assistant.\n\n` +
     `What specific medical topic or service would you like help with today?\n` +
     `• Health guidance (e.g., *Care of heat waves* or *Mild cold home care*)\n` +
     `• Finding a doctor (e.g., *Which doctor for migraine?* or *Dermatologist available today at 5 PM*)\n` +

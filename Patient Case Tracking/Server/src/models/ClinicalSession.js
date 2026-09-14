@@ -19,8 +19,19 @@ const ClinicalSessionSchema = new mongoose.Schema(
     },
     consultation_type: {
       type: String,
-      enum: ['GENERAL', 'AYUSH_AYURVEDA'],
       default: 'GENERAL',
+      index: true,
+    },
+    opd_type: {
+      type: String,
+      enum: ['GENERAL', 'AYUSH'],
+      default: 'GENERAL',
+      index: true,
+    },
+    opd_system: {
+      type: String,
+      default: 'GENERAL_MEDICINE',
+      index: true,
     },
     status: {
       type: String,
@@ -38,6 +49,16 @@ const ClinicalSessionSchema = new mongoose.Schema(
         'CONSULTATION_COMPLETE',
       ],
       default: 'STARTED',
+    },
+    journey_stage: {
+      type: String,
+      enum: ['CHECKED_IN', 'VITALS_TAKEN', 'IN_CONSULTATION', 'LAB_PENDING', 'COMPLETED'],
+      default: 'CHECKED_IN',
+      index: true,
+    },
+    journey_step_index: {
+      type: Number,
+      default: 0,
     },
     chief_complaint_category: {
       type: String,

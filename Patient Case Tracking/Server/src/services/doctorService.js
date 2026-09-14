@@ -4,7 +4,7 @@ import { sessionRepository } from '../repositories/sessionRepository.js';
 import { ClinicalSession } from '../models/ClinicalSession.js';
 
 /**
- * Verified MediKiosk Hospital Specialist Directory
+ * Verified Sehat Hospital Specialist Directory
  * Ground-truth clinical roster mapped to OPD wings, rooms, and consultation schedules.
  */
 const VERIFIED_DOCTORS_DIRECTORY = [
@@ -15,7 +15,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Dermatology',
     sub_specialty: 'Clinical Dermatology & Cutaneous Allergies',
     department: 'Department of Dermatology & Skin Care',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 204 (Wing B, 2nd Floor)',
     experience_years: 12,
     consultation_type: 'GENERAL',
@@ -32,7 +32,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'General Medicine',
     sub_specialty: 'Adult Internal Medicine & Infectious Diseases',
     department: 'Department of General Internal Medicine',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 102 (Main OPD Block, 1st Floor)',
     experience_years: 15,
     consultation_type: 'GENERAL',
@@ -49,7 +49,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Cardiology',
     sub_specialty: 'Interventional Cardiology & Coronary Care',
     department: 'Department of Cardiology & Cardiac Care',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 305 (Cardiac Center, 3rd Floor)',
     experience_years: 18,
     consultation_type: 'GENERAL',
@@ -66,7 +66,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Neurology',
     sub_specialty: 'Headache Disorders, Migraine & Stroke Management',
     department: 'Department of Neurosciences',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 308 (Neurosciences Wing, 3rd Floor)',
     experience_years: 14,
     consultation_type: 'GENERAL',
@@ -83,7 +83,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Orthopedics',
     sub_specialty: 'Joint Replacement & Musculoskeletal Trauma',
     department: 'Department of Orthopedic Surgery',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 104 (Surgical Block, 1st Floor)',
     experience_years: 16,
     consultation_type: 'GENERAL',
@@ -97,10 +97,10 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     doctor_id: 'DOC-AYUS-01',
     doctor_name: 'Dr. Harish Vyas',
     qualification: 'BAMS, MD (Ayurveda - Kayachikitsa)',
-    specialty: 'AYUSH / Integrative Medicine',
+    specialty: 'Ayurveda',
     sub_specialty: 'Ayurvedic Kayachikitsa & Panchakarma',
-    department: 'Department of AYUSH & Integrative Medicine',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    department: 'Department of Ayurveda & Integrative Medicine',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 106 (AYUSH Block C, 1st Floor)',
     experience_years: 20,
     consultation_type: 'AYUSH_AYURVEDA',
@@ -111,13 +111,98 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     fixed_slots: ['09:30 AM', '10:45 AM', '02:30 PM', '04:00 PM'],
   },
   {
+    doctor_id: 'DOC-AYUS-02',
+    doctor_name: 'Dr. Aarav Mehta',
+    qualification: 'BNYS (Naturopathy & Yogic Sciences)',
+    specialty: 'Yoga & Naturopathy',
+    sub_specialty: 'Therapeutic Yoga & Clinical Naturopathy',
+    department: 'Department of Yoga & Naturopathy',
+    hospital: 'Sehat Apex Civil Hospital',
+    room: 'Room 108 (AYUSH Block C, 1st Floor)',
+    experience_years: 12,
+    consultation_type: 'AYUSH_YOGA_NATUROPATHY',
+    languages: ['English', 'Hindi', 'Gujarati'],
+    days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    shift: { start: '08:30', end: '16:30', break_start: '12:30', break_end: '13:30' },
+    slot_duration_mins: 25,
+    fixed_slots: ['09:00 AM', '10:30 AM', '02:00 PM', '03:30 PM'],
+  },
+  {
+    doctor_id: 'DOC-AYUS-03',
+    doctor_name: 'Dr. Tariq Hakim',
+    qualification: 'BUMS, MD (Unani Medicine)',
+    specialty: 'Unani',
+    sub_specialty: 'Ilaj-bil-Tadbeer & Herbal Formulations',
+    department: 'Department of Unani Medicine',
+    hospital: 'Sehat Apex Civil Hospital',
+    room: 'Room 110 (AYUSH Block C, 1st Floor)',
+    experience_years: 15,
+    consultation_type: 'AYUSH_UNANI',
+    languages: ['English', 'Hindi', 'Urdu', 'Gujarati'],
+    days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+    shift: { start: '09:00', end: '17:00', break_start: '13:00', break_end: '14:00' },
+    slot_duration_mins: 20,
+    fixed_slots: ['10:00 AM', '11:30 AM', '03:00 PM', '04:30 PM'],
+  },
+  {
+    doctor_id: 'DOC-AYUS-04',
+    doctor_name: 'Dr. S. Murugan',
+    qualification: 'BSMS, MD (Siddha Maruthuvam)',
+    specialty: 'Siddha',
+    sub_specialty: 'Siddha Mineral-Herb Therapy & Varmam',
+    department: 'Department of Siddha Medicine',
+    hospital: 'Sehat Apex Civil Hospital',
+    room: 'Room 112 (AYUSH Block C, 1st Floor)',
+    experience_years: 17,
+    consultation_type: 'AYUSH_SIDDHA',
+    languages: ['English', 'Tamil', 'Hindi'],
+    days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    shift: { start: '09:00', end: '17:00', break_start: '13:00', break_end: '14:00' },
+    slot_duration_mins: 20,
+    fixed_slots: ['09:45 AM', '11:15 AM', '02:45 PM', '04:15 PM'],
+  },
+  {
+    doctor_id: 'DOC-AYUS-05',
+    doctor_name: 'Dr. Rohini Sen',
+    qualification: 'BHMS, MD (Homoeopathy)',
+    specialty: 'Homoeopathy',
+    sub_specialty: 'Constitutional Homoeopathy & Chronic Diseases',
+    department: 'Department of Homoeopathy',
+    hospital: 'Sehat Apex Civil Hospital',
+    room: 'Room 114 (AYUSH Block C, 1st Floor)',
+    experience_years: 14,
+    consultation_type: 'AYUSH_HOMOEOPATHY',
+    languages: ['English', 'Hindi', 'Bengali', 'Gujarati'],
+    days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    shift: { start: '09:30', end: '17:30', break_start: '13:00', break_end: '14:00' },
+    slot_duration_mins: 20,
+    fixed_slots: ['10:00 AM', '11:45 AM', '03:15 PM', '04:45 PM'],
+  },
+  {
+    doctor_id: 'DOC-AYUS-06',
+    doctor_name: 'Dr. Tenzin Norbu',
+    qualification: 'Menrampa (MD Sowa-Rigpa)',
+    specialty: 'Sowa-Rigpa',
+    sub_specialty: 'Traditional Himalayan Medicine & Pulse Examination',
+    department: 'Department of Sowa-Rigpa & Himalayan Healing',
+    hospital: 'Sehat Apex Civil Hospital',
+    room: 'Room 116 (AYUSH Block C, 1st Floor)',
+    experience_years: 19,
+    consultation_type: 'AYUSH_SOWA_RIGPA',
+    languages: ['English', 'Hindi', 'Tibetan'],
+    days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+    shift: { start: '10:00', end: '17:00', break_start: '13:00', break_end: '14:00' },
+    slot_duration_mins: 25,
+    fixed_slots: ['10:30 AM', '11:30 AM', '02:30 PM', '04:00 PM'],
+  },
+  {
     doctor_id: 'DOC-GAST-01',
     doctor_name: 'Dr. Vikram Rathod',
     qualification: 'MBBS, MD, DM (Gastroenterology)',
     specialty: 'Gastroenterology',
     sub_specialty: 'Digestive Diseases & Therapeutic Endoscopy',
     department: 'Department of Gastroenterology & Hepatology',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 210 (Wing B, 2nd Floor)',
     experience_years: 13,
     consultation_type: 'GENERAL',
@@ -134,7 +219,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Pulmonology',
     sub_specialty: 'Asthma, COPD & Respiratory Critical Care',
     department: 'Department of Pulmonary & Chest Medicine',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 214 (Chest Clinic, 2nd Floor)',
     experience_years: 17,
     consultation_type: 'GENERAL',
@@ -151,7 +236,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'ENT',
     sub_specialty: 'Ear, Nose, Throat & Sinus Disorders',
     department: 'Department of ENT & Head-Neck Surgery',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 208 (Wing A, 2nd Floor)',
     experience_years: 11,
     consultation_type: 'GENERAL',
@@ -168,7 +253,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Ophthalmology',
     sub_specialty: 'Comprehensive Eye Care & Cornea',
     department: 'Department of Ophthalmology & Eye Clinic',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 112 (Eye Center, 1st Floor)',
     experience_years: 19,
     consultation_type: 'GENERAL',
@@ -185,7 +270,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Dentistry',
     sub_specialty: 'Oral Medicine & Endodontics',
     department: 'Department of Dental Surgery',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 114 (Dental Wing, 1st Floor)',
     experience_years: 9,
     consultation_type: 'GENERAL',
@@ -202,7 +287,7 @@ const VERIFIED_DOCTORS_DIRECTORY = [
     specialty: 'Psychiatry',
     sub_specialty: 'Adult Psychiatry, Anxiety & Mood Disorders',
     department: 'Department of Psychiatry & Mental Health',
-    hospital: 'MediKiosk Apex Civil Hospital',
+    hospital: 'Sehat Apex Civil Hospital',
     room: 'Room 312 (Behavioral Health, 3rd Floor)',
     experience_years: 13,
     consultation_type: 'GENERAL',
@@ -381,25 +466,56 @@ export class DoctorService {
       chiefComplaint = '',
       targetTime = null,
       priority = 'ROUTINE',
+      consultationType = null,
+      opdMode = null,
+      opdSystem = null,
     } = options;
 
     let candidateDoctors = [];
 
-    // 1. Gather doctors by candidate specialties
-    if (specialties.length > 0) {
-      for (const sp of specialties) {
-        const matched = this.getDoctorsBySpecialty(sp);
-        for (const doc of matched) {
-          if (!candidateDoctors.some((d) => d.doctor_id === doc.doctor_id)) {
-            candidateDoctors.push(doc);
+    // 1. AYUSH Discipline-Specific Matching
+    const isAyush =
+      opdMode === 'AYUSH' ||
+      (consultationType && consultationType.startsWith('AYUSH')) ||
+      (opdSystem && ['AYURVEDA', 'YOGA_NATUROPATHY', 'UNANI', 'SIDDHA', 'HOMOEOPATHY', 'SOWA_RIGPA'].includes(opdSystem.toUpperCase()));
+
+    if (isAyush) {
+      const ayushSystem = (opdSystem || consultationType || '').toUpperCase();
+      let matchedAyushDocs = [];
+
+      if (ayushSystem.includes('YOGA') || ayushSystem.includes('NATUROPATHY')) {
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_YOGA_NATUROPATHY' || d.specialty.includes('Yoga'));
+      } else if (ayushSystem.includes('UNANI')) {
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_UNANI' || d.specialty.includes('Unani'));
+      } else if (ayushSystem.includes('SIDDHA')) {
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_SIDDHA' || d.specialty.includes('Siddha'));
+      } else if (ayushSystem.includes('HOMOEOPATHY') || ayushSystem.includes('HOMEOPATHY')) {
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_HOMOEOPATHY' || d.specialty.includes('Homoeopathy'));
+      } else if (ayushSystem.includes('SOWA') || ayushSystem.includes('RIGPA')) {
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_SOWA_RIGPA' || d.specialty.includes('Sowa-Rigpa'));
+      } else {
+        // Default to Ayurveda
+        matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_AYURVEDA' || d.specialty.includes('Ayurveda'));
+      }
+
+      candidateDoctors = matchedAyushDocs.length > 0 ? matchedAyushDocs : VERIFIED_DOCTORS_DIRECTORY.filter((d) => (d.consultation_type || '').startsWith('AYUSH'));
+    } else {
+      // 2. Modern Medicine (General OPD) Specialty Matching
+      if (specialties.length > 0) {
+        for (const sp of specialties) {
+          const matched = this.getDoctorsBySpecialty(sp).filter((d) => !(d.consultation_type || '').startsWith('AYUSH'));
+          for (const doc of matched) {
+            if (!candidateDoctors.some((d) => d.doctor_id === doc.doctor_id)) {
+              candidateDoctors.push(doc);
+            }
           }
         }
       }
-    }
 
-    // Fallback: If no specialty candidates match, include General Medicine
-    if (candidateDoctors.length === 0) {
-      candidateDoctors = this.getDoctorsBySpecialty('General Medicine');
+      // Fallback: If no specialty candidates match, include General Medicine
+      if (candidateDoctors.length === 0) {
+        candidateDoctors = this.getDoctorsBySpecialty('General Medicine').filter((d) => !(d.consultation_type || '').startsWith('AYUSH'));
+      }
     }
 
     // 2. Compute availability for each candidate
@@ -424,6 +540,23 @@ export class DoctorService {
     });
 
     return evaluatedDoctors;
+  }
+
+  /**
+   * Find a doctor by name (e.g. "Dr. Nidhi Shah", "Nidhi Shah", "Arvind Joshi")
+   */
+  async findDoctorByName(nameQuery) {
+    if (!nameQuery || typeof nameQuery !== 'string') return null;
+    const clean = nameQuery.toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+    if (clean.length < 3) return null;
+
+    const matchedDoc = VERIFIED_DOCTORS_DIRECTORY.find((d) => {
+      const docClean = d.doctor_name.toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+      return docClean.includes(clean) || clean.includes(docClean);
+    });
+
+    if (!matchedDoc) return null;
+    return this.calculateDoctorAvailability(matchedDoc);
   }
 
   /**

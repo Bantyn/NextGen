@@ -304,6 +304,146 @@ export async function resetQueue() {
   return memoryPatients;
 }
 
+/**
+ * 13. Live OPD Kanban Pipeline (7 Stages with Drag and Drop)
+ */
+export async function getDoctorPipeline(search = '', filter = 'ALL') {
+  try {
+    const query = new URLSearchParams({ search, filter }).toString();
+    const res = await apiClient.get(`${API_ENDPOINTS.DOCTOR_PIPELINE}?${query}`);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching pipeline failed:', err.message);
+  }
+  return {
+    pipeline: { registered: [], waiting: [], ai_intake: [], triage: [], consultation: [], prescription: [], completed: [] },
+    counts: { all: 0, registered: 0, waiting: 0, ai_intake: 0, triage: 0, consultation: 0, prescription: 0, completed: 0, priority: 0 },
+  };
+}
+
+export async function updateCaseWorkflowStatus(caseId, status) {
+  const res = await apiClient.patch(API_ENDPOINTS.DOCTOR_CASE_STATUS(caseId), { status });
+  notifyListeners();
+  return res?.data;
+}
+
+/**
+ * 14. Doctor Appointments Workspace
+ */
+export async function getDoctorAppointments(tab = 'TODAY', search = '') {
+  try {
+    const query = new URLSearchParams({ tab, search }).toString();
+    const res = await apiClient.get(`${API_ENDPOINTS.DOCTOR_APPOINTMENTS}?${query}`);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching appointments failed:', err.message);
+  }
+  return { appointments: [], counts: { today: 0, upcoming: 0, completed: 0, cancelled: 0, total: 0 } };
+}
+
+export async function createDoctorAppointment(data) {
+  const res = await apiClient.post(API_ENDPOINTS.DOCTOR_APPOINTMENTS, data);
+  return res?.data;
+}
+
+export async function updateAppointmentStatus(id, status) {
+  const res = await apiClient.patch(API_ENDPOINTS.DOCTOR_APPOINTMENT_STATUS(id), { status });
+  return res?.data;
+}
+
+/**
+ * 15. Doctor Patients Directory & Clinical Dossier
+ */
+export async function getDoctorPatients(search = '', page = 1) {
+  try {
+    const query = new URLSearchParams({ search, page: String(page) }).toString();
+    const res = await apiClient.get(`${API_ENDPOINTS.DOCTOR_PATIENTS}?${query}`);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching patients failed:', err.message);
+  }
+  return { patients: [], total: 0, page: 1, limit: 50 };
+}
+
+export async function getPatientClinicalProfile(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.DOCTOR_PATIENT_PROFILE(patientId));
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching patient profile failed:', err.message);
+  }
+  return null;
+}
+
+/**
+ * 16. Doctor Consultations
+ */
+export async function getDoctorConsultations(tab = 'ALL', search = '') {
+  try {
+    const query = new URLSearchParams({ tab, search }).toString();
+    const res = await apiClient.get(`${API_ENDPOINTS.DOCTOR_CONSULTATIONS}?${query}`);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching consultations failed:', err.message);
+  }
+  return [];
+}
+
+/**
+ * 17. Diagnostic Reports
+ */
+export async function getDoctorReports(search = '') {
+  try {
+    const query = new URLSearchParams({ search }).toString();
+    const res = await apiClient.get(`${API_ENDPOINTS.DOCTOR_REPORTS}?${query}`);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching reports failed:', err.message);
+  }
+  return [];
+}
+
+export async function verifyDoctorReport(documentId, verification_notes = '') {
+  const res = await apiClient.patch(API_ENDPOINTS.DOCTOR_REPORT_VERIFY(documentId), { verification_notes });
+  return res?.data;
+}
+
+/**
+ * 18. Notifications Center
+ */
+export async function getDoctorNotifications() {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.DOCTOR_NOTIFICATIONS);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching notifications failed:', err.message);
+  }
+  return [];
+}
+
+export async function markDoctorNotificationRead(id) {
+  const res = await apiClient.patch(API_ENDPOINTS.DOCTOR_NOTIFICATION_READ(id));
+  return res?.data;
+}
+
+/**
+ * 19. Doctor Profile & Settings
+ */
+export async function getDoctorProfile() {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.DOCTOR_PROFILE);
+    if (res?.data) return res.data;
+  } catch (err) {
+    console.warn('[DoctorService] Fetching doctor profile failed:', err.message);
+  }
+  return null;
+}
+
+export async function updateDoctorProfile(data) {
+  const res = await apiClient.patch(API_ENDPOINTS.DOCTOR_PROFILE, data);
+  return res?.data;
+}
+
 export default {
   getDashboardStats,
   getPatients,
@@ -324,4 +464,18 @@ export default {
   getDoctorAnalytics,
   subscribeDoctorDashboard,
   resetQueue,
+  getDoctorPipeline,
+  updateCaseWorkflowStatus,
+  getDoctorAppointments,
+  createDoctorAppointment,
+  updateAppointmentStatus,
+  getDoctorPatients,
+  getPatientClinicalProfile,
+  getDoctorConsultations,
+  getDoctorReports,
+  verifyDoctorReport,
+  getDoctorNotifications,
+  markDoctorNotificationRead,
+  getDoctorProfile,
+  updateDoctorProfile,
 };

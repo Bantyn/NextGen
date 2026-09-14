@@ -494,7 +494,7 @@ export class AdminService {
         database: {
           name: 'MongoDB Atlas',
           status: mongoStatus,
-          connected_db: mongoose.connection.name || 'medikiosk_patient_tracking',
+          connected_db: mongoose.connection.name || 'Sehat_patient_tracking',
         },
         api_engine: {
           name: 'Node.js Express Engine',

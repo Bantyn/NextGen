@@ -45,8 +45,8 @@ export async function fetchRegisteredPatients() {
 export function mapDocumentToReport(doc) {
   if (!doc) return null;
   const structured = doc.structured_data || doc.extracted_data || {};
-  const isLab = doc.document_type === 'LAB_REPORT' || (structured.lab_investigations && structured.lab_investigations.length > 0);
-  const isPrescription = doc.document_type === 'PRESCRIPTION' || (structured.prescribed_medicines && structured.prescribed_medicines.length > 0);
+  const isLab = doc.document_type === 'LAB_REPORT' || (structured.lab_investigations && structured.lab_investigations.length > 0) || (doc.extracted_data?.lab_results && doc.extracted_data.lab_results.length > 0);
+  const isPrescription = doc.document_type === 'PRESCRIPTION' || (structured.prescribed_medicines && structured.prescribed_medicines.length > 0) || (doc.extracted_data?.current_medications && doc.extracted_data.current_medications.length > 0);
 
   const title = structured.document_title || doc.file_name || (isLab ? 'Diagnostic Lab Report' : isPrescription ? 'Physician Prescription' : 'Medical Report');
 
@@ -56,17 +56,25 @@ export function mapDocumentToReport(doc) {
       : `${Math.round(doc.file_size / 1024)} KB`
     : '1.2 MB';
 
-  const labs = structured.lab_investigations || [];
+  const labs = structured.lab_investigations || doc.extracted_data?.lab_results || [];
   const parameters = labs.length > 0
     ? labs.map((l) => ({
         name: l.test_name || 'Investigation',
         value: `${l.observed_value || '-'} ${l.unit || ''}`.trim(),
-        normalRange: l.reference_range || 'Standard',
+        normalRange: l.reference_range || 'Standard Range',
         status: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL') ? l.flag : 'Normal',
         alert: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL'),
       }))
     : (structured.prescribed_medicines && structured.prescribed_medicines.length > 0)
     ? structured.prescribed_medicines.map((m) => ({
+        name: m.name || 'Prescribed Drug',
+        value: [m.dosage, m.frequency].filter(Boolean).join(' - ') || 'Active',
+        normalRange: m.duration || 'Per Rx',
+        status: 'Prescribed',
+        alert: false,
+      }))
+    : (doc.extracted_data?.current_medications && doc.extracted_data.current_medications.length > 0)
+    ? doc.extracted_data.current_medications.map((m) => ({
         name: m.name || 'Prescribed Drug',
         value: [m.dosage, m.frequency].filter(Boolean).join(' - ') || 'Active',
         normalRange: m.duration || 'Per Rx',
@@ -83,197 +91,202 @@ export function mapDocumentToReport(doc) {
         },
       ];
 
-  const hasAbnormal = parameters.some((p) => p.alert) || doc.requires_doctor_verification;
+  const importantFindings = doc.important_findings || structured.important_findings || [];
+  const hasAbnormal = parameters.some((p) => p.alert) || importantFindings.some((f) => f.status !== 'NORMAL') || doc.requires_doctor_verification;
+
+  const clinicalSummary = doc.clinical_summary || structured.clinical_summary || null;
+  const patientSummary = doc.patient_summary || structured.patient_summary || null;
+
+  const summarySnippet =
+    patientSummary?.meaning ||
+    patientSummary?.about ||
+    (typeof clinicalSummary === 'string' ? clinicalSummary.slice(0, 160) : clinicalSummary?.physician_digest ? clinicalSummary.physician_digest.slice(0, 160) : null) ||
+    (doc.extracted_text ? doc.extracted_text.slice(0, 160) : '') ||
+    'Uploaded medical document processed and synchronized to ABDM Health Locker.';
+
+  const fileUrl = doc.file_url
+    ? (doc.file_url.startsWith('http') ? doc.file_url : `http://localhost:5000${doc.file_url}`)
+    : null;
 
   return {
     id: doc._id || doc.document_id || `DOC-${Date.now()}`,
+    documentId: doc.document_id || doc._id || `DOC-${Date.now()}`,
     testCode: `DOC-${(String(doc._id || doc.document_id || '')).slice(-4).toUpperCase() || 'REP'}`,
     title,
     category: isLab ? 'Biochemistry' : isPrescription ? 'Prescriptions' : 'Diagnostic Report',
     date: doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
-    orderedBy: structured.doctor_names?.[0] || 'Attending Physician',
-    facility: structured.organization_name || 'MediKiosk Apex Civil Hospital',
+    orderedBy: structured.doctor?.name || structured.doctor_names?.[0] || 'Attending Physician',
+    facility: structured.doctor?.facility || structured.organization_name || 'Apex Healthcare Diagnostics',
     status: doc.processing_status || 'COMPLETED',
     statusSeverity: hasAbnormal ? 'attention' : 'normal',
     critical: doc.requires_doctor_verification || false,
     fileSize: formattedSize,
-    fileUrl: doc.file_url ? (doc.file_url.startsWith('http') ? doc.file_url : `http://localhost:5000${doc.file_url}`) : null,
+    fileUrl,
     fileName: doc.file_name,
     labTechnician: structured.organization_name || 'Apex Clinical Diagnostics',
-    summary: structured.clinical_summary?.patient_friendly_summary || structured.clinical_summary?.physician_digest || (doc.extracted_text ? doc.extracted_text.slice(0, 160) : '') || 'Uploaded medical document processed and synchronized to ABDM Health Locker.',
+    summary: summarySnippet,
     parameters,
     values: parameters,
+    clinicalSummary,
+    patientSummary,
+    importantFindings,
+    confidenceScore: doc.confidence_score || 0.94,
+    extractionConfidence: doc.extraction_confidence || 'CLEAR',
+    extractedText: doc.extracted_text || '',
+    extractedData: doc.extracted_data || structured,
+    rawDoc: doc,
   };
 }
 
 /**
  * 2. Fetch full clinical dashboard bundle for an individual patient
+ * Calls the high-performance centralized GET /api/patient/dashboard endpoint
  */
 export async function fetchPatientDashboardBundle(patientId) {
-  const fallback = { ...INITIAL_EMPTY_PATIENT };
-
-  if (!patientId) return fallback;
+  if (!patientId) return { ...INITIAL_EMPTY_PATIENT };
 
   try {
-    const [patientRes, recordsRes, docsRes] = await Promise.all([
-      apiClient.get(API_ENDPOINTS.PATIENT_BY_ID(patientId)).catch(() => null),
-      apiClient.get(API_ENDPOINTS.RECORDS_BY_PATIENT(patientId)).catch(() => null),
-      apiClient.get(API_ENDPOINTS.DOCUMENTS_BY_PATIENT(patientId)).catch(() => null),
-    ]);
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_DASHBOARD(patientId));
+    const data = res?.data || res;
 
-    const p = patientRes?.data || null;
-    const records = recordsRes?.data || [];
-    const uploadedDocs = Array.isArray(docsRes?.data) ? docsRes.data.map(mapDocumentToReport).filter(Boolean) : [];
-
-    if (p) {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || fallback.name;
-      const latestRecord = records.length > 0 ? records[0] : null;
-
-      // Map real prescriptions from MongoDB ClinicalRecords
-      const realPrescriptions = [];
-      records.forEach((rec, recIdx) => {
-        if (rec.physician_prescription && rec.physician_prescription.length > 0) {
-          const meds = rec.physician_prescription.map((m) => ({
-            name: m.medicine_name || 'Prescribed Medicine',
-            generic: m.generic_name || m.medicine_name || '',
-            dosage: m.dosage || '1 tablet',
-            timing: m.frequency || 'Twice daily',
-            duration: m.duration || '15 days',
-            instructions: m.instructions || 'Take with warm water after meals',
-            schedule: m.frequency || '1 - 0 - 1',
-            refill: 'Authorized (1 refill)',
-          }));
-          realPrescriptions.push({
-            id: rec.record_id || `RX-00${recIdx + 1}`,
-            rxNumber: `RX-SEH-${rec.record_id?.slice(-4) || '8812'}`,
-            doctor: 'Dr. Priya Sharma',
-            specialty: rec.consultation_type === 'AYUSH_AYURVEDA' ? 'Department of Ayush & Integrative Medicine' : 'General Internal Medicine',
-            department: rec.consultation_type === 'AYUSH_AYURVEDA' ? 'Department of Ayush & Integrative Medicine' : 'General Internal Medicine',
-            date: rec.reviewed_at ? new Date(rec.reviewed_at).toLocaleDateString() : 'Recent',
-            validTill: 'In 30 days',
-            status: rec.review_status === 'APPROVED' ? 'Active' : 'Pending',
-            diagnosis: rec.chief_complaint || latestRecord?.chief_complaint || 'Primary Consultation',
-            medications: meds,
-            medicines: meds,
-          });
-        }
-      });
-
-      // Map real diagnostic reports or observations
-      const realReports = (latestRecord?.lab_investigations && latestRecord.lab_investigations.length > 0)
-        ? latestRecord.lab_investigations.map((inv, idx) => ({
-            id: `REP-00${idx + 1}`,
-            testCode: `INV-00${idx + 1}`,
-            title: inv.test_name || 'Diagnostic Investigation',
-            category: 'Biochemistry',
-            date: new Date().toLocaleDateString(),
-            orderedBy: 'Dr. Priya Sharma',
-            facility: 'MediKiosk Apex Civil Hospital',
-            status: 'COMPLETED',
-            statusSeverity: 'normal',
-            critical: false,
-            fileSize: '1.2 MB',
-            time: '10:30 AM',
-            labTechnician: 'Apex Clinical Lab Team',
-            summary: inv.clinical_indication || 'Completed diagnostic inquiry. All findings reviewed.',
-            parameters: [
-              { name: 'Investigation Result', value: inv.result || 'Normal', normalRange: 'Standard', status: 'Normal', alert: false },
-            ],
-            values: [
-              { param: 'Finding', result: inv.result || 'Normal', normalRange: 'Standard', status: 'normal' },
-            ],
-          }))
-        : (fallback.reports || []);
-
-      const combinedReports = [...uploadedDocs, ...realReports];
-
-      // Map real consulted doctors
-      const realConsultedDoctors = records.map((rec) => ({
-        id: 'DOC-MED-01',
-        name: 'Dr. Priya Sharma',
-        specialty: rec.consultation_type === 'AYUSH_AYURVEDA' ? 'Ayush & Integrative Medicine' : 'General Medicine',
-        degrees: 'MBBS, MD (Internal Medicine)',
-        department: rec.consultation_type === 'AYUSH_AYURVEDA' ? 'Department of Ayush & Integrative Medicine' : 'General Medicine',
-        room: 'OPD Room 102',
-        lastVisit: rec.reviewed_at ? new Date(rec.reviewed_at).toLocaleDateString() : '08 Sep 2026',
-        nextFollowup: 'In 2 weeks',
-        followUp: 'In 2 weeks',
-        chiefComplaint: rec.chief_complaint || latestRecord?.chief_complaint || 'Primary Consultation',
-        diagnosis: rec.chief_complaint || 'Under Active Clinical Observation',
-        clinicalNotes: rec.doctor_notes || 'Continue prescribed therapy and monitor vital parameters.',
-        notes: rec.doctor_notes || 'Continue prescribed therapy and monitor vital parameters.',
-        avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300',
-      }));
-
-      // Map real status and token
-      const isComplete = p.current_status === 'CONSULTATION_COMPLETE';
-      const currentToken = {
-        token: `TK-${p.patient_id ? p.patient_id.slice(-3) : '101'}`,
-        room: 'OPD Room 102 (Main Block)',
-        department: 'General Internal Medicine & Ayush',
-        doctor: 'Dr. Priya Sharma',
-        status: isComplete ? 'COMPLETED' : 'IN_CONSULTATION',
-        statusLabel: isComplete ? 'Consultation Complete' : 'In Consultation',
-        queuePosition: isComplete ? 0 : 2,
-        estimatedWait: isComplete ? 'Encounter Finalized' : '5-10 mins wait',
-        checkinTime: p.createdAt ? new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '10:15 AM today',
-      };
-
-      // Real or baseline vitals
-      const vitals = fallback.vitals;
-
+    if (data && data.patient) {
+      const p = data.patient;
       return {
-        ...fallback,
-        id: p.patient_id || p._id,
-        name: fullName,
-        gender: p.gender === 'MALE' ? 'Male' : p.gender === 'FEMALE' ? 'Female' : 'Other',
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 42,
-        phone: p.phone || fallback.phone,
-        abhaId: p.patient_id ? `91-${p.patient_id.slice(-4)}-8812-9901` : fallback.abhaId,
-        address: p.address || fallback.address,
-        currentToken,
-        vitals,
-        reports: combinedReports || [],
-        prescriptions: realPrescriptions || [],
-        consultedDoctors: realConsultedDoctors || [],
-        allergies: (latestRecord?.structured_history?.allergies || []).map((a) => ({
-          allergen: typeof a === 'string' ? a : a.allergen || 'Known Allergen',
-          reaction: typeof a === 'string' ? 'Hypersensitivity' : a.reaction || 'Mild',
-          severity: typeof a === 'string' ? 'Moderate' : a.severity || 'Moderate',
-        })),
-        chronicConditions: (latestRecord?.structured_history?.past_medical_history || []).map((m) => ({
-          name: typeof m === 'string' ? m : m.condition || 'Past Condition',
-          diagnosedYear: 'Recorded in EMR',
-          status: 'Ongoing Management',
-        })),
-        timeline: records.map((r, rIdx) => ({
-          id: r.record_id || `TL-${rIdx}`,
-          date: r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString() : 'Recent Visit',
-          category: r.consultation_type === 'AYUSH_AYURVEDA' ? 'Ayush Intake' : 'General OPD',
-          department: r.consultation_type === 'AYUSH_AYURVEDA' ? 'Ayurvedic Medicine' : 'General OPD',
-          title: r.chief_complaint || 'Clinical Examination',
-          description: r.doctor_notes || 'Patient evaluated and advised care protocol.',
-          doctor: 'Dr. Priya Sharma',
-        })),
-        vitalsHistory: [
-          {
-            date: p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'Today',
-            bpSys: 120,
-            bpDia: 80,
-            pulse: 74,
-            sugar: 98,
-            weight: 68,
-          },
-        ],
-        historyOfPresentIllness: latestRecord?.structured_history?.history_of_present_illness || null,
-        doctorNotes: latestRecord?.doctor_notes || null,
+        id: p.id || p.patientId,
+        patientId: p.id || p.patientId,
+        name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Patient',
+        firstName: p.firstName || '',
+        lastName: p.lastName || '',
+        gender: p.gender || 'Unknown',
+        age: p.age,
+        dateOfBirth: p.dateOfBirth,
+        bloodGroup: p.bloodGroup || '',
+        phone: p.phone || '',
+        address: p.address || '',
+        abhaId: p.abhaId || null,
+        isAbhaLinked: Boolean(p.isAbhaLinked || p.abhaId),
+        opdType: p.opdType || 'GENERAL',
+        opdSystem: p.opdSystem || 'GENERAL_MEDICINE',
+        medicalSpecialization: p.medicalSpecialization || 'General Medicine',
+        opdDisplay: p.opdDisplay || 'General OPD',
+        registrationDate: p.registrationDate,
+        currentStatus: p.currentStatus,
+        health: data.health || { risk: null, lastUpdated: null },
+        vitals: data.vitals || null,
+        vitalsHistory: data.vitalsHistory || [],
+        currentToken: data.currentToken || null,
+        reports: data.reports || [],
+        documents: data.documents || { total: (data.reports || []).length, items: data.reports || [] },
+        prescriptions: data.prescriptions || [],
+        consultedDoctors: data.consultedDoctors || [],
+        allergies: data.allergies || [],
+        chronicConditions: data.chronicConditions || [],
+        timeline: data.timeline || [],
+        appointments: data.appointments || { upcoming: [], all: [] },
+        notifications: data.notifications || { unreadCount: 0, items: [] },
+        counters: data.counters || {
+          totalReports: (data.reports || []).length,
+          upcomingAppointments: (data.appointments?.upcoming || []).length,
+          totalPrescriptions: (data.prescriptions || []).length,
+          unreadNotifications: data.notifications?.unreadCount || 0,
+          completedVisits: (data.timeline || []).length,
+        },
       };
     }
   } catch (err) {
-    console.warn('[PatientService] Error building patient dashboard bundle:', err.message);
+    console.warn('[PatientService] Error fetching patient dashboard bundle:', err.message);
+    throw err;
   }
 
-  return fallback;
+  return { ...INITIAL_EMPTY_PATIENT };
+}
+
+/**
+ * Record real patient vitals measurement
+ */
+export async function recordPatientVitalsAPI(patientId, vitalsData) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.PATIENT_VITALS, {
+      patient_id: patientId,
+      ...vitalsData,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Record vitals failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Book a new patient appointment
+ */
+export async function bookPatientAppointmentAPI(patientId, appointmentData) {
+  try {
+    const res = await apiClient.post('/patient/appointments', {
+      patient_id: patientId,
+      ...appointmentData,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Book appointment failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Fetch patient appointments
+ */
+export async function fetchPatientAppointmentsAPI(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_APPOINTMENTS(patientId));
+    return res?.data || [];
+  } catch (err) {
+    console.warn('[PatientService] Fetch appointments failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch patient notifications
+ */
+export async function fetchPatientNotificationsAPI(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_NOTIFICATIONS(patientId));
+    return res?.data || { unreadCount: 0, items: [] };
+  } catch (err) {
+    console.warn('[PatientService] Fetch notifications failed:', err.message);
+    return { unreadCount: 0, items: [] };
+  }
+}
+
+/**
+ * Mark notification as read
+ */
+export async function markNotificationReadAPI(notificationId) {
+  try {
+    const res = await apiClient.patch(API_ENDPOINTS.PATIENT_NOTIFICATION_READ(notificationId));
+    return res?.data || res;
+  } catch (err) {
+    console.warn('[PatientService] Mark read failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Update the patient's live OPD journey stage
+ */
+export async function updatePatientJourneyStageAPI(patientId, stageKey, sessionId = null) {
+  try {
+    const res = await apiClient.patch(API_ENDPOINTS.PATIENT_JOURNEY_STEP, {
+      patient_id: patientId,
+      stageKey,
+      sessionId,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Update journey stage failed:', err.message);
+    throw err;
+  }
 }
 
 /**
@@ -323,12 +336,19 @@ export async function registerAndCheckinPatient(formData) {
     const lastName = parts.slice(1).join(' ') || 'User';
 
     // 2. Register Patient record
+    const opdType = formData.opdType || (formData.opdMode === 'AYUSH' ? 'AYUSH' : 'GENERAL');
+    const opdSystem = formData.opdSystem || (opdType === 'AYUSH' ? 'AYURVEDA' : 'GENERAL_MEDICINE');
+    const medicalSpec = formData.medicalSpecialization || 'General Medicine (MBBS / MD)';
+
     const patientPayload = {
       first_name: firstName,
       last_name: lastName,
       phone: formData.phone?.trim(),
       gender: (formData.gender || 'MALE').toUpperCase(),
       address: 'Ahmedabad, Gujarat',
+      opd_type: opdType,
+      opd_system: opdSystem,
+      medical_specialization: medicalSpec,
     };
 
     let createdPatient = null;
@@ -342,10 +362,16 @@ export async function registerAndCheckinPatient(formData) {
     const patientId = createdPatient?.patient_id || `PAT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
     // 3. Initialize Clinical Session on Backend
+    const consultationType = opdType === 'AYUSH'
+      ? `AYUSH_${opdSystem.toUpperCase()}`
+      : 'GENERAL';
+
     const sessionPayload = {
       patient_id: patientId,
       language: formData.preferredLanguage || 'gu-IN',
-      consultation_type: formData.opdMode === 'AYUSH' ? 'AYUSH_AYURVEDA' : 'GENERAL',
+      consultation_type: consultationType,
+      opd_type: opdType,
+      opd_system: opdSystem,
       chief_complaint_category: 'OTHER',
     };
 
@@ -366,7 +392,11 @@ export async function registerAndCheckinPatient(formData) {
       fullName: `${firstName} ${lastName}`,
       phone: formData.phone,
       preferredLanguage: formData.preferredLanguage,
-      opdMode: formData.opdMode,
+      opdMode: opdType,
+      opdType,
+      opdSystem,
+      medicalSpecialization: medicalSpec,
+      consultationType,
       abhaId: formData.abhaId || `91-${patientId.slice(-4)}-8812-9901`,
       tokenNumber: `TK-${Math.floor(Math.random() * 80 + 101)}`,
       checkinTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -400,6 +430,32 @@ export async function sendLoginOtp(phone, name, otp) {
   }
 }
 
+/**
+ * 6. Fetch Document by ID
+ */
+export async function fetchDocumentById(documentId) {
+  try {
+    const res = await apiClient.get(`/documents/${documentId}`);
+    return res?.data || null;
+  } catch (err) {
+    console.warn('[PatientService] Fetch document failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 7. Fetch Document Summary
+ */
+export async function fetchDocumentSummary(documentId) {
+  try {
+    const res = await apiClient.get(`/documents/${documentId}/summary`);
+    return res?.data || null;
+  } catch (err) {
+    console.warn('[PatientService] Fetch document summary failed:', err.message);
+    return null;
+  }
+}
+
 export default {
   fetchRegisteredPatients,
   fetchPatientDashboardBundle,
@@ -407,4 +463,11 @@ export default {
   registerAndCheckinPatient,
   mapDocumentToReport,
   sendLoginOtp,
+  fetchDocumentById,
+  fetchDocumentSummary,
+  recordPatientVitalsAPI,
+  bookPatientAppointmentAPI,
+  fetchPatientAppointmentsAPI,
+  fetchPatientNotificationsAPI,
+  markNotificationReadAPI,
 };

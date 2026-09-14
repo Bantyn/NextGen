@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  LayoutDashboard,
   ClipboardList,
+  Calendar,
   AlertTriangle,
+  Users,
   FolderArchive,
-  BarChart3,
+  Stethoscope,
+  FileText,
+  FileSpreadsheet,
   Pill,
-  Volume2,
+  BarChart3,
   Bell,
+  MessageSquare,
+  Settings,
+  Volume2,
   Menu,
   X,
   User,
@@ -23,12 +31,13 @@ import {
   acceptEmergencyCase,
   updateDoctorAvailability,
   subscribeDoctorDashboard,
+  getDoctorProfile,
 } from '../../modules/doctor/services/doctorDashboardService';
 
 /**
  * DoctorLayout Component
- * Enterprise Doctor Dashboard Layout with dynamic auth context, real-time red-flag alerts,
- * and clinical workspace navigation.
+ * Enterprise Doctor Clinical Workspace Layout with dynamic clinical navigation,
+ * real-time red-flag alerts, department context, and live availability controls.
  */
 export const DoctorLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -37,9 +46,15 @@ export const DoctorLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [nextPatient, setNextPatient] = useState(null);
   const [stats, setStats] = useState({
-    awaitingReview: 3,
+    totalOPD: 9,
+    waiting: 4,
+    inConsultation: 2,
     emergencyTriage: 1,
+    priorityCases: 1,
+    completedToday: 1,
+    averageWaitMins: 20,
   });
+  const [profile, setProfile] = useState(null);
   const [emergencyAlerts, setEmergencyAlerts] = useState([]);
   const [alertsDropdownOpen, setAlertsDropdownOpen] = useState(false);
   const [onDuty, setOnDuty] = useState(true);
@@ -48,15 +63,22 @@ export const DoctorLayout = ({ children }) => {
     let isMounted = true;
     const fetchNavData = async () => {
       try {
-        const [next, currentStats, alerts] = await Promise.all([
-          getNextWaitingPatient(),
-          getDashboardStats(),
-          getEmergencyAlerts(),
+        const [next, currentStats, alerts, docProf] = await Promise.all([
+          getNextWaitingPatient().catch(() => null),
+          getDashboardStats().catch(() => null),
+          getEmergencyAlerts().catch(() => []),
+          getDoctorProfile().catch(() => null),
         ]);
         if (isMounted) {
-          setNextPatient(next);
-          setStats(currentStats);
-          setEmergencyAlerts(alerts || []);
+          if (next) setNextPatient(next);
+          if (currentStats) {
+            setStats(currentStats);
+            if (currentStats.doctorInfo?.on_duty !== undefined) {
+              setOnDuty(currentStats.doctorInfo.on_duty);
+            }
+          }
+          if (alerts) setEmergencyAlerts(alerts);
+          if (docProf) setProfile(docProf);
         }
       } catch (err) {
         console.error('Error fetching doctor layout stats:', err);
@@ -111,18 +133,62 @@ export const DoctorLayout = ({ children }) => {
     }
   };
 
-  const navItems = [
-    { name: 'Live OPD Queue', path: '/doctor', icon: ClipboardList, badge: String(stats.awaitingReview || 4) },
+  const doctorName = profile?.name || stats.doctorInfo?.name || user?.name || 'Dr. Aarav Sharma';
+  const doctorSpecialty = profile?.specialty || stats.doctorInfo?.specialty || (user?.opd_type === 'AYUSH' ? 'Ayush Kayachikitsa' : 'General Medicine');
+  const doctorRoom = profile?.room || stats.doctorInfo?.room || 'Room 104';
+
+  const navSections = [
     {
-      name: 'Priority Triage',
-      path: '/doctor?tab=triage',
-      icon: AlertTriangle,
-      badge: String(stats.emergencyTriage || emergencyAlerts.length || 0),
-      badgeColor: 'bg-rose-100 text-rose-700',
+      title: 'CLINICAL WORKSPACE',
+      items: [
+        { name: 'Dashboard', path: '/doctor', icon: LayoutDashboard },
+        { name: 'Live OPD', path: '/doctor/opd', icon: ClipboardList, badge: String(stats.waiting || 4) },
+        { name: 'Appointments', path: '/doctor/appointments', icon: Calendar, badge: '4' },
+        {
+          name: 'Priority Triage',
+          path: '/doctor/triage',
+          icon: AlertTriangle,
+          badge: String(stats.emergencyTriage || stats.priorityCases || emergencyAlerts.length || 1),
+          badgeColor: 'bg-rose-100 text-rose-700',
+        },
+        { name: 'Patients', path: '/doctor/patients', icon: Users },
+        { name: 'Patient Archives', path: '/doctor/archives', icon: FolderArchive },
+      ],
     },
-    { name: 'Patient Archives', path: '/doctor?tab=archive', icon: FolderArchive },
-    { name: 'Clinical Analytics', path: '/doctor?tab=analytics', icon: BarChart3 },
-    { name: 'Prescription Templates', path: '/doctor?tab=templates', icon: Pill },
+    {
+      title: 'CLINICAL TOOLS',
+      items: [
+        { name: 'Consultations', path: '/doctor/consultations', icon: Stethoscope },
+        { name: 'Prescriptions', path: '/doctor/prescriptions', icon: FileText },
+        { name: 'Medical Reports', path: '/doctor/reports', icon: FileSpreadsheet },
+        { name: 'Prescription Templates', path: '/doctor/templates', icon: Pill },
+      ],
+    },
+    {
+      title: 'INSIGHTS',
+      items: [
+        { name: 'Clinical Analytics', path: '/doctor/analytics', icon: BarChart3 },
+      ],
+    },
+    {
+      title: 'COMMUNICATION',
+      items: [
+        {
+          name: 'Notifications',
+          path: '/doctor/notifications',
+          icon: Bell,
+          badge: emergencyAlerts.length > 0 ? String(emergencyAlerts.length) : null,
+          badgeColor: 'bg-amber-100 text-amber-700',
+        },
+        { name: 'Messages', path: '/doctor/messages', icon: MessageSquare },
+      ],
+    },
+    {
+      title: 'SYSTEM',
+      items: [
+        { name: 'Settings', path: '/doctor/settings', icon: Settings },
+      ],
+    },
   ];
 
   return (
@@ -144,14 +210,14 @@ export const DoctorLayout = ({ children }) => {
         <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col justify-between">
           <div>
             {/* Brand Header */}
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <Link to="/" className="flex items-center gap-2.5 select-none">
                 <img
                   src="/logo.png"
                   alt="Sehat"
-                  className="h-8 w-auto object-contain"
+                  className="h-7 w-auto object-contain"
                 />
-                <span className="text-[10px] text-sky-600 font-semibold px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 uppercase tracking-wider">
+                <span className="text-[10px] text-sky-700 font-semibold px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 uppercase tracking-wider">
                   Doctor Portal
                 </span>
               </Link>
@@ -163,84 +229,89 @@ export const DoctorLayout = ({ children }) => {
               </button>
             </div>
 
-            {/* Navigation Links */}
-            <div className="px-3 py-5 space-y-1">
-              <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Clinical Workspace
-              </div>
-              {navItems.map((item) => {
-                const [itemPath, itemQuery] = item.path.split('?');
-                const isActive = itemQuery
-                  ? location.pathname === itemPath && location.search === `?${itemQuery}`
-                  : location.pathname === itemPath && !location.search;
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.path}
-                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-normal transition ${
-                      isActive
-                        ? 'bg-slate-950 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className="w-4 h-4" />
-                      <span>{item.name}</span>
-                    </div>
-                    {item.badge && item.badge !== '0' && (
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+            {/* Navigation Sections */}
+            <div className="px-3 py-4 space-y-4">
+              {navSections.map((section) => (
+                <div key={section.title} className="space-y-0.5">
+                  <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                    {section.title}
+                  </div>
+                  {section.items.map((item) => {
+                    const [itemPath, itemQuery] = item.path.split('?');
+                    const isActive = itemQuery
+                      ? location.pathname === itemPath && location.search === `?${itemQuery}`
+                      : location.pathname === itemPath;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-normal transition ${
                           isActive
-                            ? 'bg-slate-800 text-slate-200'
-                            : item.badgeColor || 'bg-slate-100 text-slate-600'
+                            ? 'bg-slate-950 text-white shadow-xs font-medium'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                         }`}
                       >
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+                        <div className="flex items-center gap-2.5">
+                          <Icon className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{item.name}</span>
+                        </div>
+                        {item.badge && item.badge !== '0' && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${
+                              isActive
+                                ? 'bg-slate-800 text-slate-200'
+                                : item.badgeColor || 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Doctor Profile Footer */}
-          <div className="p-4 m-3 rounded-2xl bg-slate-50 border border-slate-200/70">
+          <div className="p-3.5 m-3 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-slate-950 text-white flex items-center justify-center text-xs font-semibold">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-slate-950 text-white flex items-center justify-center text-xs font-semibold shrink-0">
                   <User className="w-4 h-4" />
                 </div>
-                <div className="truncate">
+                <div className="min-w-0">
                   <div className="text-xs font-semibold text-slate-900 truncate">
-                    {user?.name || 'Dr. Aarav Sharma'}
+                    {doctorName}
                   </div>
                   <div className="text-[10px] text-slate-500 truncate">
-                    {user?.department || 'Ayush & Clinical Intake'}
+                    {doctorSpecialty}
                   </div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={logout}
-                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer shrink-0"
                 title="Sign out of Doctor Portal"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-600">
+            <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-600">
               <button
                 type="button"
                 onClick={handleToggleDuty}
                 className="inline-flex items-center gap-1.5 font-medium cursor-pointer hover:underline"
               >
-                <span className={`w-2 h-2 rounded-full ${onDuty ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                <span className={`w-2 h-2 rounded-full ${onDuty ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                 <span>{onDuty ? 'On Duty (OPD)' : 'Off Duty'}</span>
               </button>
-              <span className="text-[10px] text-slate-400 font-mono">Room 104</span>
+              <span className="text-[10px] text-slate-400 font-mono">{doctorRoom}</span>
             </div>
           </div>
         </div>
@@ -259,9 +330,9 @@ export const DoctorLayout = ({ children }) => {
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2 text-xs text-slate-500 font-normal">
-              <span className="font-semibold text-slate-800">OPD Clinical Wing</span>
+              <span className="font-semibold text-slate-800">{doctorSpecialty}</span>
               <span>/</span>
-              <span className="text-slate-600">{user?.name || 'Dr. Aarav Sharma'}</span>
+              <span className="text-slate-600">{doctorName}</span>
             </div>
           </div>
 

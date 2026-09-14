@@ -530,6 +530,46 @@ function validateAndFilterOutput(llmOutput, detectedIntent, toolResult) {
   return llmOutput.trim();
 }
 
+/**
+ * Optional External Orchestrator: Query live n8n AI Assistant Webhook
+ */
+async function callN8nAssistantWebhook({ message, language, user_id, role, session_id, conversation_history }) {
+  const n8nWebhook = process.env.N8N_ASSISTANT_WEBHOOK;
+  if (!n8nWebhook || n8nWebhook.includes('localhost:5678')) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(n8nWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        language,
+        user_id,
+        role,
+        session_id,
+        conversation_history: (conversation_history || []).slice(-4),
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data = await res.json();
+      const outputText = data.output || data.message || data.text;
+      if (outputText && typeof outputText === 'string' && outputText.trim()) {
+        console.log('[N8NAssistantWebhook] Successfully received AI response');
+        return outputText.trim();
+      }
+    }
+  } catch (err) {
+    console.warn(`[N8NAssistantWebhook Notice]: ${err.message}`);
+  }
+  return null;
+}
+
 // ============================================================================
 // MAIN CONTROLLER: SECURE SMART ASSISTANT CHAT TURN
 // ============================================================================
@@ -669,7 +709,7 @@ export async function handleAssistantChat(req, res) {
           },
         ],
         actions: [
-          { type: 'OPEN_MEDICINE', label: 'View Medicine Details', medicine: medDetection.medicineName },
+          { type: 'OPEN_MEDICINE', label: `View ${medDetection.medicineName || 'Medicine'} Details`, medicine: medDetection.medicineName },
           { type: 'VIEW_DOCTOR', label: 'Consult General Physician', specialty: 'General Medicine' },
         ],
         quick_actions: ['Start Patient Intake', 'Cold & Cough Care', 'Hospital Contacts'],
@@ -684,9 +724,32 @@ export async function handleAssistantChat(req, res) {
       role,
     });
 
+    // 6. If turn is general chat or website inquiry, query n8n AI Assistant Webhook if available
+    let finalMessage = clinicalTurnResult.message;
+    let finalSources = clinicalTurnResult.sources || [];
+
+    if (clinicalTurnResult.intent === 'GENERAL_CHAT' || clinicalTurnResult.intent === 'WEBSITE_NAVIGATION') {
+      const n8nAiResponse = await callN8nAssistantWebhook({
+        message: sanitizedText,
+        language,
+        user_id,
+        role,
+        session_id,
+        conversation_history,
+      });
+
+      if (n8nAiResponse) {
+        finalMessage = n8nAiResponse;
+        finalSources = [
+          { type: 'N8N_WORKFLOW', name: 'Sehat Intelligent AI Agent', id: 'medikiosk-smart-assistant' },
+          ...finalSources,
+        ];
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      message: clinicalTurnResult.message,
+      message: finalMessage,
       intent: clinicalTurnResult.intent,
       confidence: clinicalTurnResult.confidence || 0.94,
       risk: clinicalTurnResult.risk || { level: 'ROUTINE', requires_triage: false },
@@ -694,7 +757,7 @@ export async function handleAssistantChat(req, res) {
       doctors: clinicalTurnResult.doctors || [],
       availability: clinicalTurnResult.availability || [],
       actions: clinicalTurnResult.actions || [],
-      sources: clinicalTurnResult.sources || [],
+      sources: finalSources,
       requires_follow_up: Boolean(clinicalTurnResult.requires_follow_up),
       urgent: Boolean(clinicalTurnResult.urgent || clinicalTurnResult.risk?.level === 'EMERGENCY'),
       requires_doctor: Boolean(clinicalTurnResult.requires_doctor || clinicalTurnResult.specialty),

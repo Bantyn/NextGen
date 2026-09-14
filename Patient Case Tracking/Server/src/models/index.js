@@ -18,4 +18,7 @@ export {
   AssistantContact,
 } from './AssistantKnowledge.js';
 export { PrescriptionTemplate } from './PrescriptionTemplate.js';
+export { VitalsRecord } from './VitalsRecord.js';
+export { Appointment, APPOINTMENT_STATUS } from './Appointment.js';
+export { PatientNotification, PATIENT_NOTIFICATION_TYPE } from './PatientNotification.js';
 

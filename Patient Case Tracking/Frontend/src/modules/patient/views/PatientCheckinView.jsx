@@ -29,7 +29,10 @@ export const PatientCheckinView = () => {
     gender: 'Male',
     preferredLanguage: 'gu-IN',
     abhaId: '',
-    opdMode: 'AYUSH', // 'AYUSH' | 'ALLOPATHIC'
+    opdType: 'GENERAL', // 'GENERAL' | 'AYUSH'
+    opdMode: 'ALLOPATHIC', // 'ALLOPATHIC' | 'AYUSH'
+    opdSystem: 'MODERN_MEDICINE', // 'MODERN_MEDICINE' | 'AYURVEDA' | 'YOGA_NATUROPATHY' | 'UNANI' | 'SIDDHA' | 'HOMOEOPATHY' | 'SOWA_RIGPA'
+    medicalSpecialization: 'General Medicine',
     consentEhr: true,
     consentAiVoice: true,
     consentAbhaSync: true,
@@ -180,37 +183,216 @@ export const PatientCheckinView = () => {
 
           <div>
             <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Clinical Pathway
+              Clinical OPD Pathway
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setFormData((p) => ({ ...p, opdMode: 'AYUSH' }))}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-normal border transition cursor-pointer ${
-                  formData.opdMode === 'AYUSH'
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/40 shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Leaf className="w-3.5 h-3.5 text-emerald-600" />
-                <span>AYUSH OPD</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFormData((p) => ({ ...p, opdMode: 'ALLOPATHIC' }))}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-normal border transition cursor-pointer ${
-                  formData.opdMode === 'ALLOPATHIC'
+                onClick={() =>
+                  setFormData((p) => ({
+                    ...p,
+                    opdType: 'GENERAL',
+                    opdMode: 'ALLOPATHIC',
+                    opdSystem: 'MODERN_MEDICINE',
+                  }))
+                }
+                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                  (formData.opdType === 'GENERAL' || formData.opdMode === 'ALLOPATHIC')
                     ? 'bg-sky-50 border-sky-300 text-sky-800 ring-1 ring-sky-400/40 shadow-xs'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <HeartPulse className="w-3.5 h-3.5 text-sky-600" />
+                <HeartPulse className="w-4 h-4 text-sky-600" />
                 <span>General OPD</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((p) => ({
+                    ...p,
+                    opdType: 'AYUSH',
+                    opdMode: 'AYUSH',
+                    opdSystem: p.opdSystem === 'MODERN_MEDICINE' ? 'AYURVEDA' : (p.opdSystem || 'AYURVEDA'),
+                  }))
+                }
+                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                  (formData.opdType === 'AYUSH' || formData.opdMode === 'AYUSH')
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/40 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Leaf className="w-4 h-4 text-emerald-600" />
+                <span>AYUSH OPD (6 Systems)</span>
               </button>
             </div>
           </div>
         </div>
+
+        {/* Detailed OPD System Selection Sub-Panel */}
+        {(formData.opdType === 'GENERAL' || formData.opdMode === 'ALLOPATHIC') ? (
+          <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200/80 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HeartPulse className="w-4 h-4 text-sky-600" />
+                <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  General OPD • Modern & Conventional Medicine
+                </span>
+              </div>
+              <span className="text-[10px] bg-sky-100 text-sky-800 font-medium px-2 py-0.5 rounded-full">
+                MBBS / MD / Specialists
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              <strong>Purpose:</strong> Primary and general medical consultations for common health conditions, diagnostic evaluation, and acute illness under conventional modern medicine.
+            </p>
+
+            {/* Common Examples Chips */}
+            <div>
+              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
+                Common Consultations:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Fever',
+                  'Cough / Cold',
+                  'Infection',
+                  'Blood Pressure',
+                  'Diabetes',
+                  'Minor Injuries',
+                  'General Complaints',
+                ].map((chip) => (
+                  <span
+                    key={chip}
+                    className="px-2.5 py-0.5 rounded-lg text-[11px] font-normal bg-white text-slate-700 border border-sky-200 shadow-2xs"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Medical Specialization Selector */}
+            <div className="pt-2 border-t border-sky-100">
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Medical Specialization
+              </label>
+              <select
+                name="medicalSpecialization"
+                value={formData.medicalSpecialization || 'General Medicine'}
+                onChange={handleChange}
+                className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-white text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
+              >
+                <option value="General Medicine">General Medicine / Internal Medicine (MBBS, MD)</option>
+                <option value="Family Medicine">Family Medicine / Primary Care</option>
+                <option value="Cardiology">Cardiology</option>
+                <option value="Pulmonology">Pulmonology (Respiratory)</option>
+                <option value="Pediatrics">Pediatrics</option>
+                <option value="Orthopedics">Orthopedics</option>
+                <option value="Dermatology">Dermatology</option>
+                <option value="ENT">ENT (Ear, Nose, Throat)</option>
+                <option value="Gynecology & Obstetrics">Gynecology & Obstetrics</option>
+                <option value="General Surgery">General Surgery</option>
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Leaf className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  AYUSH OPD • Traditional & Holistic Systems
+                </span>
+              </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded-full">
+                Umbrella Category
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              AYUSH comprises 6 distinct recognized healthcare disciplines. Select your specific medical system for dedicated doctor routing:
+            </p>
+
+            {/* 6 AYUSH Medical Systems Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              {[
+                {
+                  id: 'AYURVEDA',
+                  title: 'Ayurveda (आयुर्वेद)',
+                  desc: 'Dosha balance, herbal formulations & Panchakarma',
+                  degree: 'BAMS / MD (Ayu)',
+                },
+                {
+                  id: 'YOGA_NATUROPATHY',
+                  title: 'Yoga & Naturopathy (योग एवं प्राकृतिक चिकित्सा)',
+                  desc: 'Lifestyle modification, pranayama & natural therapeutics',
+                  degree: 'BNYS',
+                },
+                {
+                  id: 'UNANI',
+                  title: 'Unani (यूनानी)',
+                  desc: 'Mizaj temperament diagnosis & herbal medicine',
+                  degree: 'BUMS / MD (Unani)',
+                },
+                {
+                  id: 'SIDDHA',
+                  title: 'Siddha (सिद्ध)',
+                  desc: 'Traditional Tamil medicine & herb-mineral science',
+                  degree: 'BSMS / MD (Siddha)',
+                },
+                {
+                  id: 'HOMOEOPATHY',
+                  title: 'Homoeopathy (होम्योपैथी)',
+                  desc: 'Law of Similars & individualized constitutional care',
+                  degree: 'BHMS / MD (Hom)',
+                },
+                {
+                  id: 'SOWA_RIGPA',
+                  title: 'Sowa-Rigpa (सोवा-रिग्पा)',
+                  desc: 'Traditional Himalayan / Tibetan healing & pulse exam',
+                  degree: 'Menrampa / BSRMS',
+                },
+              ].map((sys) => {
+                const isSelected = formData.opdSystem === sys.id;
+                return (
+                  <button
+                    key={sys.id}
+                    type="button"
+                    onClick={() =>
+                      setFormData((p) => ({
+                        ...p,
+                        opdType: 'AYUSH',
+                        opdMode: 'AYUSH',
+                        opdSystem: sys.id,
+                        medicalSpecialization: sys.title.split(' ')[0],
+                      }))
+                    }
+                    className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-white border-emerald-500 ring-2 ring-emerald-400/30 shadow-xs'
+                        : 'bg-white/70 border-emerald-200/60 hover:bg-white hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-semibold ${isSelected ? 'text-emerald-900' : 'text-slate-800'}`}>
+                        {sys.title}
+                      </span>
+                      {isSelected && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">{sys.desc}</p>
+                    <span className="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-1.5 self-start">
+                      {sys.degree}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
 
         {/* ABHA Auto-Fill Primary Input */}

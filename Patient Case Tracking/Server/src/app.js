@@ -8,6 +8,8 @@ import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorMiddleware.js';
 import { requestLogger } from './middleware/requestLoggerMiddleware.js';
 import apiRoutes from './routes/index.js';
+import documentRoutes from './routes/documentRoutes.js';
+import patientRoutes from './routes/patientRoutes.js';
 
 dotenv.config();
 
@@ -104,6 +106,14 @@ app.get('/api/v1/health', (req, res) => {
 
 // Centralized API v1 Routes
 app.use('/api/v1', apiRoutes);
+
+// Patient Document Intelligence Direct Endpoints (Supporting Section 13)
+app.use('/api/documents', documentRoutes);
+app.use('/api/patient/documents', documentRoutes);
+
+// Patient Dashboard Direct Endpoints (Supporting Dynamic Dashboard)
+app.use('/api/patient', patientRoutes);
+app.use('/api/v1/patient', patientRoutes);
 
 // Catch 404 Route Not Found
 app.use(notFoundHandler);

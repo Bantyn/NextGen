@@ -2,7 +2,13 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { processDocumentUpload, getDocumentsByPatient } from '../controllers/documentController.js';
+import {
+  processDocumentUpload,
+  getDocumentsByPatient,
+  getDocumentById,
+  getDocumentSummary,
+  serveDocumentFile,
+} from '../controllers/documentController.js';
 
 const router = express.Router();
 
@@ -31,7 +37,12 @@ const upload = multer({
 
 // Routes
 router.post('/upload', upload.single('file'), processDocumentUpload);
+router.post('/', upload.single('file'), processDocumentUpload);
 router.post('/process-base64', express.json({ limit: '25mb' }), processDocumentUpload);
+router.get('/', getDocumentsByPatient);
 router.get('/patient/:patientId', getDocumentsByPatient);
+router.get('/:documentId/summary', getDocumentSummary);
+router.get('/:documentId/file', serveDocumentFile);
+router.get('/:documentId', getDocumentById);
 
 export default router;

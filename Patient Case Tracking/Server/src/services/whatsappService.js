@@ -268,7 +268,7 @@ export class WhatsAppService {
         `_કૃપા કરીને રૂમ 104 ની બહાર પ્રતીક્ષા ક્ષેત્રમાં બેસો._`;
     } else {
       messageText =
-        `🏥 *MediKiosk - OPD Registration Successful!*\n\n` +
+        `🏥 *Sehat - OPD Registration Successful!*\n\n` +
         `Namaste *${patientName}*,\n` +
         `Your clinical intake & OPD check-in has been successfully completed.\n\n` +
         `📋 *Your Check-In Summary:*\n` +
@@ -360,7 +360,7 @@ export class WhatsAppService {
     const chatId = `${cleanNumber}@c.us`;
 
     const messageText = 
-      `🔐 *MediKiosk Patient Portal Login*\n\n` +
+      `*Sehat Patient Portal Login*\n\n` +
       `Namaste ${name ? '*' + name + '*' : 'Patient'},\n\n` +
       `Your One-Time Password (OTP) for logging into the Patient Dashboard is:\n` +
       `*${otp}*\n\n` +
