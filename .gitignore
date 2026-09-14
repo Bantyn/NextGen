@@ -7,22 +7,33 @@
 # Local environment overrides
 *.local
 
-
-# Dependencies
+# ============================================================
+# Dependencies — ALL levels (never commit node_modules)
+# ============================================================
 node_modules/
+**/node_modules/
 */node_modules/
 */*/node_modules/
+*/*/*/node_modules/
 .pnpm-store/
+.yarn/
+package-lock.json
+!Server/package-lock.json
 
+# ============================================================
 # Build & Vite artifacts
+# ============================================================
 dist/
 dist-ssr/
 build/
 out/
 .vite/
 .next/
+*.tsbuildinfo
 
+# ============================================================
 # Uploads, OCR models & temporary storage
+# ============================================================
 uploads/
 */uploads/
 */*/uploads/
@@ -30,7 +41,9 @@ uploads/
 temp/
 tmp/
 
+# ============================================================
 # Logs & Debug
+# ============================================================
 logs/
 *.log
 npm-debug.log*
@@ -39,7 +52,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ============================================================
 # Editor & OS files
+# ============================================================
 .vscode/
 !.vscode/extensions.json
 .idea/
