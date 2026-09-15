@@ -149,10 +149,10 @@ function Hero({ onStartCheckIn, onDoctorPortal }) {
               <img
                 src={heroVoiceImg}
                 alt="Multilingual Voice AI Intake"
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out"
                 loading="eager"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/15 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent opacity-60 group-hover:opacity-75 transition-opacity" />
 
               {/* Floating Voice Active Pill */}
               <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-md border border-white/60 shadow-xs flex items-center gap-1.5 text-[11px] font-medium text-slate-800">
