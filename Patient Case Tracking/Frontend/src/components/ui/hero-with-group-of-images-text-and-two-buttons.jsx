@@ -125,7 +125,7 @@ function Hero({ onStartCheckIn, onDoctorPortal }) {
               <img
                 src={heroDoctorImg}
                 alt="Doctor consultation in OPD"
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+                className="w-full h-full object-cover object-[center_20%] group-hover:scale-110 transition-transform duration-500 ease-out"
                 loading="eager"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
