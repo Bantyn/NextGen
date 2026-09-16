@@ -31,6 +31,10 @@ export const API_ENDPOINTS = {
   PATIENT_LOGIN: '/patient/login',
   PATIENT_ENCOUNTERS: (id) => id ? `/patient/encounters?patientId=${id}` : '/patient/encounters',
   PATIENT_ENCOUNTER_BY_ID: (sessionId, patientId) => `/patient/encounters/${sessionId}${patientId ? `?patientId=${patientId}` : ''}`,
+  ABHA_INITIATE: '/patient/abha/initiate',
+  ABHA_VERIFY_OTP: '/patient/abha/verify-otp',
+  ABHA_LINK: '/patient/abha/link',
+  ABHA_STATUS: '/patient/abha/status',
 
   // Consent Management
   CONSENTS: '/consents',

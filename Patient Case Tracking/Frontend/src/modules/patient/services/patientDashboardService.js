@@ -341,7 +341,8 @@ export async function registerAndCheckinPatient(formData) {
       last_name: lastName,
       phone: formData.phone?.trim(),
       gender: (formData.gender || 'MALE').toUpperCase(),
-      address: 'Ahmedabad, Gujarat',
+      address: formData.address?.trim() || '',
+      blood_group: formData.bloodGroup || 'UNKNOWN',
       opd_type: opdType,
       opd_system: opdSystem,
       medical_specialization: medicalSpec,
@@ -539,6 +540,68 @@ export async function fetchAvailableDoctorsAPI(filters = {}) {
   }
 }
 
+/**
+ * 14. Recommend doctor based on symptoms using AI
+ */
+export async function recommendDoctorAPI(symptoms, opdType, patientId) {
+  try {
+    const res = await apiClient.post('/patient/recommend-doctor', {
+      symptoms,
+      opdType,
+      patient_id: patientId
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Recommend doctor failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * 15. ABHA Onboarding & Identity Linking APIs
+ */
+export async function initiateAbhaAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_INITIATE, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Initiate ABHA failed:', err.message);
+    throw err;
+  }
+}
+
+export async function verifyAbhaOtpAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_VERIFY_OTP, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Verify ABHA OTP failed:', err.message);
+    throw err;
+  }
+}
+
+export async function linkAbhaAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_LINK, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Link ABHA failed:', err.message);
+    throw err;
+  }
+}
+
+export async function getAbhaStatusAPI(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.ABHA_STATUS, {
+      params: patientId ? { patient_id: patientId } : undefined,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Get ABHA status failed:', err.message);
+    throw err;
+  }
+}
+
 export default {
   fetchRegisteredPatients,
   fetchPatientDashboardBundle,
@@ -559,4 +622,10 @@ export default {
   patientLoginAPI,
   addPatientMedicalHistoryAPI,
   fetchAvailableDoctorsAPI,
+  recommendDoctorAPI,
+  initiateAbhaAPI,
+  verifyAbhaOtpAPI,
+  linkAbhaAPI,
+  getAbhaStatusAPI,
 };
+

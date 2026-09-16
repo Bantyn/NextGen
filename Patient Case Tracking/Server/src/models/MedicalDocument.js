@@ -100,6 +100,60 @@ const MedicalDocumentSchema = new mongoose.Schema(
       enum: ['CLEAR', 'PARTIAL', 'UNCERTAIN'],
       default: 'CLEAR',
     },
+    document_hash: {
+      type: String,
+      index: true,
+      sparse: true,
+      default: null,
+    },
+    collected_at: {
+      type: String,
+      default: null,
+    },
+    reported_at: {
+      type: String,
+      default: null,
+    },
+    registered_at: {
+      type: String,
+      default: null,
+    },
+    document_date: {
+      type: String,
+      default: null,
+    },
+    document_patient_name: {
+      type: String,
+      default: null,
+    },
+    document_patient_identifier: {
+      type: String,
+      default: null,
+    },
+    identity_match: {
+      type: Boolean,
+      default: true,
+    },
+    extraction_completeness: {
+      type: Number,
+      default: 1.0,
+    },
+    detected_parameters_count: {
+      type: Number,
+      default: 0,
+    },
+    structured_parameters_count: {
+      type: Number,
+      default: 0,
+    },
+    validation_errors: {
+      type: [String],
+      default: [],
+    },
+    requires_review: {
+      type: Boolean,
+      default: false,
+    },
     requires_doctor_verification: {
       type: Boolean,
       default: false,

@@ -11,6 +11,7 @@ import { patientNotificationRepository } from '../repositories/patientNotificati
 import { User } from '../models/User.js';
 import mongoose from 'mongoose';
 import { doctorService } from './doctorService.js';
+import clinicalIntelligenceService from './clinicalIntelligenceService.js';
 import { ApiError } from '../utils/apiError.js';
 import { logger } from '../utils/logger.js';
 
@@ -85,11 +86,11 @@ export class PatientDashboardService {
       }).sort({ createdAt: -1 }).lean(),
       Appointment.find({
         patient_id: { $in: relatedPatientIds },
-        status: { $in: ['CONFIRMED', 'SCHEDULED', 'PENDING'] },
-      }).sort({ date: 1 }).lean().catch(() => []),
+        status: { $in: ['CONFIRMED', 'UPCOMING', 'PENDING'] },
+      }).sort({ appointment_date: 1 }).lean().catch(() => []),
       Appointment.find({
         patient_id: { $in: relatedPatientIds },
-      }).sort({ date: -1, createdAt: -1 }).lean().catch(() => []),
+      }).sort({ appointment_date: -1, createdAt: -1 }).lean().catch(() => []),
       patientNotificationRepository.findByPatientId(resolvedPatientId, 10),
       patientNotificationRepository.countUnreadByPatientId(resolvedPatientId),
     ]);
@@ -708,8 +709,12 @@ export class PatientDashboardService {
       name: fullName,
       age,
       gender: patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : 'Other',
-      abhaId: abhaIdentity ? abhaIdentity.identity_reference : null,
-      isAbhaLinked: Boolean(abhaIdentity),
+      abhaId: abhaIdentity ? (abhaIdentity.abha_number || abhaIdentity.identity_reference) : null,
+      abhaNumber: abhaIdentity ? (abhaIdentity.abha_number || abhaIdentity.identity_reference) : null,
+      abhaAddress: abhaIdentity ? (abhaIdentity.abha_address || null) : null,
+      abhaStatus: abhaIdentity ? (abhaIdentity.verification_status || 'LINKED') : 'NOT_LINKED',
+      abhaLinkedAt: abhaIdentity?.link_metadata?.linked_at || abhaIdentity?.updatedAt || null,
+      isAbhaLinked: Boolean(abhaIdentity && abhaIdentity.verification_status === 'VERIFIED'),
       opdType: patient.opd_type || 'GENERAL',
       opdSystem: patient.opd_system || 'GENERAL_MEDICINE',
       medicalSpecialization: patient.medical_specialization || 'General Medicine',
@@ -724,8 +729,13 @@ export class PatientDashboardService {
         dateOfBirth: patient.date_of_birth,
         phone: patient.phone || null,
         address: patient.address || null,
-        abhaId: abhaIdentity ? abhaIdentity.identity_reference : null,
-        isAbhaLinked: Boolean(abhaIdentity),
+        bloodGroup: patient.blood_group || null,
+        abhaId: abhaIdentity ? (abhaIdentity.abha_number || abhaIdentity.identity_reference) : null,
+        abhaNumber: abhaIdentity ? (abhaIdentity.abha_number || abhaIdentity.identity_reference) : null,
+        abhaAddress: abhaIdentity ? (abhaIdentity.abha_address || null) : null,
+        abhaStatus: abhaIdentity ? (abhaIdentity.verification_status || 'LINKED') : 'NOT_LINKED',
+        abhaLinkedAt: abhaIdentity?.link_metadata?.linked_at || abhaIdentity?.updatedAt || null,
+        isAbhaLinked: Boolean(abhaIdentity && abhaIdentity.verification_status === 'VERIFIED'),
         opdType: patient.opd_type || 'GENERAL',
         opdSystem: patient.opd_system || 'GENERAL_MEDICINE',
         medicalSpecialization: patient.medical_specialization || 'General Medicine',
@@ -1207,6 +1217,52 @@ export class PatientDashboardService {
       }
     }
     return doctors;
+  }
+
+  /**
+   * AI-based Doctor Recommendation based on symptoms
+   */
+  async recommendDoctor(patientId, { symptoms, opdType = 'GENERAL' }) {
+    if (!symptoms) throw ApiError.badRequest('Symptoms are required for recommendation.');
+
+    try {
+      // 1. Get AI recommendation for specialty
+      const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptoms, '');
+      const targetSpecialty = specialtyMatch?.primary || 'General Medicine';
+
+      // 2. Fetch available doctors for the given opdType
+      const availableDocs = await this.getAvailableDoctorsForBooking({ opd_type: opdType });
+      
+      if (!availableDocs || availableDocs.length === 0) {
+        return {
+          recommendedDoctor: null,
+          specialty: targetSpecialty,
+          message: `Based on your symptoms, we recommend a ${targetSpecialty} specialist, but none are currently available.`,
+        };
+      }
+
+      // 3. Try to match doctor by department or specialty
+      let bestMatch = availableDocs.find(
+        doc => 
+          (doc.specialization && doc.specialization.toLowerCase().includes(targetSpecialty.toLowerCase())) ||
+          (doc.department && doc.department.toLowerCase().includes(targetSpecialty.toLowerCase()))
+      );
+
+      // Fallback to first available if no exact match
+      if (!bestMatch) {
+        bestMatch = availableDocs[0];
+      }
+
+      return {
+        recommendedDoctor: bestMatch,
+        specialty: targetSpecialty,
+        confidence: specialtyMatch?.confidence || 0.8,
+        message: `Based on your symptoms, we matched you with ${bestMatch.name} (${bestMatch.specialization || bestMatch.department}).`
+      };
+    } catch (error) {
+      logger.error('[PatientDashboardService] Error in AI recommendation: ' + error.message);
+      throw error;
+    }
   }
 }
 

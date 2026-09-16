@@ -43,11 +43,10 @@ export const recordPatientVitals = async (req, res, next) => {
   try {
     let patientId = req.body.patient_id || req.body.patientId;
     if (req.user?.role === 'PATIENT') {
-      const ownId = (req.user.patient_id || req.user.id || '').toUpperCase();
-      if (patientId && patientId.toUpperCase() !== ownId) {
-        throw ApiError.forbidden("Access denied: You cannot record vitals for another patient.", 'FORBIDDEN_ACCESS');
-      }
-      patientId = req.user.patient_id || req.user.id;
+      throw ApiError.forbidden(
+        'Access denied: Patients are not permitted to record clinical vitals. Vitals must be recorded by authorized clinical triage or attending physicians.',
+        'PATIENT_OPERATION_NOT_ALLOWED'
+      );
     }
 
     if (!patientId) {
@@ -165,11 +164,10 @@ export const updateJourneyStep = async (req, res, next) => {
   try {
     let patientId = req.body.patient_id || req.body.patientId || req.query.patientId;
     if (req.user?.role === 'PATIENT') {
-      const ownId = (req.user.patient_id || req.user.id || '').toUpperCase();
-      if (patientId && patientId.toUpperCase() !== ownId) {
-        throw ApiError.forbidden("Access denied: You cannot update journey stage for another patient.", 'FORBIDDEN_ACCESS');
-      }
-      patientId = req.user.patient_id || req.user.id;
+      throw ApiError.forbidden(
+        'Access denied: Patients are not permitted to advance or modify OPD journey stages. Stage transitions must be authorized by attending doctors or clinical staff.',
+        'PATIENT_OPERATION_NOT_ALLOWED'
+      );
     }
 
     const { stageKey, sessionId } = req.body;
@@ -318,6 +316,26 @@ export const getAvailableDoctors = async (req, res, next) => {
   }
 };
 
+export const recommendDoctor = async (req, res, next) => {
+  try {
+    const patientId = req.user?.patient_id || req.user?.id || req.body.patient_id;
+    const { symptoms, opdType } = req.body;
+    
+    if (!symptoms) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: 'error',
+        message: 'Symptoms are required',
+      });
+    }
+
+    const recommendation = await patientDashboardService.recommendDoctor(patientId, { symptoms, opdType });
+    return sendSuccess(res, HTTP_STATUS.OK, 'Doctor recommendation retrieved successfully', recommendation);
+  } catch (error) {
+    logger.error('[RecommendDoctorController] Error: ' + error.message);
+    next(error);
+  }
+};
+
 export default {
   getPatientDashboard,
   recordPatientVitals,
@@ -331,4 +349,5 @@ export default {
   getPatientEncounterById,
   addPatientMedicalHistory,
   getAvailableDoctors,
+  recommendDoctor,
 };

@@ -7,6 +7,7 @@ import {
   Pill,
   Clock,
   Activity,
+  Shield,
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
@@ -50,13 +51,12 @@ import {
   fetchRegisteredPatients,
   fetchPatientDashboardBundle,
   uploadPatientMedicalDocument,
-  recordPatientVitalsAPI,
   bookPatientAppointmentAPI,
   markNotificationReadAPI,
-  updatePatientJourneyStageAPI,
   startNewPatientIntakeAPI,
   addPatientMedicalHistoryAPI,
   fetchAvailableDoctorsAPI,
+  recommendDoctorAPI,
 } from '../services/patientDashboardService';
 import { INITIAL_EMPTY_PATIENT } from '../../../data/patientDashboardData';
 import {
@@ -79,7 +79,6 @@ export const PatientDashboardView = () => {
   const [patient, setPatient] = useState(INITIAL_EMPTY_PATIENT);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [patientLoadError, setPatientLoadError] = useState(null);
-  const [isUpdatingJourney, setIsUpdatingJourney] = useState(false);
   const [isStartingIntake, setIsStartingIntake] = useState(false);
   const [selectedIntakeDetail, setSelectedIntakeDetail] = useState(null);
 
@@ -120,26 +119,11 @@ export const PatientDashboardView = () => {
     }
   };
 
-  // Modals for Vitals Recording, Appointments, Notifications
-  const [showRecordVitalsModal, setShowRecordVitalsModal] = useState(false);
+  // Modals for Appointments, Notifications
   const [showBookAppointmentModal, setShowBookAppointmentModal] = useState(false);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
-  const [isSubmittingVitals, setIsSubmittingVitals] = useState(false);
   const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
-  const [vitalsFormError, setVitalsFormError] = useState(null);
   const [appointmentFormError, setAppointmentFormError] = useState(null);
-  const [vitalsForm, setVitalsForm] = useState({
-    systolic: '',
-    diastolic: '',
-    pulse: '',
-    spo2: '',
-    temperature: '',
-    bloodSugar: '',
-    sugarType: 'RANDOM',
-    weight: '',
-    height: '',
-    notes: '',
-  });
   const [appointmentForm, setAppointmentForm] = useState({
     doctorId: 'DOC-MED-01',
     doctorName: 'Dr. Priya Sharma',
@@ -154,6 +138,44 @@ export const PatientDashboardView = () => {
   const [availableDoctors, setAvailableDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [doctorFetchError, setDoctorFetchError] = useState(null);
+
+  // AI Doctor Recommendation State
+  const [isRecommendingDoctor, setIsRecommendingDoctor] = useState(false);
+  const [recommendationMessage, setRecommendationMessage] = useState('');
+
+  const handleRecommendDoctor = async () => {
+    if (!appointmentForm.reason) {
+      alert('Please describe your symptoms in the "Reason for Visit" box first.');
+      return;
+    }
+    
+    setIsRecommendingDoctor(true);
+    setRecommendationMessage('');
+    
+    try {
+      const patientId = selectedPatientId || user?.patient_id || user?.id;
+      const res = await recommendDoctorAPI(appointmentForm.reason, patient?.opdType || 'GENERAL', patientId);
+      
+      if (res && res.recommendedDoctor) {
+        const doc = res.recommendedDoctor;
+        setAppointmentForm(prev => ({
+          ...prev,
+          doctorId: doc.doctorId,
+          doctorName: doc.name,
+          doctorSpecialization: doc.specialization || doc.department || 'General Medicine',
+          time: doc.fixedSlots && doc.fixedSlots.length > 0 ? doc.fixedSlots[0] : prev.time,
+        }));
+        setRecommendationMessage(`AI Selected: ${doc.name} (${res.specialty}). ${res.message || ''}`);
+      } else {
+        setRecommendationMessage('Could not find a suitable doctor for your symptoms.');
+      }
+    } catch (err) {
+      console.error('AI Recommendation failed:', err);
+      alert('AI Recommendation failed. Please select a doctor manually.');
+    } finally {
+      setIsRecommendingDoctor(false);
+    }
+  };
 
   // Fetch verified hospital doctors live from backend when appointment modal is opened
   React.useEffect(() => {
@@ -235,6 +257,25 @@ export const PatientDashboardView = () => {
 
   React.useEffect(() => {
     loadDashboard();
+  }, [loadDashboard]);
+
+  // Listen for storage events or window refocus from ABHA creation new tab
+  React.useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'abha_linked_event') {
+        loadDashboard();
+      }
+    };
+    const handleFocus = () => {
+      loadDashboard();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [loadDashboard]);
 
 
@@ -338,33 +379,6 @@ export const PatientDashboardView = () => {
   };
 
   // Handlers for dynamic actions
-  const handleRecordVitalsSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedPatientId) return;
-    try {
-      setIsSubmittingVitals(true);
-      setVitalsFormError(null);
-      await recordPatientVitalsAPI(selectedPatientId, vitalsForm);
-      setShowRecordVitalsModal(false);
-      setVitalsForm({
-        systolic: '',
-        diastolic: '',
-        pulse: '',
-        spo2: '',
-        temperature: '',
-        bloodSugar: '',
-        sugarType: 'RANDOM',
-        weight: '',
-        height: '',
-        notes: '',
-      });
-      await loadDashboard();
-    } catch (err) {
-      setVitalsFormError(err.message || 'Failed to record vitals.');
-    } finally {
-      setIsSubmittingVitals(false);
-    }
-  };
 
   const handleBookAppointmentSubmit = async (e) => {
     e.preventDefault();
@@ -418,50 +432,6 @@ export const PatientDashboardView = () => {
 
     return () => clearInterval(interval);
   }, [selectedPatientId]);
-
-  const handleUpdateJourneyStage = async (targetStageKey) => {
-    if (!selectedPatientId) return;
-    try {
-      setIsUpdatingJourney(true);
-      const stepIdxMap = {
-        CHECKED_IN: 0,
-        VITALS_TAKEN: 1,
-        IN_CONSULTATION: 2,
-        LAB_PENDING: 3,
-        COMPLETED: 4,
-      };
-      if (stepIdxMap[targetStageKey] !== undefined) {
-        setPatient((prev) => ({
-          ...prev,
-          currentToken: prev.currentToken
-            ? {
-                ...prev.currentToken,
-                status: targetStageKey,
-                stageKey: targetStageKey,
-                stepIndex: stepIdxMap[targetStageKey],
-              }
-            : null,
-        }));
-      }
-
-      const updatedBundle = await updatePatientJourneyStageAPI(
-        selectedPatientId,
-        targetStageKey,
-        safePatient?.currentToken?.sessionId
-      );
-
-      if (updatedBundle) {
-        setPatient(updatedBundle);
-      } else {
-        await loadDashboard();
-      }
-    } catch (err) {
-      console.warn('Failed to update journey stage:', err.message);
-      await loadDashboard();
-    } finally {
-      setIsUpdatingJourney(false);
-    }
-  };
 
   // Theme-compliant Skeleton Loading State based on Planner/Theme.md
   if (loadingPatient || !patient) {
@@ -960,9 +930,6 @@ export const PatientDashboardView = () => {
                   <h2 className="text-sm font-semibold text-slate-950">
                     Live OPD Journey & Consultation Status
                   </h2>
-                  {isUpdatingJourney && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                  )}
                 </div>
                 <p className="text-xs text-slate-500">
                   {currentToken.department} • {currentToken.room}
@@ -980,27 +947,15 @@ export const PatientDashboardView = () => {
                 Doctor: <strong className="text-slate-900">{currentToken.doctor}</strong>
               </span>
 
-              {/* Live Stage Selector for Testing & Clinic Staff */}
-              <div className="flex items-center gap-1.5 pl-1">
-                <span className="text-[11px] text-slate-400 font-medium hidden md:inline">Change Stage:</span>
-                <select
-                  value={journeySteps[currentStepIdx]?.key || 'CHECKED_IN'}
-                  onChange={(e) => handleUpdateJourneyStage(e.target.value)}
-                  disabled={isUpdatingJourney}
-                  className="px-2 py-1 text-[11px] rounded-lg bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-slate-800 font-medium focus:ring-2 focus:ring-sky-500 focus:outline-none transition cursor-pointer"
-                  title="Manually transition the OPD encounter stage"
-                >
-                  {journeySteps.map((s, i) => (
-                    <option key={s.key} value={s.key}>
-                      Stage {i + 1}: {s.label}
-                    </option>
-                  ))}
-                </select>
+              {/* Authoritative Real-Time Hospital Feed Badge */}
+              <div className="flex items-center gap-1.5 pl-1 text-[11px] font-medium text-slate-500">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+                <span className="hidden sm:inline">Authoritative Hospital Feed</span>
               </div>
             </div>
           </div>
 
-          {/* 5-Step Horizontal Flow Indicator (Interactive) */}
+          {/* 5-Step Horizontal Flow Indicator (Read-Only Live Tracker) */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
             {journeySteps.map((step, idx) => {
               const isCompleted = idx < currentStepIdx;
@@ -1009,14 +964,13 @@ export const PatientDashboardView = () => {
               return (
                 <div
                   key={step.key}
-                  onClick={() => handleUpdateJourneyStage(step.key)}
-                  title={`Click to set status to '${step.label}'`}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] active:scale-[0.99] ${
+                  title={`Stage ${idx + 1}: ${step.label} (${isCurrent ? 'In Progress' : isCompleted ? 'Completed' : 'Pending'})`}
+                  className={`p-3.5 rounded-2xl border transition-all ${
                     isCurrent
                       ? 'bg-sky-50/70 border-sky-300 ring-2 ring-sky-500/20 shadow-xs'
                       : isCompleted
-                      ? 'bg-slate-50/80 border-emerald-200/70 hover:border-emerald-300'
-                      : 'bg-white border-slate-200/60 opacity-60 hover:opacity-100 hover:border-slate-300'
+                      ? 'bg-slate-50/80 border-emerald-200/70'
+                      : 'bg-white border-slate-200/60 opacity-60'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
@@ -1026,7 +980,7 @@ export const PatientDashboardView = () => {
                           ? 'bg-sky-600 text-white shadow-xs'
                           : isCompleted
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-200 text-slate-500 group-hover:bg-slate-300'
+                          : 'bg-slate-200 text-slate-500'
                       }`}
                     >
                       {isCompleted ? <Check className="w-3 h-3 stroke-[3]" /> : idx + 1}
@@ -1040,10 +994,10 @@ export const PatientDashboardView = () => {
                       <span className="text-[10px] font-medium text-emerald-700">Done</span>
                     )}
                     {!isCompleted && !isCurrent && (
-                      <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-600">Pending</span>
+                      <span className="text-[10px] font-medium text-slate-400">Pending</span>
                     )}
                   </div>
-                  <div className="text-xs font-semibold text-slate-900 leading-tight group-hover:text-sky-700 transition">
+                  <div className="text-xs font-semibold text-slate-900 leading-tight">
                     {step.label}
                   </div>
                   <div className="text-[11px] text-slate-500 leading-tight mt-0.5">
@@ -1073,14 +1027,11 @@ export const PatientDashboardView = () => {
             </div>
 
             {currentStepIdx < 4 ? (
-              <button
-                onClick={() => handleUpdateJourneyStage(journeySteps[currentStepIdx + 1].key)}
-                disabled={isUpdatingJourney}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs w-fit"
-              >
-                <span>Advance to: {journeySteps[currentStepIdx + 1].label}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 border border-slate-200 text-slate-700">
+                <Activity className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
+                <span>Next Stage: <strong className="text-slate-900">{journeySteps[currentStepIdx + 1].label}</strong></span>
+                <span className="text-slate-400 hidden sm:inline">• Awaiting clinic staff update</span>
+              </div>
             ) : (
               <span className="inline-flex items-center gap-1 text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -1108,13 +1059,6 @@ export const PatientDashboardView = () => {
             >
               {isStartingIntake ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[2.5]" />}
               <span>+ Start New Clinical Intake</span>
-            </button>
-            <button
-              onClick={() => handleUpdateJourneyStage('CHECKED_IN')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200/80 text-slate-800 transition shrink-0 border border-slate-200 cursor-pointer"
-            >
-              <span>Check In for Today's OPD</span>
-              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -1192,6 +1136,92 @@ export const PatientDashboardView = () => {
           ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Dedicated ABHA Section (State A: Linked, State B: Not Linked) */}
+          {safePatient.isAbhaLinked && safePatient.abhaId ? (
+            /* State A — ABHA Already Linked */
+            <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-sky-950 text-white shadow-md border border-slate-700/60 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-sky-400 shrink-0">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-sky-400">
+                        Ayushman Bharat Health Account (ABHA)
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Linked</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm sm:text-base font-mono font-bold tracking-wider text-white">
+                        {safePatient.abhaId}
+                      </span>
+                      <button
+                        onClick={handleCopyAbha}
+                        className="text-slate-400 hover:text-white transition cursor-pointer"
+                        title="Copy ABHA Number"
+                      >
+                        {copiedAbha ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {safePatient.abhaAddress && (
+                      <p className="text-xs text-slate-300 font-mono">
+                        Address: <strong className="text-sky-300">{safePatient.abhaAddress}</strong>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setShowAbhaModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-white text-slate-900 hover:bg-slate-100 transition shadow-xs cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-sky-600" />
+                    <span>View ABHA Card</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* State B — ABHA Not Linked (Clear Non-Intrusive CTA opening in New Tab) */
+            <div className="p-5 sm:p-6 rounded-3xl bg-sky-50/70 border border-sky-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-white text-sky-600 border border-sky-200 flex items-center justify-center shrink-0 shadow-xs">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-950">Your ABHA is not linked yet</h4>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200/70 text-slate-600">
+                      Unlinked
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
+                    Create or link your ABHA to connect your digital health identity with your healthcare records. Your existing clinical consultations, lab reports, and history will stay attached to your profile.
+                  </p>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-2">
+                <a
+                  href={`/patient/abha/create${selectedPatientId ? `?patientId=${selectedPatientId}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Create ABHA</span>
+                  <ExternalLink className="w-3.5 h-3.5 ml-0.5 opacity-80" />
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* 0. Clinical Risk & Red-Flag Assessment Status Banner (Dynamic) */}
           <div className="p-4 sm:p-5 rounded-2xl border transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border-slate-200/80">
             <div className="flex items-center gap-3">
@@ -1270,13 +1300,10 @@ export const PatientDashboardView = () => {
                   </span>
                 )}
               </div>
-              <button
-                onClick={() => setShowRecordVitalsModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Record Vitals</span>
-              </button>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+                <span>Recorded by Hospital Staff</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
@@ -2598,13 +2625,10 @@ export const PatientDashboardView = () => {
                     : patientVitals?.lastUpdated || 'No readings on record'}
                 </strong>
               </span>
-              <button
-                onClick={() => setShowRecordVitalsModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Record New Reading</span>
-              </button>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+                <span>Authoritative Clinical Data • Managed by Triage & Doctor</span>
+              </div>
             </div>
           </div>
 
@@ -3645,184 +3669,6 @@ export const PatientDashboardView = () => {
       )}
 
       {/* =========================================================================
-          MODAL 3: RECORD CLINICAL VITALS
-          ========================================================================= */}
-      {showRecordVitalsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleUp">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
-                  <HeartPulse className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">Record Clinical Vitals</h3>
-                  <p className="text-xs text-slate-500">Record latest biometric parameters to health record</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRecordVitalsModal(false)}
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRecordVitalsSubmit} className="p-6 space-y-4 text-xs">
-              {vitalsFormError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>{vitalsFormError}</div>
-                </div>
-              )}
-
-              {/* BP Systolic & Diastolic */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Systolic BP (mmHg)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 120"
-                    value={vitalsForm.systolic}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, systolic: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Diastolic BP (mmHg)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 80"
-                    value={vitalsForm.diastolic}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, diastolic: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Pulse & SpO2 */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Pulse / Heart Rate (bpm)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 74"
-                    value={vitalsForm.pulse}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, pulse: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Oxygen SpO2 (%)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 98"
-                    value={vitalsForm.spo2}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, spo2: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Temperature & Blood Sugar */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Temperature (°F)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="e.g. 98.6"
-                    value={vitalsForm.temperature}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, temperature: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Blood Sugar (mg/dL)</label>
-                  <div className="flex gap-1.5">
-                    <input
-                      type="number"
-                      placeholder="e.g. 105"
-                      value={vitalsForm.bloodSugar}
-                      onChange={(e) => setVitalsForm({ ...vitalsForm, bloodSugar: e.target.value })}
-                      className="w-2/3 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                    />
-                    <select
-                      value={vitalsForm.sugarType}
-                      onChange={(e) => setVitalsForm({ ...vitalsForm, sugarType: e.target.value })}
-                      className="w-1/3 px-2 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-[11px]"
-                    >
-                      <option value="RANDOM">Random</option>
-                      <option value="FASTING">Fasting</option>
-                      <option value="POST_PRANDIAL">PP</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Weight & Height (Auto BMI calculated on server) */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Weight (kg)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="e.g. 68.5"
-                    value={vitalsForm.weight}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, weight: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Height (cm)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 172"
-                    value={vitalsForm.height}
-                    onChange={(e) => setVitalsForm({ ...vitalsForm, height: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Clinical Notes (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Patient resting for 15 mins prior to reading"
-                  value={vitalsForm.notes}
-                  onChange={(e) => setVitalsForm({ ...vitalsForm, notes: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-3">
-                <button
-                  type="submit"
-                  disabled={isSubmittingVitals}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSubmittingVitals ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                  <span>Save Vitals to EMR</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowRecordVitalsModal(false)}
-                  disabled={isSubmittingVitals}
-                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* =========================================================================
           MODAL 4: BOOK CONSULTATION APPOINTMENT
@@ -3854,6 +3700,13 @@ export const PatientDashboardView = () => {
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div>{appointmentFormError}</div>
+                </div>
+              )}
+
+              {recommendationMessage && (
+                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 flex items-start gap-2 mb-2 text-xs">
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>{recommendationMessage}</div>
                 </div>
               )}
 
@@ -3969,14 +3822,28 @@ export const PatientDashboardView = () => {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Reason for Visit</label>
+                <label className="font-semibold text-slate-700 block mb-1">Reason for Visit & Symptoms</label>
                 <textarea
                   rows={2}
-                  placeholder="Describe your current symptoms or reason for follow-up"
+                  placeholder="Describe your current symptoms (e.g., severe headache, fever) to let AI recommend a doctor, or write your reason for follow-up"
                   value={appointmentForm.reason}
                   onChange={(e) => setAppointmentForm({ ...appointmentForm, reason: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none mb-2"
                 />
+                
+                <button
+                  type="button"
+                  onClick={handleRecommendDoctor}
+                  disabled={isRecommendingDoctor || loadingDoctors}
+                  className="w-full py-2 rounded-xl text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isRecommendingDoctor ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>AI Recommend Doctor based on Symptoms</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-2 pt-3">

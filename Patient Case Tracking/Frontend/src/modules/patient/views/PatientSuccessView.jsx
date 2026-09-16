@@ -181,12 +181,12 @@ export const PatientSuccessView = () => {
           <ArrowRight className="w-4 h-4" />
         </button>
 
-        <button
+        {/* <button
           onClick={() => navigate(`/doctor/cases/${summary.sessionId}`)}
           className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-normal text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-sm"
         >
           <span>Open Physician Consultation EMR</span>
-        </button>
+        </button> */}
 
         <button
           onClick={() => navigate('/patient/register')}

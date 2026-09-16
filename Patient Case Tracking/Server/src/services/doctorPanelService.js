@@ -1407,6 +1407,17 @@ export class DoctorPanelService {
     const filter = { patient_id: { $in: authorizedPatientIds } };
     if (search && search.trim()) {
       const q = search.trim();
+      // Match ABHA identities (ABHA Number or ABHA Address or reference)
+      const matchingAbhas = await PatientIdentity.find({
+        identity_type: 'ABHA',
+        $or: [
+          { identity_reference: { $regex: q, $options: 'i' } },
+          { abha_number: { $regex: q, $options: 'i' } },
+          { abha_address: { $regex: q, $options: 'i' } },
+        ],
+      }).select('patient_id').lean().catch(() => []);
+      const abhaPatientIds = matchingAbhas.map((m) => m.patient_id).filter(Boolean);
+
       filter.$and = [
         { patient_id: { $in: authorizedPatientIds } },
         {
@@ -1415,6 +1426,7 @@ export class DoctorPanelService {
             { last_name: { $regex: q, $options: 'i' } },
             { patient_id: { $regex: q, $options: 'i' } },
             { phone: { $regex: q, $options: 'i' } },
+            ...(abhaPatientIds.length > 0 ? [{ patient_id: { $in: abhaPatientIds } }] : []),
           ],
         },
       ];

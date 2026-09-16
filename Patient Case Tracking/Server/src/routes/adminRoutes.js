@@ -20,6 +20,7 @@ import {
   handleGetPatients,
   handleGetRedFlags,
   handleResolveRedFlag,
+  handleGetAnalytics,
 } from '../controllers/adminController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { restrictTo } from '../middleware/rbacMiddleware.js';
@@ -91,6 +92,9 @@ router.put('/assistant/config', handleUpdateAssistantConfig);
 // 10. System Diagnostics & Audit Logs
 router.get('/system/health', handleGetSystemHealth);
 router.get('/audit-logs', handleGetAuditLogs);
+
+// 11. Institutional Analytics
+router.get('/analytics', handleGetAnalytics);
 
 export default router;
 

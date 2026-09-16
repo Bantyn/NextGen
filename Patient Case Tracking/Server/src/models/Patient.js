@@ -48,6 +48,12 @@ const PatientSchema = new mongoose.Schema(
       phone: { type: String, default: '' },
       relationship: { type: String, default: '' },
     },
+    blood_group: {
+      type: String,
+      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', 'UNKNOWN', null],
+      default: 'UNKNOWN',
+      trim: true,
+    },
     current_status: {
       type: String,
       default: 'CHECKED_IN',

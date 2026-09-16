@@ -144,23 +144,30 @@ export function extractSourceFlag(rowText) {
  */
 export function sanitizeUnit(unit) {
   if (!unit) return '';
-  const u = String(unit).trim();
+  let u = String(unit).trim();
 
   // Reject if unit is a flag/status word
   if (UNIT_BLACKLIST.some((w) => u.toLowerCase() === w)) return '';
 
   // Normalize common OCR unit corruptions
-  const normalized = u
+  u = u
+    .replace(/^Jemm$/i, '/cumm')
+    .replace(/^\/cmm$/i, '/cumm')
+    .replace(/^cumm$/i, '/cumm')
+    .replace(/^mil\s*\/cmm$/i, 'mill/cumm')
+    .replace(/^gm%$/i, 'g/dL')
+    .replace(/^gm\/dl$/i, 'g/dL')
+    .replace(/^ul$/i, 'U/L')
+    .replace(/^u\/l$/i, 'U/L')
+    .replace(/^fl$/i, 'fL')
     .replace(/\bul\b/gi, 'U/L')
     .replace(/\bma\/dl\b/gi, 'mg/dL')
     .replace(/\bg\/l\b/gi, 'g/L')
     .replace(/\bmeq\/l\b/gi, 'mEq/L')
     .replace(/\buiu\/ml\b/gi, 'uIU/mL')
-    .replace(/\biu\/l\b/gi, 'IU/L')
-    .replace(/\bmill\/cumm\b/gi, 'mill/cumm')
-    .replace(/\b\/cumm\b/gi, '/cumm');
+    .replace(/\biu\/l\b/gi, 'IU/L');
 
-  return normalized;
+  return u;
 }
 
 // ─── Section Header Detector ───────────────────────────────────────────────────
@@ -173,7 +180,10 @@ export function detectSectionHeader(line) {
   if (!line || line.trim().length < 3) return null;
   const l = line.trim();
 
-  // Must be mostly uppercase / title-case and relatively short
+  // Section headers do not contain numeric test values or results
+  if (/\d/.test(l)) return null;
+
+  // Must be relatively short
   const wordCount = l.split(/\s+/).length;
   if (wordCount > 8) return null;
 
@@ -182,7 +192,7 @@ export function detectSectionHeader(line) {
   }
 
   // Generic: ALL CAPS line with no numeric content — treat as section header
-  if (/^[A-Z\s\/\(\)&,.-]{5,60}$/.test(l) && !/\d/.test(l)) {
+  if (/^[A-Z\s\/\(\)&,.-]{5,60}$/.test(l)) {
     return l;
   }
 
@@ -216,12 +226,13 @@ export function classifyLabRow(line, currentSection = 'General') {
   // Must contain at least one numeric value to be a data row
   if (!/\d/.test(l)) return null;
 
-  // Split on 2+ consecutive spaces (column separator in most printed reports)
-  const cells = l.split(/\s{2,}/).map((c) => c.trim()).filter(Boolean);
+  // Split on pipe (|), tab (\t), or 2+ consecutive spaces (column separator in most printed reports)
+  const delimiter = l.includes('|') ? '|' : (l.includes('\t') ? '\t' : /\s{2,}/);
+  const cells = l.split(delimiter).map((c) => c.trim()).filter(Boolean);
   if (cells.length < 2) {
     // Try single-space split as fallback for OCR-collapsed columns
-    // Only if there's a plausible structure: <text> <number>
-    const fallback = l.match(/^([A-Za-z][A-Za-z\s\(\)\/\-\.,:]+?)\s+(\d+(?:[.,]\d+)?)\s*(.*)?$/);
+    // Allows alphanumeric test names like (T3), (T4), HbA1c, D3, B12
+    const fallback = l.match(/^([A-Za-z][A-Za-z0-9\s\(\)\/\-\.,:]*?[A-Za-z0-9\)])\s+(\d+(?:[.,]\d+)?)\s*(.*)?$/);
     if (!fallback) return null;
 
     const testName = fallback[1].trim();
@@ -273,19 +284,57 @@ export function classifyLabRow(line, currentSection = 'General') {
 }
 
 // ─── Unit Extractor Helpers ────────────────────────────────────────────────────
-const KNOWN_UNITS = [
-  'mg/dL', 'g/dL', 'U/L', 'IU/L', 'mEq/L', 'uIU/mL', '%',
-  '/cumm', 'mill/cumm', 'µg/dL', 'mcg/dL', 'ng/mL', 'pg/mL',
-  'mmol/L', 'µmol/L', 'fL', 'pg', 'g/L', 'kU/L', 'mIU/L',
-  '/hpf', '/lpf', 'mm/hr', 'sec', 'INR',
-];
-
+export const KNOWN_UNITS = [
+  'mill/cumm',
+  'mil /cmm',
+  'mil/cmm',
+  'mcg/dL',
+  'uIU/mL',
+  'mmol/L',
+  'µmol/L',
+  'mEq/L',
+  'mg/dL',
+  'gm/dl',
+  'µg/dL',
+  'ng/mL',
+  'pg/mL',
+  'mIU/L',
+  'mm/hr',
+  '/cumm',
+  'Jemm',
+  '/cmm',
+  'cumm',
+  'gm%',
+  'IU/L',
+  'g/dL',
+  'kU/L',
+  '/hpf',
+  '/lpf',
+  'sec',
+  'INR',
+  'U/L',
+  'uL',
+  'u/L',
+  'g/L',
+  'mL',
+  'fL',
+  'pg',
+  'fl',
+  'mg',
+  'g',
+  '%',
+].sort((a, b) => b.length - a.length);
 
 /**
  * Try to extract a unit from a text string by matching known unit patterns.
  */
 function extractUnitFromRemainder(text) {
   if (!text) return '';
+  for (const u of KNOWN_UNITS) {
+    const escaped = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`, 'i');
+    if (rx.test(text)) return u;
+  }
   for (const u of KNOWN_UNITS) {
     if (text.includes(u)) return u;
   }
@@ -438,69 +487,163 @@ export function extractLabTableRows(rawText) {
 }
 
 /**
+ * Check for and repair common OCR decimal loss artifacts.
+ * E.g. RBC reference interval printed as "4.5 - 5.5" but OCR'd as "45 - 55"
+ * E.g. MCHC reference interval printed as "32.5 - 34.5" but OCR'd as "32.5 - 345"
+ */
+export function checkAndRepairDecimalLoss(testName, value, rMin, rMax) {
+  const name = String(testName || '').toLowerCase().replace(/[^a-z0-9]/g, ' ');
+  let repairedMin = rMin;
+  let repairedMax = rMax;
+  let wasRepaired = false;
+
+  // 1. RBC Count: physiological interval is ~4.0 - 6.0 mill/cumm.
+  // OCR frequently recognizes "4.5 - 5.5" as "45 - 55" or "38 - 48"
+  if ((name.includes('rbc') || name.includes('red blood')) && repairedMin !== null && repairedMax !== null) {
+    if (repairedMin >= 30 && repairedMax <= 70) {
+      repairedMin = Number((repairedMin / 10).toFixed(2));
+      repairedMax = Number((repairedMax / 10).toFixed(2));
+      wasRepaired = true;
+    }
+  }
+
+  // 2. MCHC: physiological interval is ~32 - 36 g/dL.
+  // OCR frequently recognizes "32.5 - 34.5" as "32.5 - 345" (dropping decimal in upper bound)
+  if (name.includes('mchc') && repairedMax !== null && repairedMax >= 300 && repairedMax <= 400) {
+    repairedMax = Number((repairedMax / 10).toFixed(1));
+    wasRepaired = true;
+  }
+
+  // 3. Bilirubin Direct: physiological interval is < 0.3 mg/dL.
+  // OCR frequently recognizes "< 0.3" as "<03" (parsed as 3)
+  if ((name.includes('bilirubin direct') || name.includes('direct bilirubin')) && repairedMax === 3) {
+    repairedMax = 0.3;
+    wasRepaired = true;
+  }
+
+  // 4. General 10x ratio guard:
+  // If value is ~5.2 and range is 45 - 55 (value * 10 is inside range), detect decimal loss in range
+  if (value !== null && repairedMin !== null && repairedMax !== null && !wasRepaired) {
+    if (value >= 1.0 && value <= 15.0 && repairedMin >= 10.0 && repairedMax <= 150.0) {
+      const tenX = value * 10;
+      if (tenX >= repairedMin && tenX <= repairedMax) {
+        repairedMin = Number((repairedMin / 10).toFixed(2));
+        repairedMax = Number((repairedMax / 10).toFixed(2));
+        wasRepaired = true;
+      }
+    }
+  }
+
+  return {
+    min: repairedMin,
+    max: repairedMax,
+    raw: wasRepaired ? `${repairedMin} - ${repairedMax}` : null,
+    wasRepaired,
+  };
+}
+
+/**
  * Post-process extracted rows:
- * - Compute flag from value vs range and compare with source flag
- * - Set verification_required if they conflict
- * - Apply critical threshold check
+ * - Apply decimal loss repair on reference ranges
+ * - Separate source flag from calculated status
+ * - Priority: 1. Source flag, 2. Range calculation, 3. Critical overrides
+ * - Calculate field-level confidence scores
  */
 export function postProcessRows(rows, standardRanges = {}) {
   return rows.map((row) => {
     const value = parseNumericValue(row.observed_value);
+    const { min: initialMin, max: initialMax } = parseReferenceRange(row.reference_range);
 
-    let flag = row.source_flag;   // always start with what the source printed
+    // Decimal loss repair
+    const { min: rMin, max: rMax, raw: repairedRangeStr, wasRepaired } = checkAndRepairDecimalLoss(
+      row.test_name,
+      value,
+      initialMin,
+      initialMax
+    );
+    let effectiveRefRange = row.reference_range;
+    if (wasRepaired && repairedRangeStr) {
+      effectiveRefRange = repairedRangeStr;
+      row.reference_range = repairedRangeStr;
+      row.decimal_loss_repaired = true;
+    }
+
+    // Compute mathematical status against the reference interval
+    let computedFlag = null;
+    if (value !== null && rMin !== null && rMax !== null) {
+      if (value < rMin) computedFlag = 'LOW';
+      else if (value > rMax) computedFlag = 'HIGH';
+      else computedFlag = 'NORMAL';
+    } else if (value !== null && rMax !== null && rMin === -Infinity) {
+      computedFlag = value > rMax ? 'HIGH' : 'NORMAL';
+    } else if (value !== null && rMin !== null && rMax === Infinity) {
+      computedFlag = value < rMin ? 'LOW' : 'NORMAL';
+    }
+
+    // Source Flag vs Calculated Status (Section 9 of Core Rule)
+    const sourceFlag = row.source_flag || null;
+    const calculatedStatus = computedFlag || (row.flag === 'NORMAL' ? 'NORMAL' : null);
+
+    // Final flag: source flag has highest priority unless critical bounds
+    let finalFlag = sourceFlag || computedFlag || 'NORMAL';
     let verificationRequired = false;
 
-    // Critical threshold check using standard ranges dict (OVERRIDES source only at critical bounds)
+    // Critical threshold check using standard ranges dictionary
     const testKey = String(row.test_name || '').toLowerCase().replace(/[^a-z]/g, '_');
     for (const [key, std] of Object.entries(standardRanges)) {
       if (testKey.includes(key) || key.includes(testKey.replace(/_+/g, ''))) {
         if (value !== null) {
           if (std.criticalLow !== null && std.criticalLow !== undefined && value <= std.criticalLow) {
-            flag = 'CRITICAL';
+            finalFlag = 'CRITICAL';
             verificationRequired = true;
           } else if (std.criticalHigh !== null && std.criticalHigh !== undefined && value >= std.criticalHigh) {
-            flag = 'CRITICAL';
+            finalFlag = 'CRITICAL';
             verificationRequired = true;
           }
-          // If source flag is present (Normal/High/Low/Borderline), trust it unless critical override
-          // If source flag is absent, compute from reference range
-          if (!row.source_flag && flag !== 'CRITICAL') {
-            const { min: rMin, max: rMax } = parseReferenceRange(row.reference_range);
-            if (rMin !== null && rMax !== null && value !== null) {
-              if (value < rMin) flag = 'LOW';
-              else if (value > rMax) flag = 'HIGH';
-              else flag = 'NORMAL';
-            }
-          }
         }
-        // Fill missing unit / range from standard dict
         if (!row.unit && std.unit) row.unit = std.unit;
-        if (!row.reference_range && std.min !== undefined && std.max !== undefined) {
-          row.reference_range = `${std.min} - ${std.max}`;
-        }
         break;
       }
     }
 
-    // If still no flag and no source flag — compute from reference range
-    if (!flag) {
-      const computedFlag = computeFlag(value, row.reference_range);
-      flag = computedFlag;
-    }
-
-    const computedFlag = computeFlag(value, row.reference_range);
-
-    // Set verification_required if source says Normal but computed says otherwise (and not critical)
-    if (row.source_flag === 'NORMAL' && computedFlag && computedFlag !== 'NORMAL' && flag !== 'CRITICAL') {
+    // If source flag conflicts with computed flag (and neither is Borderline), flag for verification
+    if (sourceFlag && computedFlag && sourceFlag !== computedFlag && sourceFlag !== 'BORDERLINE') {
       verificationRequired = true;
     }
 
+    // Explicitly preserve BORDERLINE
+    if (sourceFlag === 'BORDERLINE') {
+      finalFlag = 'BORDERLINE';
+    }
+
+    // Field-level confidence scores (Section 12)
+    const nameConf = row.test_name ? 0.98 : 0.1;
+    const valConf = value !== null ? 0.99 : 0.4;
+    const unitConf = row.unit ? 0.96 : 0.7;
+    const refConf = effectiveRefRange ? (wasRepaired ? 0.90 : 0.96) : 0.6;
+    const flagConf = sourceFlag ? 0.99 : 0.92;
+    const overallConf = Number(((nameConf + valConf + unitConf + refConf + flagConf) / 5).toFixed(2));
+
     return {
       ...row,
-      flag,
+      observed_value: value !== null ? String(value) : row.observed_value,
+      value: value !== null ? String(value) : row.observed_value,
+      reference_range: effectiveRefRange,
+      source_flag: sourceFlag,
+      calculated_status: calculatedStatus,
       computed_flag: computedFlag,
+      flag: finalFlag,
+      status: finalFlag,
       verification_required: verificationRequired,
-      alert: flag === 'CRITICAL' || flag === 'HIGH' || flag === 'LOW' || flag === 'BORDERLINE' || flag === 'ABNORMAL',
+      alert: finalFlag === 'CRITICAL' || finalFlag === 'HIGH' || finalFlag === 'LOW' || finalFlag === 'BORDERLINE' || finalFlag === 'ABNORMAL',
+      confidence: {
+        test_name: nameConf,
+        value: valConf,
+        unit: unitConf,
+        reference_range: refConf,
+        flag: flagConf,
+        overall: overallConf,
+      },
     };
   });
 }
@@ -508,10 +651,12 @@ export function postProcessRows(rows, standardRanges = {}) {
 export default {
   extractLabTableRows,
   postProcessRows,
+  checkAndRepairDecimalLoss,
   parseNumericValue,
   parseReferenceRange,
   extractSourceFlag,
   sanitizeUnit,
   computeFlag,
   computeConfidenceScore,
+  KNOWN_UNITS,
 };

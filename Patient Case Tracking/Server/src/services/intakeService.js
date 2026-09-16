@@ -8,6 +8,8 @@ import { observationRepository } from '../repositories/observationRepository.js'
 import { sessionRepository } from '../repositories/sessionRepository.js';
 import { documentRepository } from '../repositories/documentRepository.js';
 import { redFlagCaseService } from './redFlagCaseService.js';
+import clinicalIntelligenceService from './clinicalIntelligenceService.js';
+import { doctorService } from './doctorService.js';
 
 dotenv.config();
 
@@ -1881,14 +1883,52 @@ Extract clinical entities in JSON:
           });
         }
 
+        let assignedDoctorId = undefined;
+
+        // Feature: Auto-assign doctor on Intake Completion
+        if (nextQuestionResult.is_complete) {
+          try {
+            const symptomsText = state.symptoms?.join(', ') || state.chief_complaint || '';
+            if (symptomsText) {
+              const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptomsText, '');
+              const targetSpecialty = specialtyMatch?.primary || 'General Medicine';
+              
+              const availableDocs = await doctorService.getAvailableDoctors({ opd_type: opd_mode || 'GENERAL' });
+              
+              let bestMatch = availableDocs.find(
+                doc => 
+                  (doc.specialization && doc.specialization.toLowerCase().includes(targetSpecialty.toLowerCase())) ||
+                  (doc.department && doc.department.toLowerCase().includes(targetSpecialty.toLowerCase()))
+              );
+              
+              if (!bestMatch && availableDocs.length > 0) {
+                bestMatch = availableDocs[0];
+              }
+              
+              if (bestMatch) {
+                assignedDoctorId = bestMatch.doctor_id;
+                logger.info(`[IntakeService] Auto-assigned Doctor ${assignedDoctorId} for Specialty ${targetSpecialty}`);
+              }
+            }
+          } catch (assignErr) {
+            logger.warn(`[IntakeService] Auto-assignment failed: ${assignErr.message}`);
+          }
+        }
+
+        const extraFields = {
+          clinical_state: state,
+          triage_level: triageResult.triage_level,
+          triage_reason: triageResult.reason,
+        };
+
+        if (assignedDoctorId) {
+          extraFields.assigned_doctor_id = assignedDoctorId;
+        }
+
         await sessionRepository.updateStatus(
           session_id,
           nextQuestionResult.is_complete ? 'READY_FOR_DOCTOR' : sessionStatus,
-          {
-            clinical_state: state,
-            triage_level: triageResult.triage_level,
-            triage_reason: triageResult.reason,
-          }
+          extraFields
         );
       } catch (dbErr) {
         logger.warn(`[Intake DB Persistence Notice]: ${dbErr.message}`);

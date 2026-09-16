@@ -87,18 +87,14 @@ export const Navbar = () => {
         ]
       : []),
     {
-      label: 'Patient Kiosk',
+      label: 'Patient Intake',
       path: '/patient/register',
       isActive:
         location.pathname === '/patient/register' ||
         location.pathname === '/patient/intake' ||
         location.pathname === '/patient/success',
     },
-    {
-      label: 'Doctor OPD',
-      path: '/doctor',
-      isActive: location.pathname.startsWith('/doctor'),
-    },
+    
   ];
 
   return (
@@ -303,13 +299,14 @@ export const Navbar = () => {
             )}
 
             {/* Primary CTA button */}
-            <Link
+            {!isAuthenticated ? (<Link
               to="/patient/register"
               className="inline-flex items-center gap-1 px-3.5 sm:px-5 py-1.5 rounded-full text-xs font-medium text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-xs"
             >
               <span>Intake</span>
               <ArrowRight className="w-3.5 h-3.5 hidden sm:inline" />
-            </Link>
+            </Link>) : ""}
+            
 
             {/* Mobile Hamburger Toggle Button */}
             <button

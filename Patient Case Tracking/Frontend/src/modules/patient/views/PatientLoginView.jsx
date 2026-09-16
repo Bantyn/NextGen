@@ -83,6 +83,28 @@ export const PatientLoginView = () => {
     setIsSendingOtp(true);
     setLoginError('');
 
+    // Normalize phone for comparison (last 10 digits)
+    const normalizedInputPhone = id.replace(/[^0-9]/g, '').slice(-10);
+    
+    // Check if the number or ID exists in the fetched patients list
+    const isRegistered = patientsList.some(
+      (p) => {
+        if (p.abhaId === id || p.id === id) return true;
+        if (p.phone) {
+          const dbPhone = p.phone.replace(/[^0-9]/g, '').slice(-10);
+          if (dbPhone === normalizedInputPhone && normalizedInputPhone.length >= 10) return true;
+        }
+        return false;
+      }
+    );
+
+    // If not registered, show validation error and prevent OTP sending
+    if (!isRegistered) {
+      setLoginError(`No account found with this ${loginMethod === 'ABHA' ? 'ABHA ID' : 'mobile number'}. Please register first.`);
+      setIsSendingOtp(false);
+      return;
+    }
+
     try {
       // Generate a 6-digit OTP on client side (server will also generate & store)
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -194,14 +216,6 @@ export const PatientLoginView = () => {
       >
         <div className="space-y-6">
           {/* Alerts */}
-          {loginError && (
-            <Toast
-              type="error"
-              message={loginError}
-              onClose={() => setLoginError('')}
-              className="animate-fadeIn"
-            />
-          )}
           {successMsg && (
             <Toast
               type="success"
@@ -258,6 +272,7 @@ export const PatientLoginView = () => {
                   value={identifier}
                   onChange={(e) => { setIdentifier(e.target.value); setLoginError(''); }}
                   icon={Phone}
+                  error={loginError}
                   helperText="Enter the 10-digit mobile number registered during hospital check-in"
                 />
               ) : (
@@ -268,6 +283,7 @@ export const PatientLoginView = () => {
                   value={identifier}
                   onChange={(e) => { setIdentifier(e.target.value); setLoginError(''); }}
                   icon={ShieldCheck}
+                  error={loginError}
                   helperText="Enter your government-issued 14-digit ABHA address or ID"
                 />
               )}
@@ -323,6 +339,7 @@ export const PatientLoginView = () => {
                   value={otpCode}
                   onChange={(e) => { setOtpCode(e.target.value.replace(/[^0-9]/g, '')); setLoginError(''); }}
                   icon={KeyRound}
+                  error={loginError}
                   className="font-mono text-center tracking-widest text-base"
                 />
               </div>

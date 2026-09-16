@@ -23,6 +23,44 @@ import { registerAndCheckinPatient } from '../services/patientDashboardService';
 import { VirusBackground3D } from '../../../components/3d/VirusBackground3D';
 import apiClient from '../../../core/api/apiClient';
 
+// ============================================================================
+// Sehat TTS Configuration
+// ============================================================================
+const PREFERRED_TTS_ENGINE = import.meta.env.VITE_TTS_ENGINE || "openrouter";
+const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
+const FISH_AUDIO_MODEL = import.meta.env.VITE_FISH_AUDIO_MODEL || "fish-audio/s2.1-pro";
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
+const SEHAT_FISH_VOICE_ID = import.meta.env.VITE_SEHAT_FISH_VOICE_ID || "7f92f8afb8ec43bf81429cc1c9199cb1";
+
+function pcmToWavBlob(pcmBuffer, sampleRate = 44100) {
+  const numChannels = 1;
+  const bytesPerSample = 2;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = pcmBuffer.byteLength;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + dataSize, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint32(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, dataSize, true);
+
+  new Uint8Array(buffer, 44).set(new Uint8Array(pcmBuffer));
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
 // Recognized languages with native script & localized greeting
 const LANGUAGES = [
   { id: 'gu-IN', name: 'Gujarati', native: 'ગુજરાતી', greeting: 'નમસ્તે, આપનું સેહત કિયોસ્કમાં સ્વાગત છે.' },
@@ -68,6 +106,8 @@ export const PatientCheckinView = () => {
     fullName: '',
     age: '28',
     gender: 'Male',
+    bloodGroup: 'UNKNOWN',
+    address: '',
     phone: '',
     opdType: 'GENERAL', // 'GENERAL' | 'AYUSH'
     opdMode: 'ALLOPATHIC',
@@ -106,19 +146,97 @@ export const PatientCheckinView = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentStep, formData]);
 
-  // Multilingual Speech Synthesis
-  const speakText = (text, langCode) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
+  // Multilingual Speech Synthesis via OpenRouter TTS
+  const speakText = async (text, langCode) => {
+    if (!text) return;
     setAudioSpeechActive(true);
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langCode || formData.preferredLanguage || 'gu-IN';
-    utterance.rate = 0.95;
-    utterance.onend = () => setAudioSpeechActive(false);
-    utterance.onerror = () => setAudioSpeechActive(false);
+    const fallbackToBrowser = () => {
+      if (!('speechSynthesis' in window)) {
+        setAudioSpeechActive(false);
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = langCode || formData.preferredLanguage || 'gu-IN';
+      utterance.rate = 0.95;
+      utterance.onend = () => setAudioSpeechActive(false);
+      utterance.onerror = () => setAudioSpeechActive(false);
+      window.speechSynthesis.speak(utterance);
+    };
 
-    window.speechSynthesis.speak(utterance);
+    if (PREFERRED_TTS_ENGINE !== 'openrouter' || !OPENROUTER_API_KEY) {
+      fallbackToBrowser();
+      return;
+    }
+
+    try {
+      const payload = {
+        model: FISH_AUDIO_MODEL,
+        input: text,
+        voice: SEHAT_FISH_VOICE_ID,
+        response_format: 'mp3',
+      };
+
+      const response = await fetch(OPENROUTER_TTS_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin || 'http://localhost:5173',
+          'X-Title': 'Sehat Voice Assistant',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter TTS failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length > 0) chunks.push(value);
+      }
+
+      if (chunks.length === 0) throw new Error('Empty audio');
+
+      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+      const buffer = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        buffer.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      let audioBlob;
+      if (contentType.includes('audio/pcm') || contentType.includes('pcm')) {
+        audioBlob = pcmToWavBlob(buffer.buffer, 44100);
+      } else {
+        audioBlob = new Blob([buffer], { type: contentType || 'audio/mpeg' });
+      }
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        setAudioSpeechActive(false);
+      };
+      
+      audio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        fallbackToBrowser();
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.warn('TTS API failed, falling back to browser:', err);
+      fallbackToBrowser();
+    }
   };
 
   const handleAudioGuidance = () => {
@@ -402,49 +520,6 @@ export const PatientCheckinView = () => {
         <div className="absolute -bottom-24 -right-24 w-[500px] h-[400px] bg-sky-100/50 rounded-full blur-[110px]" />
       </div>
 
-      {/* Top Clean Header */}
-      <header className="relative z-10 w-full max-w-4xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-slate-950 text-white flex items-center justify-center text-xs font-semibold">
-            S
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold text-slate-900 tracking-tight">Sehat Health Kiosk</h1>
-            <p className="text-[11px] text-slate-500 font-normal">Patient Self Check-In</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleAudioGuidance}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition cursor-pointer ${
-              audioSpeechActive
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Volume2 className="w-3.5 h-3.5" />
-            <span>{audioSpeechActive ? 'Playing...' : 'Voice Guidance'}</span>
-          </button>
-
-          {currentStep > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('Reset check-in to beginning?')) {
-                  setCurrentStep(0);
-                }
-              }}
-              className="p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition cursor-pointer"
-              title="Restart"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </header>
-
       {/* Main Centered Q&A Card */}
       <main className="relative z-10 w-full max-w-2xl mx-auto px-4 py-6 sm:py-10 flex-grow flex flex-col justify-center">
         {/* Step Progress Line */}
@@ -625,7 +700,6 @@ export const PatientCheckinView = () => {
                   <div className="relative">
                     <input
                       type="text"
-                      value={formData.abhaId}
                       onChange={(e) => handleAbhaChange(e.target.value)}
                       placeholder="e.g. 91-4432-8812-9901 or name@abdm"
                       className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
@@ -638,7 +712,7 @@ export const PatientCheckinView = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  {/* <div className="flex items-center justify-between">
                     <button
                       type="button"
                       onClick={handleApplyPresetAbha}
@@ -647,14 +721,14 @@ export const PatientCheckinView = () => {
                       <QrCode className="w-3.5 h-3.5" />
                       <span>Autofill Demo ABHA (91-4432-8812-9901)</span>
                     </button>
-                  </div>
+                  </div> */}
 
-                  {formData.fullName && (
+                  {/* {formData.fullName && (
                     <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center gap-2 animate-fadeIn">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>Verified: Auto-filled as {formData.fullName} ({formData.gender}, {formData.age}y)</span>
                     </div>
-                  )}
+                  )} */}
                 </div>
 
                 <div className="pt-3 flex items-center justify-between">
@@ -711,26 +785,13 @@ export const PatientCheckinView = () => {
                     <input
                       type="text"
                       autoFocus
-                      value={formData.fullName}
                       onChange={(e) => updateField('fullName', e.target.value)}
                       placeholder="e.g. Ramesh Patel"
                       className="w-full pl-11 pr-14 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-base placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
                     />
-                    <button
-                      type="button"
-                      onClick={toggleVoiceDictation}
-                      className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition cursor-pointer ${
-                        isVoiceListening
-                          ? 'bg-rose-500 text-white animate-pulse'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                      title="Speak name aloud"
-                    >
-                      {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
                   </div>
                   <span className="block text-[11px] text-slate-400 font-normal">
-                    Click mic to dictate • Press Enter ↵ to advance
+                    Press Enter ↵ to advance
                   </span>
                 </div>
 
@@ -788,7 +849,6 @@ export const PatientCheckinView = () => {
                       type="number"
                       min="1"
                       max="120"
-                      value={formData.age}
                       onChange={(e) => updateField('age', e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-lg font-mono focus:bg-white focus:outline-none focus:border-slate-400 transition"
                     />
@@ -841,6 +901,54 @@ export const PatientCheckinView = () => {
                     </div>
                   </div>
                 </div>
+
+                  {/* Blood Group */}
+                  <div className="space-y-2">
+                    <label className="block text-xs text-slate-600 font-medium">
+                      Blood Group (రక్తం గ్రూప్)
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => {
+                        const isSelected = formData.bloodGroup === bg;
+                        return (
+                          <button
+                            key={bg}
+                            type="button"
+                            onClick={() => updateField('bloodGroup', bg)}
+                            className={`py-2 rounded-xl border text-xs font-mono font-semibold transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {bg}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateField('bloodGroup', 'UNKNOWN')}
+                      className={`text-[11px] transition cursor-pointer ${
+                        formData.bloodGroup === 'UNKNOWN' ? 'text-slate-900 font-semibold' : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      Unknown / Not tested
+                    </button>
+                  </div>
+
+                  {/* Address */}
+                  <div className="space-y-2">
+                    <label className="block text-xs text-slate-600 font-medium">
+                      Home Address (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      onChange={(e) => updateField('address', e.target.value)}
+                      placeholder="e.g. B-402, Shivalik Residency, Satellite, Ahmedabad"
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition resize-none"
+                    />
+                  </div>
 
                 <div className="pt-3 flex items-center justify-between">
                   <button
@@ -895,7 +1003,6 @@ export const PatientCheckinView = () => {
                     <input
                       type="tel"
                       autoFocus
-                      value={formData.phone}
                       onChange={(e) => updateField('phone', e.target.value)}
                       placeholder="98765 43210"
                       className="w-full pl-20 pr-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-base font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
@@ -1017,7 +1124,6 @@ export const PatientCheckinView = () => {
                       Select Medical Specialization:
                     </label>
                     <select
-                      value={formData.medicalSpecialization}
                       onChange={(e) => updateField('medicalSpecialization', e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-slate-400"
                     >
@@ -1320,11 +1426,6 @@ export const PatientCheckinView = () => {
         </div>
       </main>
 
-      {/* Clean Bottom Footer */}
-      <footer className="relative z-10 w-full max-w-4xl mx-auto px-6 py-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-100">
-        <span>AIIA Hospital Patient Check-In</span>
-        <span>Press Enter ↵ to advance</span>
-      </footer>
     </div>
   );
 };

@@ -21,6 +21,11 @@ export class DocumentRepository {
     return MedicalDocument.findOne({ $or: conditions });
   }
 
+  async findByHash(documentHash) {
+    if (!documentHash) return null;
+    return MedicalDocument.findOne({ document_hash: documentHash });
+  }
+
   async findBySessionId(sessionId) {
     return MedicalDocument.find({ session_id: sessionId }).sort({ createdAt: -1 });
   }

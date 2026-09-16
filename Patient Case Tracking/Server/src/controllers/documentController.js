@@ -95,7 +95,9 @@ export const processDocumentUpload = async (req, res) => {
 
     return res.status(200).json({
       status: result.status,
-      message: result.status === 'failed' ? result.error : 'Document processed successfully',
+      message: result.status === 'failed'
+        ? result.error
+        : (result.is_duplicate ? 'Document already processed (idempotent response)' : 'Document processed successfully'),
       data: result,
       ...result,
     });
@@ -195,6 +197,18 @@ export const getDocumentSummary = async (req, res) => {
         confidenceScore: doc.confidence_score,
         extraction_confidence: doc.extraction_confidence,
         extractionConfidence: doc.extraction_confidence,
+        collected_at: doc.collected_at,
+        reported_at: doc.reported_at,
+        registered_at: doc.registered_at,
+        document_date: doc.document_date,
+        document_patient_name: doc.document_patient_name,
+        document_patient_identifier: doc.document_patient_identifier,
+        identity_match: doc.identity_match,
+        extraction_completeness: doc.extraction_completeness,
+        detected_parameters_count: doc.detected_parameters_count,
+        structured_parameters_count: doc.structured_parameters_count,
+        requires_review: doc.requires_review,
+        requires_doctor_verification: doc.requires_doctor_verification,
       },
     });
   } catch (error) {

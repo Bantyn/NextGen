@@ -38,8 +38,12 @@ const SEED_VERSION = '1.0.0';
  * Connect to MongoDB for the standalone seeding process
  */
 async function connectForSeeding() {
-  const primaryUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/medikiosk_patient_tracking';
-  const localFallbackUri = 'mongodb://127.0.0.1:27017/medikiosk_patient_tracking';
+  const primaryUri = process.env.MONGO_URI;
+
+  if (!primaryUri) {
+    console.error('[Seed]: MONGO_URI is not defined in environment variables.');
+    process.exit(1);
+  }
 
   try {
     const conn = await mongoose.connect(primaryUri, {
@@ -49,13 +53,8 @@ async function connectForSeeding() {
     console.log(`[Seed]: Connected to MongoDB (${conn.connection.name}) on ${conn.connection.host}`);
     return conn;
   } catch (err) {
-    console.warn(`[Seed]: Primary MongoDB connection failed (${err.message}). Trying local fallback...`);
-    const fallbackConn = await mongoose.connect(localFallbackUri, {
-      maxPoolSize: 5,
-      serverSelectionTimeoutMS: 3000,
-    });
-    console.log(`[Seed]: Connected to Local Fallback MongoDB (${fallbackConn.connection.name})`);
-    return fallbackConn;
+    console.error(`[Seed]: Primary MongoDB connection failed (${err.message}).`);
+    process.exit(1);
   }
 }
 
@@ -86,7 +85,7 @@ export async function runDatabaseSeed(force = false) {
       console.log(`🚀 Executing one-time clinical seed '${SEED_NAME}' v${SEED_VERSION}...`);
     }
 
-    const defaultPasswordHash = await bcrypt.hash('soctor@123', 10);
+    const defaultPasswordHash = await bcrypt.hash('docter@123', 10);
     const patientPasswordHash = await bcrypt.hash('patient@123', 10);
 
     // ==========================================
