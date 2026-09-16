@@ -63,12 +63,20 @@ export const AuthProvider = ({ children }) => {
       }
       throw new Error(res?.message || 'Login failed');
     } catch (apiErr) {
-      // 2. Demo User Fallback check if backend is offline
+      // Demo User Fallback — only for explicitly pre-configured demo accounts (offline dev mode)
       const matchedDemo = DEMO_USERS.find(
         (u) => u.email.toLowerCase() === email.toLowerCase()
       );
 
       if (matchedDemo) {
+        // Verify password matches demo account password
+        if (matchedDemo.password && matchedDemo.password !== password) {
+          const err = new Error('Invalid email address or password.');
+          err.code = 'INVALID_CREDENTIALS';
+          setError(err.message);
+          setIsLoading(false);
+          throw err;
+        }
         const fallbackUser = {
           id: `usr_demo_${matchedDemo.role.toLowerCase()}`,
           name: matchedDemo.name,
@@ -82,22 +90,9 @@ export const AuthProvider = ({ children }) => {
         return { success: true, user: fallbackUser, isDemoFallback: true };
       }
 
-      // Generic Demo User Login (if any credentials entered)
-      if (email && password) {
-        const genericUser = {
-          id: `usr_staff_${Date.now()}`,
-          name: email.split('@')[0].replace('.', ' ').toUpperCase(),
-          email: email,
-          role: ROLES.DOCTOR,
-          department: 'General OPD',
-          license: 'AIIA-GEN-99',
-        };
-        const genericToken = `jwt_simulated_${Date.now()}`;
-        saveSession(genericToken, genericUser);
-        return { success: true, user: genericUser, isDemoFallback: true };
-      }
+      // No backend, no demo match → surface the real error
+      const errorMessage = apiErr?.response?.data?.message || apiErr?.message || 'Invalid email address or password.';
 
-      const errorMessage = apiErr?.message || 'Invalid credentials. Please try again.';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -128,6 +123,8 @@ export const AuthProvider = ({ children }) => {
         email: formData.email,
         phone: formData.phone,
         role: formData.role || ROLES.DOCTOR,
+        age: formData.age ? Number(formData.age) : null,
+        gender: formData.gender ? String(formData.gender).toUpperCase() : 'OTHER',
         department: formData.department || 'Ayush & Clinical Intake',
         license: formData.license || `AIIA-REG-${Math.floor(1000 + Math.random() * 9000)}`,
       };
@@ -161,7 +158,7 @@ export const AuthProvider = ({ children }) => {
   /**
    * Dedicated Patient Login (ABHA / Phone / Registered Profile)
    */
-  const loginAsPatient = useCallback((patientData) => {
+  const loginAsPatient = useCallback((patientData, customToken = null) => {
     if (!patientData) return { success: false, error: 'Patient data required' };
     const pId = patientData.patient_id || patientData.id;
     if (!pId) return { success: false, error: 'Patient ID missing' };
@@ -172,14 +169,53 @@ export const AuthProvider = ({ children }) => {
       name: patientData.name || `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim() || 'Patient',
       email: patientData.email || `${pId.toLowerCase()}@sehat.org`,
       phone: patientData.phone || '',
-      abhaId: patientData.abhaId || null,
+      abhaId: patientData.abhaId || patientData.abha_id || null,
       role: ROLES.PATIENT,
       department: 'Patient Portal',
-      license: patientData.abhaId || null,
+      license: patientData.abhaId || patientData.abha_id || null,
     };
-    const token = `jwt_patient_${patientUser.id}_${Date.now()}`;
+    const token = customToken || `jwt_patient_${patientUser.id}_${Date.now()}`;
     saveSession(token, patientUser);
+    try {
+      sessionStorage.setItem('selected_patient_id', pId);
+    } catch {}
     return { success: true, user: patientUser };
+  }, [saveSession]);
+
+  /**
+   * Dedicated Backend Patient Login (via ABHA / Phone / ID)
+   */
+  const loginPatientWithBackend = useCallback(async (identifier, dateOfBirth = null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient.post('/auth/patient-login', { identifier, date_of_birth: dateOfBirth });
+      const token = res?.data?.token || res?.token;
+      const patient = res?.data?.patient || res?.patient;
+      if (token && patient) {
+        const patientUser = {
+          id: patient.patient_id,
+          patient_id: patient.patient_id,
+          name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+          email: `${patient.patient_id.toLowerCase()}@sehat.org`,
+          phone: patient.phone,
+          abhaId: patient.abha_id,
+          role: ROLES.PATIENT,
+          department: 'Patient Portal',
+        };
+        saveSession(token, patientUser);
+        try {
+          sessionStorage.setItem('selected_patient_id', patient.patient_id);
+        } catch {}
+        return { success: true, user: patientUser, token };
+      }
+      throw new Error(res?.message || 'Patient login failed');
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   }, [saveSession]);
 
   /**
@@ -194,6 +230,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem(STORAGE_USER_KEY);
       localStorage.removeItem('medikiosk_token');
       localStorage.removeItem('medikiosk_user');
+      sessionStorage.removeItem('selected_patient_id');
+      sessionStorage.removeItem('patient_session');
     } catch (err) {
       console.error('Failed to clear storage:', err);
     }
@@ -208,6 +246,7 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     loginAsPatient,
+    loginPatientWithBackend,
     register,
     logout,
     switchDemoRole,

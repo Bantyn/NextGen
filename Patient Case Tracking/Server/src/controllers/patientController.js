@@ -41,6 +41,15 @@ export const attachIdentity = async (req, res, next) => {
   }
 };
 
+export const checkPhone = async (req, res, next) => {
+  try {
+    const result = await patientService.checkPhoneAvailable(req.params.phone);
+    return sendSuccess(res, HTTP_STATUS.OK, 'Phone availability check completed', result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   createPatient,
   searchPatients,

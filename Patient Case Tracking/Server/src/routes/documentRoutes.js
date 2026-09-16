@@ -8,6 +8,7 @@ import {
   getDocumentById,
   getDocumentSummary,
   serveDocumentFile,
+  reanalyzeDocumentWithAI,
 } from '../controllers/documentController.js';
 
 const router = express.Router();
@@ -41,6 +42,7 @@ router.post('/', upload.single('file'), processDocumentUpload);
 router.post('/process-base64', express.json({ limit: '25mb' }), processDocumentUpload);
 router.get('/', getDocumentsByPatient);
 router.get('/patient/:patientId', getDocumentsByPatient);
+router.post('/:documentId/analyze', reanalyzeDocumentWithAI);
 router.get('/:documentId/summary', getDocumentSummary);
 router.get('/:documentId/file', serveDocumentFile);
 router.get('/:documentId', getDocumentById);

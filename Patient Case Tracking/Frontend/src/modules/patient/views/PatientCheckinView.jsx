@@ -1,54 +1,214 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  QrCode,
-  ShieldCheck,
   Volume2,
   CheckCircle2,
   ArrowRight,
+  ArrowLeft,
   User,
   Phone,
-  Sparkles,
   Lock,
   HeartPulse,
   Leaf,
   Loader2,
+  RotateCcw,
+  Mic,
+  MicOff,
+  Check,
+  X,
+  QrCode,
 } from 'lucide-react';
 import { registerAndCheckinPatient } from '../services/patientDashboardService';
+import { VirusBackground3D } from '../../../components/3d/VirusBackground3D';
+import apiClient from '../../../core/api/apiClient';
 
-/**
- * PatientCheckinView Component — Step 1: Identify & DPDP Act 2023 Consent (Module D)
- * Seamless ABHA ID verification, multilingual audio-guided consent, and clinical pathway selection.
- */
+// Recognized languages with native script & localized greeting
+const LANGUAGES = [
+  { id: 'gu-IN', name: 'Gujarati', native: 'ગુજરાતી', greeting: 'નમસ્તે, આપનું સેહત કિયોસ્કમાં સ્વાગત છે.' },
+  { id: 'hi-IN', name: 'Hindi', native: 'हिंदी', greeting: 'नमस्ते, आपका सेहत कियोस्क में स्वागत है.' },
+  { id: 'en-IN', name: 'English', native: 'English', greeting: 'Welcome to Sehat AI Clinical Kiosk.' },
+  { id: 'mr-IN', name: 'Marathi', native: 'મરાઠી', greeting: 'नमस्कार, સેહેત કિયોસ્ક માં આપનું સ્વાગત છે.' },
+  { id: 'ta-IN', name: 'Tamil', native: 'தமிழ்', greeting: 'வணக்கம், சேஹத் கியோஸ்க்கிற்கு வரவேற்கிறோம்.' },
+  { id: 'te-IN', name: 'Telugu', native: 'తెలుగు', greeting: 'నమస్కారం, సెహత్ కియోస్క్‌కి స్వాగతం.' },
+  { id: 'bn-IN', name: 'Bengali', native: 'বাংলা', greeting: 'নমস্কার, সেহত কিয়স্কে আপনাকে স্বাগতম.' },
+];
+
+// AYUSH Systems
+const AYUSH_SYSTEMS = [
+  { id: 'AYURVEDA', name: 'Ayurveda', native: 'आयुर्वेद', desc: 'Dosha balance & herbal therapeutics' },
+  { id: 'YOGA_NATUROPATHY', name: 'Yoga & Naturopathy', native: 'योग एवं प्राकृतिक चिकित्सा', desc: 'Pranayama & lifestyle balance' },
+  { id: 'UNANI', name: 'Unani', native: 'यूनानी', desc: 'Mizaj diagnosis & herbal science' },
+  { id: 'SIDDHA', name: 'Siddha', native: 'सिद्ध', desc: 'Traditional Tamil medicine' },
+  { id: 'HOMOEOPATHY', name: 'Homoeopathy', native: 'होम्योपैथी', desc: 'Constitutional individual care' },
+  { id: 'SOWA_RIGPA', name: 'Sowa-Rigpa', native: 'सोवा-रिग्पा', desc: 'Tibetan & Himalayan pulse science' },
+];
+
+// General Specializations
+const GENERAL_SPECS = [
+  'General Medicine',
+  'Family Medicine',
+  'Pediatrics',
+  'Cardiology',
+  'Dermatology',
+  'Orthopedics',
+  'ENT (Ear, Nose, Throat)',
+  'Gynecology & Obstetrics',
+];
+
 export const PatientCheckinView = () => {
   const navigate = useNavigate();
+
+  // Step 0: Welcome, 1: Language, 2: ABHA, 3: Name, 4: Demographics, 5: Mobile, 6: OPD, 7: Consent, 8: Final Ready
+  const [currentStep, setCurrentStep] = useState(0);
+
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: '',
-    age: '',
-    gender: 'Male',
     preferredLanguage: 'gu-IN',
     abhaId: '',
+    fullName: '',
+    age: '28',
+    gender: 'Male',
+    phone: '',
     opdType: 'GENERAL', // 'GENERAL' | 'AYUSH'
-    opdMode: 'ALLOPATHIC', // 'ALLOPATHIC' | 'AYUSH'
-    opdSystem: 'MODERN_MEDICINE', // 'MODERN_MEDICINE' | 'AYURVEDA' | 'YOGA_NATUROPATHY' | 'UNANI' | 'SIDDHA' | 'HOMOEOPATHY' | 'SOWA_RIGPA'
+    opdMode: 'ALLOPATHIC',
+    opdSystem: 'MODERN_MEDICINE',
     medicalSpecialization: 'General Medicine',
     consentEhr: true,
     consentAiVoice: true,
     consentAbhaSync: true,
   });
 
-  const [isAudioConsentPlaying, setIsAudioConsentPlaying] = useState(false);
-  const [isFetchingAbha, setIsFetchingAbha] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingAbha, setIsFetchingAbha] = useState(false);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [audioSpeechActive, setAudioSpeechActive] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showEditSelector, setShowEditSelector] = useState(false);
 
-  React.useEffect(() => {
-    const abhaDigits = formData.abhaId.replace(/[^0-9]/g, '');
-    // Trigger auto-fill if length matches typical ABHA (14 digits) and name is not filled
-    if (abhaDigits.length >= 14 && !formData.fullName) {
+  const speechRecognitionRef = useRef(null);
+
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setErrorMessage('');
+  };
+
+  // Keyboard navigation: Enter to advance
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (currentStep < 8) {
+          handleNextStep();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentStep, formData]);
+
+  // Multilingual Speech Synthesis
+  const speakText = (text, langCode) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    setAudioSpeechActive(true);
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = langCode || formData.preferredLanguage || 'gu-IN';
+    utterance.rate = 0.95;
+    utterance.onend = () => setAudioSpeechActive(false);
+    utterance.onerror = () => setAudioSpeechActive(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleAudioGuidance = () => {
+    if (audioSpeechActive) {
+      window.speechSynthesis.cancel();
+      setAudioSpeechActive(false);
+      return;
+    }
+
+    const lang = formData.preferredLanguage;
+    let message = '';
+
+    switch (currentStep) {
+      case 0:
+        message = lang === 'gu-IN'
+          ? 'સેહત કિયોસ્ક માં આપનું સ્વાગત છે. આગળ વધવા માટે ચેક-ઇન શરૂ કરો બટન દબાવો.'
+          : lang === 'hi-IN'
+          ? 'सेहत कियोस्क में आपका स्वागत है. चेक-इन शुरू करने के लिए बटन दबाएं.'
+          : 'Welcome to Sehat Clinical Kiosk. Press Start Check-In to proceed.';
+        break;
+      case 1:
+        message = lang === 'gu-IN'
+          ? 'આપ કઈ ભાષામાં વાતચીત કરવા માંગો છો? તમારી ભાષા પસંદ કરો.'
+          : lang === 'hi-IN'
+          ? 'आप किस भाषा में बात करना चाहते हैं? अपनी भाषा चुनें.'
+          : 'Please select your preferred language for consultation.';
+        break;
+      case 2:
+        message = lang === 'gu-IN'
+          ? 'જો તમારી પાસે આભા આઈડી હોય તો અહીં દાખલ કરો, અથવા આગળ વધો.'
+          : lang === 'hi-IN'
+          ? 'यदि आपके पास आभा आईडी है तो यहां दर्ज करें, अथवा आगे बढ़ें.'
+          : 'Please enter your ABHA Health ID or skip to enter details manually.';
+        break;
+      case 3:
+        message = lang === 'gu-IN'
+          ? 'કૃપા કરીને દર્દીનું પૂરું નામ દાખલ કરો.'
+          : lang === 'hi-IN'
+          ? 'कृपया मरीज का पूरा नाम दर्ज करें.'
+          : 'Please enter the patient full name.';
+        break;
+      case 4:
+        message = lang === 'gu-IN'
+          ? 'તમારી ઉંમર અને જાતિ પસંદ કરો.'
+          : lang === 'hi-IN'
+          ? 'अपनी आयु और लिंग चुनें.'
+          : 'Please select your age and gender.';
+        break;
+      case 5:
+        message = lang === 'gu-IN'
+          ? 'તમારો દસ અંકનો મોબાઈલ નંબર દાખલ કરો.'
+          : lang === 'hi-IN'
+          ? 'अपना दस अंकों का मोबाइल नंबर दर्ज करें.'
+          : 'Please provide your 10 digit mobile number.';
+        break;
+      case 6:
+        message = lang === 'gu-IN'
+          ? 'જનરલ ઓપીડી અથવા આયુષ ઓપીડી વિભાગ પસંદ કરો.'
+          : lang === 'hi-IN'
+          ? 'जनरल ओपीडी या आयुष ओपीडी विभाग चुनें.'
+          : 'Please choose General OPD or AYUSH Integrative OPD.';
+        break;
+      case 7:
+        message = lang === 'gu-IN'
+          ? 'સેહત પ્લેટફોર્મ તમારા અવાજનું સુરક્ષિત વિશ્લેષણ કરે છે. આગળ વધવા સંમતિ આપો.'
+          : lang === 'hi-IN'
+          ? 'सेहत आपके वॉइस का सुरक्षित विश्लेषण करता है. आगे बढ़ने के लिए सहमति दें.'
+          : 'Sehat processes your clinical voice history securely under the DPDP Act 2023.';
+        break;
+      case 8:
+        message = lang === 'gu-IN'
+          ? 'શું તમે ચેક-અપ શરૂ કરવા માટે તૈયાર છો? હા અથવા ના પસંદ કરો.'
+          : lang === 'hi-IN'
+          ? 'क्या आप चेक-अप शुरू करने के लिए तैयार हैं? हाँ या नहीं चुनें.'
+          : 'Are you ready to start the clinical check-up? Please choose Yes or No.';
+        break;
+      default:
+        break;
+    }
+
+    if (message) speakText(message, lang);
+  };
+
+  const handleAbhaChange = (val) => {
+    updateField('abhaId', val);
+    const cleaned = val.replace(/[^0-9]/g, '');
+    if (cleaned.length >= 14 && !formData.fullName) {
       setIsFetchingAbha(true);
       setTimeout(() => {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           fullName: 'Banty Patel',
           phone: '9876543210',
@@ -56,54 +216,123 @@ export const PatientCheckinView = () => {
           gender: 'Male',
         }));
         setIsFetchingAbha(false);
-      }, 800);
+      }, 700);
     }
-  }, [formData.abhaId]);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
   };
 
-
-
-  // Audio-guided consent for low-literacy patients
-  const playAudioConsent = () => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    setIsAudioConsentPlaying(true);
-
-    const consentText =
-      formData.preferredLanguage === 'gu-IN'
-        ? 'નમસ્તે. સેહત પ્લેટફોર્મ તમારા અવાજ અને દસ્તાવેજોનું વિશ્લેષણ કરીને ડૉક્ટર માટે મેડિકલ સમરી તૈયાર કરે છે. તમારો ડેટા સુરક્ષિત છે અને માત્ર આ તપાસ પૂરતો જ ઉપયોગમાં લેવાશે. જો તમે સંમત હોવ તો આગળ વધો.'
-        : formData.preferredLanguage === 'hi-IN'
-        ? 'नमस्ते। सेहत आपके वॉइस और मेडिकल रिपोर्ट्स का सुरक्षित विश्लेषण करके डॉक्टर के लिए क्लिनिकल हिस्ट्री तैयार करता है। आपका डेटा पूरी तरह सुरक्षित है। आगे बढ़ने के लिए सहमति दें।'
-        : 'Welcome to Sehat. We securely capture your voice history and medical documents to prepare an automated clinical summary for your physician under the DPDP Act 2023.';
-
-    const utterance = new SpeechSynthesisUtterance(consentText);
-    utterance.lang = formData.preferredLanguage;
-    utterance.rate = 0.92;
-    utterance.onend = () => setIsAudioConsentPlaying(false);
-    utterance.onerror = () => setIsAudioConsentPlaying(false);
-
-    window.speechSynthesis.speak(utterance);
+  const handleApplyPresetAbha = () => {
+    setIsFetchingAbha(true);
+    setTimeout(() => {
+      setFormData((prev) => ({
+        ...prev,
+        abhaId: '91-4432-8812-9901',
+        fullName: 'Banty Patel',
+        phone: '9876543210',
+        age: '28',
+        gender: 'Male',
+      }));
+      setIsFetchingAbha(false);
+    }, 600);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.fullName.trim() || !formData.phone.trim()) {
-      alert('Please enter your full name and phone number.');
-      return;
-    }
-    if (!formData.consentAiVoice) {
-      alert('Consent for AI clinical processing is required to proceed.');
+  const toggleVoiceDictation = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please type manually.');
       return;
     }
 
+    if (isVoiceListening) {
+      if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
+      setIsVoiceListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = formData.preferredLanguage || 'en-IN';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => setIsVoiceListening(true);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        updateField('fullName', transcript);
+        setIsVoiceListening(false);
+      };
+      recognition.onerror = () => setIsVoiceListening(false);
+      recognition.onend = () => setIsVoiceListening(false);
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.warn('Voice recognition error:', err);
+      setIsVoiceListening(false);
+    }
+  };
+
+  const validateStep = (step) => {
+    setErrorMessage('');
+    if (step === 3) {
+      if (!formData.fullName.trim()) {
+        setErrorMessage('Please enter the patient full name to proceed.');
+        return false;
+      }
+    }
+    if (step === 4) {
+      if (!formData.age || parseInt(formData.age, 10) <= 0) {
+        setErrorMessage('Please enter a valid age.');
+        return false;
+      }
+    }
+    if (step === 5) {
+      const digits = formData.phone.replace(/[^0-9]/g, '');
+      if (digits.length < 10) {
+        setErrorMessage('Please enter a valid 10-digit mobile number.');
+        return false;
+      }
+    }
+    if (step === 7) {
+      if (!formData.consentAiVoice) {
+        setErrorMessage('Consent for clinical voice intake is required to proceed.');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleNextStep = async () => {
+    if (!validateStep(currentStep)) return;
+
+    // Strict validation on step 5 (Mobile number): Check uniqueness
+    if (currentStep === 5) {
+      const digits = formData.phone.replace(/[^0-9]/g, '');
+      try {
+        const checkRes = await apiClient.get(`/patients/check-phone/${digits}`);
+        if (checkRes?.data && checkRes.data.available === false) {
+          setErrorMessage(
+            `A patient is already registered with mobile number +91 ${digits.slice(-10)} (Patient ID: ${checkRes.data.patient_id}). Only one patient can register with a phone number. Please sign in or use a different number.`
+          );
+          return;
+        }
+      } catch (err) {
+        // Fallback: proceed, backend will strictly reject on final submit if conflict
+      }
+    }
+
+    setCurrentStep((prev) => Math.min(prev + 1, 8));
+  };
+
+  const handlePrevStep = () => {
+    setErrorMessage('');
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  // Final Action: "YES — START CHECK-UP"
+  const handleConfirmStartCheckup = async () => {
     setIsSubmitting(true);
+    setErrorMessage('');
+
     try {
       const liveData = await registerAndCheckinPatient(formData);
       const sessionPayload = {
@@ -117,9 +346,27 @@ export const PatientCheckinView = () => {
       sessionStorage.setItem('patient_session', JSON.stringify(sessionPayload));
       sessionStorage.setItem('patient_summary', JSON.stringify(sessionPayload));
       sessionStorage.setItem('selected_patient_id', liveData.patientId);
-      navigate('/patient/intake');
+
+      speakText(
+        formData.preferredLanguage === 'gu-IN'
+          ? 'તપાસ શરૂ થઈ રહી છે.'
+          : formData.preferredLanguage === 'hi-IN'
+          ? 'चेक-अप शुरू हो रहा है.'
+          : 'Starting clinical intake.',
+        formData.preferredLanguage
+      );
+
+      setTimeout(() => {
+        navigate('/patient/intake');
+      }, 500);
     } catch (err) {
-      console.warn('[Checkin] Backend registration failed, falling back to local session:', err);
+      console.warn('[Checkin] Registration error:', err);
+      if (err.status === 409 || err.response?.status === 409) {
+        const errorMsg = err.response?.data?.message || err.message || 'A patient with this mobile number is already registered.';
+        setErrorMessage(errorMsg);
+        setCurrentStep(5); // Return directly to Mobile Number step
+        return;
+      }
       const sessionId = `SESSION_${Date.now().toString().slice(-6)}`;
       const tokenNumber = `TK-${Math.floor(Math.random() * 80 + 101)}`;
       const sessionPayload = {
@@ -137,433 +384,947 @@ export const PatientCheckinView = () => {
     }
   };
 
+  const cardVariants = {
+    initial: { opacity: 0, y: 14, scale: 0.99 },
+    animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.24, ease: 'easeOut' } },
+    exit: { opacity: 0, y: -14, scale: 0.99, transition: { duration: 0.18 } },
+  };
+
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 py-8 sm:py-12">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal bg-sky-50 text-sky-700 ring-1 ring-sky-200 mb-2">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>DPDP Act 2023 & ABDM FHIR Compliant</span>
-        </div>
-        <p className="text-sm font-normal text-slate-500 mb-1">Step 1 of 4 • Identify & Consent</p>
-        <h1 className="text-3xl sm:text-4xl font-normal text-slate-950 tracking-tight">
-          Patient Check-In & ABHA ID
-        </h1>
-        <p className="text-sm font-normal text-slate-500 mt-2 max-w-md mx-auto">
-          Authenticate your identity, select your preferred language, and grant consent for clinical history intake.
-        </p>
+    <div className="relative min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden selection:bg-slate-200">
+      {/* 3D Microscopic Virus Background with Parallax (Replacing circular telemetry) */}
+      <VirusBackground3D />
+
+      {/* Soft Multi-Color Atmospheric Glow (Exact match to /patient/intake) */}
+      <div className="fixed inset-x-0 bottom-0 h-[420px] pointer-events-none overflow-hidden z-0 opacity-70 select-none">
+        <div className="absolute -bottom-24 -left-24 w-[480px] h-[380px] bg-amber-100/50 rounded-full blur-[110px]" />
+        <div className="absolute -bottom-28 left-1/2 -translate-x-1/2 w-[540px] h-[360px] bg-rose-100/40 rounded-full blur-[120px]" />
+        <div className="absolute -bottom-24 -right-24 w-[500px] h-[400px] bg-sky-100/50 rounded-full blur-[110px]" />
       </div>
 
-      {/* Main Container */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-[28px] p-6 sm:p-8 shadow-[0_8px_30px_-10px_rgba(0,0,0,0.04)] space-y-6"
-      >
-        {/* Preferred Language & OPD Pathway Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Preferred Language (ભાષા)
-            </label>
-            <select
-              name="preferredLanguage"
-              value={formData.preferredLanguage}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400"
-            >
-              <option value="gu-IN">Gujarati (ગુજરાતી)</option>
-              <option value="hi-IN">Hindi (हिंदी)</option>
-              <option value="en-IN">English</option>
-              <option value="mr-IN">Marathi (मराठी)</option>
-              <option value="ta-IN">Tamil (தமிழ்)</option>
-              <option value="te-IN">Telugu (తెలుగు)</option>
-              <option value="bn-IN">Bengali (বাংলা)</option>
-            </select>
+      {/* Top Clean Header */}
+      <header className="relative z-10 w-full max-w-4xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-slate-950 text-white flex items-center justify-center text-xs font-semibold">
+            S
           </div>
-
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Clinical OPD Pathway
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData((p) => ({
-                    ...p,
-                    opdType: 'GENERAL',
-                    opdMode: 'ALLOPATHIC',
-                    opdSystem: 'MODERN_MEDICINE',
-                  }))
-                }
-                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                  (formData.opdType === 'GENERAL' || formData.opdMode === 'ALLOPATHIC')
-                    ? 'bg-sky-50 border-sky-300 text-sky-800 ring-1 ring-sky-400/40 shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <HeartPulse className="w-4 h-4 text-sky-600" />
-                <span>General OPD</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData((p) => ({
-                    ...p,
-                    opdType: 'AYUSH',
-                    opdMode: 'AYUSH',
-                    opdSystem: p.opdSystem === 'MODERN_MEDICINE' ? 'AYURVEDA' : (p.opdSystem || 'AYURVEDA'),
-                  }))
-                }
-                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                  (formData.opdType === 'AYUSH' || formData.opdMode === 'AYUSH')
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/40 shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Leaf className="w-4 h-4 text-emerald-600" />
-                <span>AYUSH OPD (6 Systems)</span>
-              </button>
-            </div>
+            <h1 className="text-sm font-semibold text-slate-900 tracking-tight">Sehat Health Kiosk</h1>
+            <p className="text-[11px] text-slate-500 font-normal">Patient Self Check-In</p>
           </div>
         </div>
 
-        {/* Detailed OPD System Selection Sub-Panel */}
-        {(formData.opdType === 'GENERAL' || formData.opdMode === 'ALLOPATHIC') ? (
-          <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200/80 space-y-3 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <HeartPulse className="w-4 h-4 text-sky-600" />
-                <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  General OPD • Modern & Conventional Medicine
-                </span>
-              </div>
-              <span className="text-[10px] bg-sky-100 text-sky-800 font-medium px-2 py-0.5 rounded-full">
-                MBBS / MD / Specialists
-              </span>
-            </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleAudioGuidance}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition cursor-pointer ${
+              audioSpeechActive
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>{audioSpeechActive ? 'Playing...' : 'Voice Guidance'}</span>
+          </button>
 
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              <strong>Purpose:</strong> Primary and general medical consultations for common health conditions, diagnostic evaluation, and acute illness under conventional modern medicine.
-            </p>
+          {currentStep > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Reset check-in to beginning?')) {
+                  setCurrentStep(0);
+                }
+              }}
+              className="p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition cursor-pointer"
+              title="Restart"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </header>
 
-            {/* Common Examples Chips */}
-            <div>
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
-                Common Consultations:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  'Fever',
-                  'Cough / Cold',
-                  'Infection',
-                  'Blood Pressure',
-                  'Diabetes',
-                  'Minor Injuries',
-                  'General Complaints',
-                ].map((chip) => (
-                  <span
-                    key={chip}
-                    className="px-2.5 py-0.5 rounded-lg text-[11px] font-normal bg-white text-slate-700 border border-sky-200 shadow-2xs"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Medical Specialization Selector */}
-            <div className="pt-2 border-t border-sky-100">
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Medical Specialization
-              </label>
-              <select
-                name="medicalSpecialization"
-                value={formData.medicalSpecialization || 'General Medicine'}
-                onChange={handleChange}
-                className="w-full px-3 py-2 rounded-xl border border-sky-200 bg-white text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
-              >
-                <option value="General Medicine">General Medicine / Internal Medicine (MBBS, MD)</option>
-                <option value="Family Medicine">Family Medicine / Primary Care</option>
-                <option value="Cardiology">Cardiology</option>
-                <option value="Pulmonology">Pulmonology (Respiratory)</option>
-                <option value="Pediatrics">Pediatrics</option>
-                <option value="Orthopedics">Orthopedics</option>
-                <option value="Dermatology">Dermatology</option>
-                <option value="ENT">ENT (Ear, Nose, Throat)</option>
-                <option value="Gynecology & Obstetrics">Gynecology & Obstetrics</option>
-                <option value="General Surgery">General Surgery</option>
-              </select>
-            </div>
+      {/* Main Centered Q&A Card */}
+      <main className="relative z-10 w-full max-w-2xl mx-auto px-4 py-6 sm:py-10 flex-grow flex flex-col justify-center">
+        {/* Step Progress Line */}
+        <div className="mb-6 space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span>{currentStep === 0 ? 'Welcome' : `Step ${currentStep} of 8`}</span>
+            <span>{Math.round((currentStep / 8) * 100)}%</span>
           </div>
-        ) : (
-          <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-3 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Leaf className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  AYUSH OPD • Traditional & Holistic Systems
-                </span>
-              </div>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded-full">
-                Umbrella Category
-              </span>
-            </div>
+          <div className="w-full h-1 bg-slate-200/80 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-slate-900 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${(currentStep / 8) * 100}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+        </div>
 
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              AYUSH comprises 6 distinct recognized healthcare disciplines. Select your specific medical system for dedicated doctor routing:
-            </p>
+        {/* Error Notification */}
+        {errorMessage && (
+          <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+            <X className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
-            {/* 6 AYUSH Medical Systems Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {[
-                {
-                  id: 'AYURVEDA',
-                  title: 'Ayurveda (आयुर्वेद)',
-                  desc: 'Dosha balance, herbal formulations & Panchakarma',
-                  degree: 'BAMS / MD (Ayu)',
-                },
-                {
-                  id: 'YOGA_NATUROPATHY',
-                  title: 'Yoga & Naturopathy (योग एवं प्राकृतिक चिकित्सा)',
-                  desc: 'Lifestyle modification, pranayama & natural therapeutics',
-                  degree: 'BNYS',
-                },
-                {
-                  id: 'UNANI',
-                  title: 'Unani (यूनानी)',
-                  desc: 'Mizaj temperament diagnosis & herbal medicine',
-                  degree: 'BUMS / MD (Unani)',
-                },
-                {
-                  id: 'SIDDHA',
-                  title: 'Siddha (सिद्ध)',
-                  desc: 'Traditional Tamil medicine & herb-mineral science',
-                  degree: 'BSMS / MD (Siddha)',
-                },
-                {
-                  id: 'HOMOEOPATHY',
-                  title: 'Homoeopathy (होम्योपैथी)',
-                  desc: 'Law of Similars & individualized constitutional care',
-                  degree: 'BHMS / MD (Hom)',
-                },
-                {
-                  id: 'SOWA_RIGPA',
-                  title: 'Sowa-Rigpa (सोवा-रिग्पा)',
-                  desc: 'Traditional Himalayan / Tibetan healing & pulse exam',
-                  degree: 'Menrampa / BSRMS',
-                },
-              ].map((sys) => {
-                const isSelected = formData.opdSystem === sys.id;
-                return (
+        {/* Dynamic Card Container (Theme matching /patient/intake) */}
+        <div className="bg-white/90 backdrop-blur-xl border border-slate-200/90 rounded-[28px] p-6 sm:p-10 shadow-[0_8px_30px_-10px_rgba(0,0,0,0.05)]">
+          <AnimatePresence mode="wait">
+            {/* ========================================================
+                STEP 0: WELCOME ("wellcome")
+                ======================================================== */}
+            {currentStep === 0 && (
+              <motion.div
+                key="step-0-welcome"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-2">
+                  <h2 className="text-3xl sm:text-4xl font-normal text-slate-950 tracking-tight">
+                    Welcome to Sehat
+                  </h2>
+                  <p className="text-sm text-slate-500 font-light">
+                    સેહત કિયોસ્ક માં આપનું સ્વાગત છે • सेहत कियोस्क में आपका स्वागत है
+                  </p>
+                  <p className="text-sm text-slate-600 pt-1 leading-relaxed">
+                    Fast and easy hospital check-in. Answer a few brief questions, and we will prepare your clinical history for the doctor.
+                  </p>
+                </div>
+
+                {/* Clean Feature List (without badges) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
+                    <Volume2 className="w-4 h-4 text-slate-700" />
+                    <h4 className="text-xs font-medium text-slate-900">Voice Guided</h4>
+                    <p className="text-[11px] text-slate-500">Gujarati, Hindi & English</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
+                    <User className="w-4 h-4 text-slate-700" />
+                    <h4 className="text-xs font-medium text-slate-900">ABHA Auto-Sync</h4>
+                    <p className="text-[11px] text-slate-500">Instant identity lookup</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
+                    <HeartPulse className="w-4 h-4 text-slate-700" />
+                    <h4 className="text-xs font-medium text-slate-900">Doctor Routing</h4>
+                    <p className="text-[11px] text-slate-500">Direct OPD queue entry</p>
+                  </div>
+                </div>
+
+                <div className="pt-4">
                   <button
-                    key={sys.id}
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="w-full py-4 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-sm font-medium transition active:scale-[0.99] cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  >
+                    <span>Start Check-In</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <span className="block text-center text-[11px] text-slate-400 mt-2 font-normal">
+                    Press Enter ↵ to begin
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 1: LANGUAGE SELECTION
+                ======================================================== */}
+            {currentStep === 1 && (
+              <motion.div
+                key="step-1-language"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 1 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    Which language do you prefer to speak in?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    આપ કઈ ભાષામાં વાતચીત કરવા માંગો છો? • अपनी भाषा चुनें
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {LANGUAGES.map((lang) => {
+                    const isSelected = formData.preferredLanguage === lang.id;
+                    return (
+                      <button
+                        key={lang.id}
+                        type="button"
+                        onClick={() => {
+                          updateField('preferredLanguage', lang.id);
+                          speakText(lang.greeting, lang.id);
+                        }}
+                        className={`p-3.5 rounded-2xl text-left border transition cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <div className="text-sm font-medium">{lang.name}</div>
+                          <div className={`text-xs ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {lang.native}
+                          </div>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to ABHA ID</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 2: ABHA HEALTH ID
+                ======================================================== */}
+            {currentStep === 2 && (
+              <motion.div
+                key="step-2-abha"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 2 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    Do you have an ABHA Health ID?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    આયુષ્માન ભારત હેલ્થ આઈડી (14 અંક) • Entering ABHA auto-fills your identity
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formData.abhaId}
+                      onChange={(e) => handleAbhaChange(e.target.value)}
+                      placeholder="e.g. 91-4432-8812-9901 or name@abdm"
+                      className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
+                    />
+                    {isFetchingAbha && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-slate-600 bg-slate-200 px-3 py-1 rounded-full animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Fetching...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handleApplyPresetAbha}
+                      className="text-xs text-slate-700 hover:text-slate-950 underline underline-offset-4 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>Autofill Demo ABHA (91-4432-8812-9901)</span>
+                    </button>
+                  </div>
+
+                  {formData.fullName && (
+                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center gap-2 animate-fadeIn">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Verified: Auto-filled as {formData.fullName} ({formData.gender}, {formData.age}y)</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateField('abhaId', '');
+                      handleNextStep();
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer"
+                  >
+                    I don't have an ABHA ID / Skip →
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to Name</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 3: FULL NAME
+                ======================================================== */}
+            {currentStep === 3 && (
+              <motion.div
+                key="step-3-name"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 3 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    What is the patient's full name?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    દર્દીનું પૂરું નામ લખો અથવા બોલો • Type or speak using voice dictation
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={formData.fullName}
+                      onChange={(e) => updateField('fullName', e.target.value)}
+                      placeholder="e.g. Ramesh Patel"
+                      className="w-full pl-11 pr-14 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-base placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={toggleVoiceDictation}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition cursor-pointer ${
+                        isVoiceListening
+                          ? 'bg-rose-500 text-white animate-pulse'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                      title="Speak name aloud"
+                    >
+                      {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="block text-[11px] text-slate-400 font-normal">
+                    Click mic to dictate • Press Enter ↵ to advance
+                  </span>
+                </div>
+
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="px-4 py-2 text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to Demographics</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 4: DEMOGRAPHICS (AGE & GENDER)
+                ======================================================== */}
+            {currentStep === 4 && (
+              <motion.div
+                key="step-4-demographics"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 4 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    How old are you, and what is your gender?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    તમારી ઉંમર અને જાતિ પસંદ કરો • Age & Gender
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Age */}
+                  <div className="space-y-2">
+                    <label className="block text-xs text-slate-600 font-medium">
+                      Age (Years)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={formData.age}
+                      onChange={(e) => updateField('age', e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-lg font-mono focus:bg-white focus:outline-none focus:border-slate-400 transition"
+                    />
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {['18', '28', '35', '48', '62', '75'].map((agePreset) => (
+                        <button
+                          key={agePreset}
+                          type="button"
+                          onClick={() => updateField('age', agePreset)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono transition border cursor-pointer ${
+                            formData.age === agePreset
+                              ? 'bg-slate-950 text-white border-slate-950'
+                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {agePreset}y
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Gender */}
+                  <div className="space-y-2">
+                    <label className="block text-xs text-slate-600 font-medium">
+                      Gender
+                    </label>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'Male', label: 'Male (પુરુષ)' },
+                        { id: 'Female', label: 'Female (સ્ત્રી)' },
+                        { id: 'Other', label: 'Other (અન્ય)' },
+                      ].map((g) => {
+                        const isSelected = formData.gender === g.id;
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => updateField('gender', g.id)}
+                            className={`w-full p-2.5 rounded-xl border text-left text-xs font-medium transition cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span>{g.label}</span>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="px-4 py-2 text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to Mobile</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 5: MOBILE NUMBER
+                ======================================================== */}
+            {currentStep === 5 && (
+              <motion.div
+                key="step-5-mobile"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 5 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    What is your 10-digit mobile number?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    મોબાઈલ નંબર (+91) • Used for digital prescription and OPD queue token
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="relative flex items-center">
+                    <div className="absolute left-4 flex items-center gap-1 text-xs font-mono text-slate-500 border-r border-slate-200 pr-2.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <span>+91</span>
+                    </div>
+                    <input
+                      type="tel"
+                      autoFocus
+                      value={formData.phone}
+                      onChange={(e) => updateField('phone', e.target.value)}
+                      placeholder="98765 43210"
+                      className="w-full pl-20 pr-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-base font-mono placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
+                    />
+                  </div>
+                  <span className="block text-[11px] text-slate-400 font-normal">
+                    Press Enter ↵ to advance
+                  </span>
+                </div>
+
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="px-4 py-2 text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to OPD Pathway</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 6: CLINICAL OPD PATHWAY
+                ======================================================== */}
+            {currentStep === 6 && (
+              <motion.div
+                key="step-6-opd"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 6 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    Which OPD department would you like to visit?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    ઓપીડી વિભાગ પસંદ કરો • Select General Allopathic or AYUSH Integrative OPD
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((p) => ({
+                        ...p,
+                        opdType: 'GENERAL',
+                        opdMode: 'ALLOPATHIC',
+                        opdSystem: 'MODERN_MEDICINE',
+                        medicalSpecialization: 'General Medicine',
+                      }))
+                    }
+                    className={`p-4 rounded-2xl border text-left transition cursor-pointer space-y-1.5 ${
+                      formData.opdType === 'GENERAL'
+                        ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HeartPulse className="w-4 h-4" />
+                        <span className="text-sm font-medium">General OPD</span>
+                      </div>
+                      {formData.opdType === 'GENERAL' && <CheckCircle2 className="w-4 h-4 text-white" />}
+                    </div>
+                    <p className={`text-xs ${formData.opdType === 'GENERAL' ? 'text-slate-300' : 'text-slate-500'}`}>
+                      Modern medicine (MBBS / MD) for fever, acute infections, diagnostics, and primary care.
+                    </p>
+                  </button>
+
+                  <button
                     type="button"
                     onClick={() =>
                       setFormData((p) => ({
                         ...p,
                         opdType: 'AYUSH',
                         opdMode: 'AYUSH',
-                        opdSystem: sys.id,
-                        medicalSpecialization: sys.title.split(' ')[0],
+                        opdSystem: 'AYURVEDA',
+                        medicalSpecialization: 'Ayurveda',
                       }))
                     }
-                    className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-white border-emerald-500 ring-2 ring-emerald-400/30 shadow-xs'
-                        : 'bg-white/70 border-emerald-200/60 hover:bg-white hover:border-emerald-300'
+                    className={`p-4 rounded-2xl border text-left transition cursor-pointer space-y-1.5 ${
+                      formData.opdType === 'AYUSH'
+                        ? 'bg-slate-950 text-white border-slate-950 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs font-semibold ${isSelected ? 'text-emerald-900' : 'text-slate-800'}`}>
-                        {sys.title}
-                      </span>
-                      {isSelected && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Leaf className="w-4 h-4" />
+                        <span className="text-sm font-medium">AYUSH OPD</span>
+                      </div>
+                      {formData.opdType === 'AYUSH' && <CheckCircle2 className="w-4 h-4 text-white" />}
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">{sys.desc}</p>
-                    <span className="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-1.5 self-start">
-                      {sys.degree}
-                    </span>
+                    <p className={`text-xs ${formData.opdType === 'AYUSH' ? 'text-slate-300' : 'text-slate-500'}`}>
+                      Traditional systems (Ayurveda, Yoga, Unani, Siddha, Homoeopathy, Sowa-Rigpa).
+                    </p>
                   </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                </div>
 
+                {/* Sub-Specialization Selector */}
+                {formData.opdType === 'GENERAL' ? (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <label className="block text-xs font-medium text-slate-700">
+                      Select Medical Specialization:
+                    </label>
+                    <select
+                      value={formData.medicalSpecialization}
+                      onChange={(e) => updateField('medicalSpecialization', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-slate-400"
+                    >
+                      {GENERAL_SPECS.map((spec) => (
+                        <option key={spec} value={spec}>
+                          {spec}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <label className="block text-xs font-medium text-slate-700">
+                      Choose AYUSH Discipline:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {AYUSH_SYSTEMS.map((sys) => {
+                        const isSel = formData.opdSystem === sys.id;
+                        return (
+                          <button
+                            key={sys.id}
+                            type="button"
+                            onClick={() => {
+                              setFormData((p) => ({
+                                ...p,
+                                opdSystem: sys.id,
+                                medicalSpecialization: sys.name,
+                              }));
+                            }}
+                            className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                              isSel
+                                ? 'bg-slate-950 text-white border-slate-950'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            <div className="text-xs font-medium">{sys.name}</div>
+                            <div className={`text-[10px] ${isSel ? 'text-slate-300' : 'text-slate-400'}`}>
+                              {sys.native}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-        {/* ABHA Auto-Fill Primary Input */}
-        <div className="relative">
-          <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            Enter ABHA ID (Auto-fills details)
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              name="abhaId"
-              value={formData.abhaId}
-              onChange={handleChange}
-              placeholder="e.g. 91-4432-8812-9901 or name@abdm"
-              className="w-full px-4 py-3 rounded-xl border-2 border-emerald-100 bg-emerald-50/40 text-slate-900 text-sm font-mono font-medium focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all"
-            />
-            {isFetchingAbha && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-emerald-700 text-xs font-medium bg-emerald-100 px-3 py-1 rounded-full animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Fetching details...
-              </div>
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="px-4 py-2 text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to Consent</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
             )}
-          </div>
+
+            {/* ========================================================
+                STEP 7: DPDP CONSENT
+                ======================================================== */}
+            {currentStep === 7 && (
+              <motion.div
+                key="step-7-consent"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Question 7 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    Do you grant consent for AI-assisted voice check-up?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    DPDP એક્ટ 2023 અને ડેટા સુરક્ષા સંમતિ • Digital Personal Data Protection
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-slate-700" />
+                    <span className="text-xs font-medium text-slate-900">Privacy & Consent Notice</span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    I authorize Sehat to transcribe spoken symptoms and prepare a clinical summary for my treating physician. Voice recordings are processed securely and deleted upon consultation completion.
+                  </p>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700 select-none">
+                      <input
+                        type="checkbox"
+                        checked={formData.consentAiVoice}
+                        onChange={(e) => updateField('consentAiVoice', e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-950 accent-slate-950"
+                      />
+                      <span>I consent to AI conversational voice intake & clinical structuring *</span>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700 select-none">
+                      <input
+                        type="checkbox"
+                        checked={formData.consentAbhaSync}
+                        onChange={(e) => updateField('consentAbhaSync', e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-950 accent-slate-950"
+                      />
+                      <span>Link consultation record with my ABHA Health Locker via ABDM FHIR</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="px-4 py-2 text-xs text-slate-500 hover:text-slate-900 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Continue to Final Stage</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ========================================================
+                STEP 8: FINAL STAGE — "READY TO START CHECK UP : YES OR NO"
+                ======================================================== */}
+            {currentStep === 8 && (
+              <motion.div
+                key="step-8-final-ready"
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-6"
+              >
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 font-medium">Final Stage • Step 8 of 8</span>
+                  <h2 className="text-2xl sm:text-3xl font-normal text-slate-950 tracking-tight">
+                    Ready to start check up : Yes or No?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    તપાસ શરૂ કરવા માટે તૈયાર છો? • Please verify your check-in details below
+                  </p>
+                </div>
+
+                {/* Summary Card */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Patient Name</span>
+                      <span className="text-base font-medium text-slate-950">{formData.fullName || 'Patient User'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Demographics</span>
+                      <span className="text-xs font-medium text-slate-700">
+                        {formData.gender}, {formData.age} Years
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs border-b border-slate-200/80 pb-3">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Mobile Number</span>
+                      <span className="font-mono text-slate-800">{formData.phone || '9876543210'}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">ABHA ID</span>
+                      <span className="font-mono text-slate-800">
+                        {formData.abhaId || 'Direct Kiosk Patient'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Language</span>
+                      <span className="text-slate-800">
+                        {LANGUAGES.find((l) => l.id === formData.preferredLanguage)?.name || 'Gujarati'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">OPD Pathway</span>
+                      <span className="text-slate-900 font-medium">
+                        {formData.opdType === 'AYUSH'
+                          ? `AYUSH (${formData.opdSystem})`
+                          : `General (${formData.medicalSpecialization})`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+                    <span className="flex items-center gap-1.5 text-emerald-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Consent Verified</span>
+                    </span>
+                    <span>Ready for clinical intake</span>
+                  </div>
+                </div>
+
+                {/* Edit Jump Selector if User Clicks NO */}
+                {showEditSelector && (
+                  <div className="p-3.5 rounded-2xl bg-white border border-slate-200 space-y-2 animate-fadeIn">
+                    <span className="text-xs font-medium text-slate-800 block">
+                      Which answer would you like to edit?
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      {[
+                        { label: 'Language', step: 1 },
+                        { label: 'ABHA ID', step: 2 },
+                        { label: 'Full Name', step: 3 },
+                        { label: 'Age & Gender', step: 4 },
+                        { label: 'Mobile Number', step: 5 },
+                        { label: 'OPD Pathway', step: 6 },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            setShowEditSelector(false);
+                            setCurrentStep(item.step);
+                          }}
+                          className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium text-center transition cursor-pointer"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* The User's Explicit Request: "Ready start check up : yes or nor" */}
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* NO, EDIT DETAILS */}
+                    <button
+                      type="button"
+                      onClick={() => setShowEditSelector((prev) => !prev)}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>NO, EDIT DETAILS</span>
+                    </button>
+
+                    {/* YES, START CHECK-UP */}
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleConfirmStartCheckup}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 hover:bg-slate-850 text-white text-sm font-medium transition active:scale-[0.99] cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Starting Check-Up...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>YES, START CHECK-UP</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handlePrevStep}
+                      className="text-xs text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                    >
+                      ← Back to Previous Step
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+      </main>
 
-        {/* OR Divider */}
-        <div className="flex items-center gap-4 py-2 opacity-60">
-          <div className="h-px bg-slate-300 flex-1"></div>
-          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">OR ENTER MANUALLY</span>
-          <div className="h-px bg-slate-300 flex-1"></div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              name="fullName"
-              value={formData.fullName}
-              onChange={handleChange}
-              placeholder="e.g. Ramesh Patel"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400 transition-colors"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Phone Number *
-            </label>
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              placeholder="e.g. 9876543210"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400 transition-colors"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Age & Gender Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Age (Years)
-            </label>
-            <input
-              type="number"
-              name="age"
-              value={formData.age}
-              onChange={handleChange}
-              placeholder="e.g. 48"
-              min="1"
-              max="120"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-              Gender
-            </label>
-            <select
-              name="gender"
-              value={formData.gender}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-slate-400"
-            >
-              <option value="Male">Male (પુરુષ)</option>
-              <option value="Female">Female (સ્ત્રી)</option>
-              <option value="Other">Other (અન્ય)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Module D — DPDP Act 2023 & ABDM Granular Consent Card */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">
-                Consent & Privacy Declaration (DPDP Act 2023)
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={playAudioConsent}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>{isAudioConsentPlaying ? 'Playing Consent Audio...' : 'Audio Explanation'}</span>
-            </button>
-          </div>
-
-          <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-            I hereby authorize Sehat to process my spoken symptom answers, digitize previous clinical reports, and compile an EHR summary for my treating physician. Temporary audio streams are purged immediately upon session completion.
-          </p>
-
-          <div className="space-y-2 pt-1">
-            <label className="flex items-center gap-2.5 cursor-pointer text-xs font-normal text-slate-700">
-              <input
-                type="checkbox"
-                name="consentAiVoice"
-                checked={formData.consentAiVoice}
-                onChange={handleChange}
-                className="w-4 h-4 rounded text-slate-900 accent-slate-900"
-                required
-              />
-              <span>I consent to AI conversational voice intake & clinical history structuring *</span>
-            </label>
-
-            <label className="flex items-center gap-2.5 cursor-pointer text-xs font-normal text-slate-700">
-              <input
-                type="checkbox"
-                name="consentAbhaSync"
-                checked={formData.consentAbhaSync}
-                onChange={handleChange}
-                className="w-4 h-4 rounded text-slate-900 accent-slate-900"
-              />
-              <span>Link generated clinical summary to my ABHA Health Record via ABDM FHIR gateway</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Submit Action */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className={`w-full py-3.5 rounded-full text-sm font-normal text-white bg-slate-950 hover:bg-slate-850 active:scale-98 transition cursor-pointer shadow-sm flex items-center justify-center gap-2 ${
-            isSubmitting ? 'opacity-75 cursor-not-allowed' : ''
-          }`}
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin text-white" />
-              <span>Registering & Initializing Live Session...</span>
-            </>
-          ) : (
-            <>
-              <span>Begin Multimodal Clinical Intake</span>
-              <ArrowRight className="w-4 h-4" />
-            </>
-          )}
-        </button>
-      </form>
+      {/* Clean Bottom Footer */}
+      <footer className="relative z-10 w-full max-w-4xl mx-auto px-6 py-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-100">
+        <span>AIIA Hospital Patient Check-In</span>
+        <span>Press Enter ↵ to advance</span>
+      </footer>
     </div>
   );
 };

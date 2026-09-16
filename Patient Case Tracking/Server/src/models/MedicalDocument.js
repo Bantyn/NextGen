@@ -16,7 +16,14 @@ const MedicalDocumentSchema = new mongoose.Schema(
     },
     session_id: {
       type: String,
-      required: [true, 'Session ID is required'],
+      required: false,
+      default: null,
+      index: true,
+    },
+    encounter_id: {
+      type: String,
+      required: false,
+      default: null,
       index: true,
     },
     document_type: {
@@ -123,7 +130,11 @@ MedicalDocumentSchema.virtual('patientId').get(function () {
 });
 
 MedicalDocumentSchema.virtual('sessionId').get(function () {
-  return this.session_id;
+  return this.session_id || this.encounter_id;
+});
+
+MedicalDocumentSchema.virtual('encounterId').get(function () {
+  return this.encounter_id || this.session_id;
 });
 
 MedicalDocumentSchema.virtual('fileName').get(function () {

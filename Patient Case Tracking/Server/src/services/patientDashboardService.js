@@ -4,9 +4,12 @@ import { ClinicalSession } from '../models/ClinicalSession.js';
 import { ClinicalRecord } from '../models/ClinicalRecord.js';
 import { MedicalDocument } from '../models/MedicalDocument.js';
 import { RedFlagCase } from '../models/RedFlagCase.js';
+import { Appointment } from '../models/Appointment.js';
 import { vitalsRepository } from '../repositories/vitalsRepository.js';
 import { appointmentRepository } from '../repositories/appointmentRepository.js';
 import { patientNotificationRepository } from '../repositories/patientNotificationRepository.js';
+import { User } from '../models/User.js';
+import mongoose from 'mongoose';
 import { doctorService } from './doctorService.js';
 import { ApiError } from '../utils/apiError.js';
 import { logger } from '../utils/logger.js';
@@ -36,12 +39,23 @@ export class PatientDashboardService {
 
     const resolvedPatientId = patient.patient_id;
 
+    // Resolve all linked patient records for this patient identity (e.g., matching verified phone number)
+    const relatedPatientIds = [resolvedPatientId];
+    if (patient.phone) {
+      const linkedPatients = await Patient.find({ phone: patient.phone }).select('patient_id').lean().catch(() => []);
+      linkedPatients.forEach((p) => {
+        if (p.patient_id && !relatedPatientIds.includes(p.patient_id)) {
+          relatedPatientIds.push(p.patient_id);
+        }
+      });
+    }
+
     // 2. Parallel queries across all clinical domains
     const [
       abhaIdentity,
       latestVitals,
       vitalsHistory,
-      activeSession,
+      allSessions,
       redFlagCase,
       medicalDocs,
       clinicalRecords,
@@ -50,27 +64,32 @@ export class PatientDashboardService {
       notifications,
       unreadNotifCount,
     ] = await Promise.all([
-      PatientIdentity.findOne({ patient_id: resolvedPatientId, identity_type: 'ABHA' }).lean(),
+      PatientIdentity.findOne({
+        patient_id: { $in: relatedPatientIds },
+        identity_type: 'ABHA',
+      }).lean(),
       vitalsRepository.findLatestByPatientId(resolvedPatientId),
       vitalsRepository.findHistoryByPatientId(resolvedPatientId, 15),
-      ClinicalSession.findOne({ patient_id: resolvedPatientId }).sort({ createdAt: -1 }).lean(),
-      RedFlagCase.findOne({ patient_id: resolvedPatientId, status: { $ne: 'RESOLVED' } }).sort({ createdAt: -1 }).lean(),
+      ClinicalSession.find({
+        patient_id: { $in: relatedPatientIds },
+      }).sort({ createdAt: -1 }).lean(),
+      RedFlagCase.findOne({
+        patient_id: { $in: relatedPatientIds },
+        status: { $ne: 'RESOLVED' },
+      }).sort({ createdAt: -1 }).lean(),
       MedicalDocument.find({
-        $or: [
-          { patient_id: resolvedPatientId },
-          { patient_id: resolvedPatientId.toLowerCase() },
-          { patient_id: resolvedPatientId.toUpperCase() },
-        ],
+        patient_id: { $in: relatedPatientIds },
       }).sort({ createdAt: -1 }).lean(),
       ClinicalRecord.find({
-        $or: [
-          { patient_id: resolvedPatientId },
-          { patient_id: resolvedPatientId.toLowerCase() },
-          { patient_id: resolvedPatientId.toUpperCase() },
-        ],
+        patient_id: { $in: relatedPatientIds },
       }).sort({ createdAt: -1 }).lean(),
-      appointmentRepository.findUpcomingByPatientId(resolvedPatientId),
-      appointmentRepository.findByPatientId(resolvedPatientId, 10),
+      Appointment.find({
+        patient_id: { $in: relatedPatientIds },
+        status: { $in: ['CONFIRMED', 'SCHEDULED', 'PENDING'] },
+      }).sort({ date: 1 }).lean().catch(() => []),
+      Appointment.find({
+        patient_id: { $in: relatedPatientIds },
+      }).sort({ date: -1, createdAt: -1 }).lean().catch(() => []),
       patientNotificationRepository.findByPatientId(resolvedPatientId, 10),
       patientNotificationRepository.countUnreadByPatientId(resolvedPatientId),
     ]);
@@ -172,6 +191,7 @@ export class PatientDashboardService {
     }));
 
     // 5. Format Live Journey & Token (based strictly on active session & clinical records)
+    const activeSession = (allSessions && allSessions.length > 0) ? allSessions[0] : null;
     let currentToken = null;
     if (activeSession) {
       let stageKey = activeSession.journey_stage;
@@ -296,19 +316,68 @@ export class PatientDashboardService {
       };
     }
 
+    // 6B. Format Multi-Intake Encounter History (Preserving all distinct encounters)
+    const formattedIntakeHistory = (allSessions || []).map((s) => {
+      const isAyush = s.opd_type === 'AYUSH';
+      const opdLabel = isAyush
+        ? `AYUSH — ${(s.opd_system || 'Ayurveda').replace(/_/g, ' ')}`
+        : `General OPD — ${(s.opd_system || 'General Medicine').replace(/_/g, ' ')}`;
+      const complaintText =
+        s.clinical_state?.chief_complaint ||
+        s.clinical_summary?.chief_complaint ||
+        (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Consultation');
+
+      return {
+        id: s.session_id,
+        sessionId: s.session_id,
+        encounterId: s.session_id,
+        date: new Date(s.createdAt).toLocaleDateString(),
+        time: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: s.createdAt,
+        opdType: s.opd_type || 'GENERAL',
+        opdSystem: s.opd_system || 'GENERAL_MEDICINE',
+        department: opdLabel,
+        status: s.status || 'STARTED',
+        journeyStage: s.journey_stage || 'CHECKED_IN',
+        journeyStepIndex: s.journey_step_index ?? 0,
+        chiefComplaint: complaintText,
+        symptoms: s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [],
+        triageLevel: s.triage_level || 'LOW',
+        triageReason: s.triage_reason || '',
+        hasRedFlag: Boolean(s.red_flags?.has_red_flag),
+        redFlagReason: s.red_flags?.reason || null,
+        clinicalSummary: s.clinical_summary || null,
+        clinicalState: s.clinical_state || null,
+        aiSummary: s.clinical_state?.ai_summary || s.clinical_summary?.hpi_summary || s.clinical_state?.hpi_summary || (typeof s.clinical_summary === 'string' ? s.clinical_summary : null),
+        voiceTranscript: s.clinical_state?.voice_transcript || null,
+        doctorNotes: s.doctor_notes || null,
+        prescriptions: s.prescriptions || [],
+        ayushProfile: s.ayush_profile || null,
+        startedAt: s.started_at || s.createdAt,
+        completedAt: s.completed_at || null,
+      };
+    });
+
     // 7. Format Medical Documents & AI Summaries
     const reports = (medicalDocs || []).map((doc) => {
       const isLab = doc.document_type === 'LAB_REPORT' || (doc.extracted_data?.lab_results && doc.extracted_data.lab_results.length > 0);
       const isRx = doc.document_type === 'PRESCRIPTION' || (doc.extracted_data?.current_medications && doc.extracted_data.current_medications.length > 0);
 
       const labs = doc.extracted_data?.lab_results || [];
-      const parameters = labs.map((l) => ({
-        name: l.test_name || 'Investigation',
-        value: `${l.value ?? '-'} ${l.unit || ''}`.trim(),
-        normalRange: l.reference_range || 'Standard Range',
-        status: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL') ? l.flag : 'Normal',
-        alert: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL'),
-      }));
+      const parameters = labs.map((l) => {
+        const rawVal = l.observed_value != null && l.observed_value !== '' ? l.observed_value : (l.value != null ? l.value : '-');
+        const cleanUnit = (l.unit && !/^(normal|high|low|borderline|calculated)$/i.test(String(l.unit).trim())) ? String(l.unit).trim() : '';
+        const displayVal = cleanUnit ? `${rawVal} ${cleanUnit}`.trim() : String(rawVal);
+        return {
+          name: l.test_name || 'Investigation',
+          value: displayVal,
+          observedValue: String(rawVal),
+          unit: cleanUnit,
+          normalRange: l.reference_range || 'Standard Range',
+          status: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL') ? l.flag : (l.status || 'Normal'),
+          alert: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL'),
+        };
+      });
 
       const importantFindings = doc.important_findings || [];
       const hasAbnormal = parameters.some((p) => p.alert) || importantFindings.some((f) => f.status !== 'NORMAL') || doc.requires_doctor_verification;
@@ -320,7 +389,7 @@ export class PatientDashboardService {
         title: doc.file_name ? doc.file_name.replace(/\.[^/.]+$/, '') : (isLab ? 'Diagnostic Lab Report' : isRx ? 'Prescription' : 'Medical Report'),
         category: isLab ? 'Biochemistry' : isRx ? 'Prescriptions' : 'Diagnostic Report',
         date: new Date(doc.createdAt).toLocaleDateString(),
-        orderedBy: doc.extracted_data?.doctor?.name || 'Attending Physician',
+        orderedBy: (doc.extracted_data?.doctor?.name || 'Attending Physician').replace(/\s+(?:reported|collected|registered|generated|sample|date|time|uhid|ref|page|contact).*$/i, '').trim(),
         facility: doc.extracted_data?.doctor?.facility || 'Civil Hospital / OPD Clinic',
         status: doc.processing_status || 'COMPLETED',
         statusSeverity: hasAbnormal ? 'attention' : 'normal',
@@ -342,8 +411,8 @@ export class PatientDashboardService {
 
     // 8. Format Prescriptions, Medical History & Allergies from Clinical Records
     const prescriptions = [];
-    const allergies = [];
-    const chronicConditions = [];
+    const allergiesMap = new Map();
+    const chronicConditionsMap = new Map();
     const consultedDoctors = [];
     const timeline = [];
 
@@ -374,42 +443,56 @@ export class PatientDashboardService {
         });
       }
 
-      // Allergies
+      // Allergies from Physician Records
       if (rec.structured_history?.allergies && rec.structured_history.allergies.length > 0) {
         rec.structured_history.allergies.forEach((a) => {
-          allergies.push({
-            allergen: typeof a === 'string' ? a : a.allergen || 'Recorded Allergen',
-            reaction: typeof a === 'string' ? 'Hypersensitivity' : a.reaction || 'Mild',
-            severity: typeof a === 'string' ? 'Moderate' : a.severity || 'Moderate',
-          });
+          const allergen = typeof a === 'string' ? a.trim() : (a.allergen || 'Recorded Allergen').trim();
+          if (allergen && !allergiesMap.has(allergen.toLowerCase())) {
+            allergiesMap.set(allergen.toLowerCase(), {
+              allergen,
+              reaction: typeof a === 'string' ? 'Hypersensitivity' : a.reaction || 'Mild',
+              severity: typeof a === 'string' ? 'Moderate' : a.severity || 'Moderate',
+              source: 'Physician Consultation',
+            });
+          }
         });
       }
 
-      // Chronic Conditions
+      // Chronic Conditions from Physician Records
       if (rec.structured_history?.past_medical_history && rec.structured_history.past_medical_history.length > 0) {
         rec.structured_history.past_medical_history.forEach((cond) => {
-          chronicConditions.push({
-            name: typeof cond === 'string' ? cond : cond.name || 'Medical Condition',
-            diagnosedYear: 'Recorded in EMR',
-            status: 'Ongoing Care',
-          });
+          const name = typeof cond === 'string' ? cond.trim() : (cond.name || 'Medical Condition').trim();
+          if (name && !chronicConditionsMap.has(name.toLowerCase())) {
+            chronicConditionsMap.set(name.toLowerCase(), {
+              name,
+              diagnosedYear: rec.reviewed_at ? new Date(rec.reviewed_at).toLocaleDateString() : 'Recorded in EMR',
+              status: 'Ongoing Care',
+              source: 'Physician Consultation',
+            });
+          }
         });
       }
 
-      // Consulted Doctors
+      // Consulted Doctors from Clinical Record
       if (rec.review_status === 'APPROVED' || rec.doctor_notes) {
+        const docRecordId = rec.doctor_id || (rec.reviewed_by ? String(rec.reviewed_by) : `DOC-REC-${idx}`);
+        const directoryDoc = (doctorService.getAllDoctors ? doctorService.getAllDoctors() : []).find(
+          (d) => d.doctor_id?.toLowerCase() === (rec.doctor_id || '').toLowerCase()
+        );
         consultedDoctors.push({
-          id: `DOC-REC-${idx}`,
-          name: 'Consulted OPD Physician',
-          specialty: opdSystemDisplay,
-          degrees: patient.opd_type === 'AYUSH' ? 'BAMS, MD' : 'MBBS, MD',
-          department: opdSystemDisplay,
-          room: patient.opd_type === 'AYUSH' ? 'Room 204 (AYUSH Block)' : 'Room 102 (Main OPD)',
+          id: docRecordId,
+          name: directoryDoc?.doctor_name || 'Consulted OPD Physician',
+          specialty: directoryDoc?.specialty || opdSystemDisplay,
+          degrees: directoryDoc?.qualification || (patient.opd_type === 'AYUSH' ? 'BAMS, MD' : 'MBBS, MD'),
+          department: directoryDoc?.department || opdSystemDisplay,
+          room: directoryDoc?.room || (patient.opd_type === 'AYUSH' ? 'Room 204 (AYUSH Block)' : 'Room 102 (Main OPD)'),
           lastVisit: rec.reviewed_at ? new Date(rec.reviewed_at).toLocaleDateString() : new Date(rec.createdAt).toLocaleDateString(),
+          status: 'Completed OPD Consultation',
           chiefComplaint: rec.chief_complaint || 'General Clinical Review',
           diagnosis: rec.chief_complaint || 'Evaluated and managed',
           clinicalNotes: rec.doctor_notes || 'Follow medical advice and continue monitoring.',
           notes: rec.doctor_notes || 'Follow medical advice and continue monitoring.',
+          isCurrent: false,
         });
       }
 
@@ -424,32 +507,153 @@ export class PatientDashboardService {
       });
     });
 
-    // If no past consultations exist, find matching attending doctor for patient's OPD selection
-    if (consultedDoctors.length === 0) {
-      try {
-        const matchingDocs = doctorService.findAndRankDoctors({
-          opd_type: patient.opd_type || 'GENERAL',
-          opd_system: patient.opd_system || 'GENERAL_MEDICINE',
-          specialization: patient.medical_specialization,
-        });
+    // Aggregate Medical History from AI Voice Intake Sessions
+    (allSessions || []).forEach((sess) => {
+      const sessionHistory = [
+        ...(sess.clinical_state?.relevant_history || []),
+        ...(sess.clinical_summary?.past_medical_history || []),
+        ...(sess.clinical_summary?.medical_history || []),
+      ];
 
-        if (matchingDocs && matchingDocs.length > 0) {
-          const doc = matchingDocs[0];
-          consultedDoctors.push({
-            id: doc.id,
-            name: doc.name,
-            specialty: doc.specialty || doc.department,
-            degrees: doc.degrees,
-            department: doc.department,
-            room: doc.room || 'OPD Room',
-            status: 'Assigned OPD Physician',
-            notes: 'Available for clinical consultation during active OPD session.',
+      sessionHistory.forEach((item) => {
+        if (typeof item === 'string' && item.trim().length > 1) {
+          const name = item.trim();
+          if (!chronicConditionsMap.has(name.toLowerCase())) {
+            chronicConditionsMap.set(name.toLowerCase(), {
+              name,
+              diagnosedYear: new Date(sess.createdAt).toLocaleDateString(),
+              status: 'Reported in Triage',
+              source: 'Voice Intake',
+            });
+          }
+        }
+      });
+
+      const sessionAllergies = [
+        ...(sess.clinical_state?.allergies || []),
+        ...(sess.clinical_summary?.allergies || []),
+      ];
+
+      sessionAllergies.forEach((item) => {
+        if (typeof item === 'string' && item.trim().length > 1) {
+          const allergen = item.trim();
+          if (!allergiesMap.has(allergen.toLowerCase())) {
+            allergiesMap.set(allergen.toLowerCase(), {
+              allergen,
+              reaction: 'Patient Reported',
+              severity: 'Moderate',
+              source: 'Voice Intake',
+            });
+          }
+        }
+      });
+    });
+
+    // Aggregate Medical History from Uploaded Diagnostic Reports & Prescriptions
+    (medicalDocs || []).forEach((doc) => {
+      const docHistory = [
+        ...(doc.extracted_data?.medical_history || []),
+        ...(doc.extracted_data?.diagnoses || []),
+        ...(doc.clinical_summary?.medical_history || []),
+      ];
+
+      docHistory.forEach((item) => {
+        if (typeof item === 'string' && item.trim().length > 1) {
+          const name = item.trim();
+          if (!chronicConditionsMap.has(name.toLowerCase())) {
+            chronicConditionsMap.set(name.toLowerCase(), {
+              name,
+              diagnosedYear: doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : 'Reported in Document',
+              status: 'Verified in Lab Report',
+              source: doc.file_name || 'Medical Document',
+            });
+          }
+        }
+      });
+
+      const docAllergies = doc.extracted_data?.allergies || [];
+      docAllergies.forEach((item) => {
+        if (typeof item === 'string' && item.trim().length > 1) {
+          const allergen = item.trim();
+          if (!allergiesMap.has(allergen.toLowerCase())) {
+            allergiesMap.set(allergen.toLowerCase(), {
+              allergen,
+              reaction: 'Documented Allergy',
+              severity: 'Moderate',
+              source: doc.file_name || 'Medical Document',
+            });
+          }
+        }
+      });
+    });
+
+    const chronicConditions = Array.from(chronicConditionsMap.values());
+    const allergies = Array.from(allergiesMap.values());
+
+    // Aggregate Consulted Doctors from Appointments and Active/Past Sessions
+    const consultedDoctorsMap = new Map();
+
+    // Add doctors recorded from clinical consultations
+    consultedDoctors.forEach((doc) => {
+      if (doc.id && !consultedDoctorsMap.has(doc.id.toLowerCase())) {
+        consultedDoctorsMap.set(doc.id.toLowerCase(), doc);
+      }
+    });
+
+    // Source 2: Appointments (Completed, In-Progress, or Confirmed past/present appointments)
+    (allAppointments || []).forEach((apt) => {
+      const docKey = apt.doctor_id || apt.doctor_name;
+      if (docKey && !consultedDoctorsMap.has(docKey.toLowerCase())) {
+        const directoryDoc = (doctorService.getAllDoctors ? doctorService.getAllDoctors() : []).find(
+          (d) => d.doctor_id?.toLowerCase() === (apt.doctor_id || '').toLowerCase()
+        );
+        consultedDoctorsMap.set(docKey.toLowerCase(), {
+          id: apt.doctor_id || `DOC-APT-${apt.appointment_id}`,
+          name: apt.doctor_name || directoryDoc?.doctor_name || 'Attending Physician',
+          specialty: apt.doctor_specialization || directoryDoc?.specialty || opdSystemDisplay,
+          degrees: directoryDoc?.qualification || (patient.opd_type === 'AYUSH' ? 'BAMS, MD' : 'MBBS, MD'),
+          department: directoryDoc?.department || apt.doctor_specialization || opdSystemDisplay,
+          room: apt.room || directoryDoc?.room || (patient.opd_type === 'AYUSH' ? 'Room 204 (AYUSH Block)' : 'Room 102 (Main OPD)'),
+          lastVisit: apt.appointment_date ? new Date(apt.appointment_date).toLocaleDateString() : 'Recent Visit',
+          status: apt.status === 'COMPLETED' ? 'Completed Consultation' : 'Scheduled Consultation',
+          chiefComplaint: apt.reason || 'OPD Clinical Consultation',
+          diagnosis: apt.notes || 'Evaluated and managed',
+          clinicalNotes: apt.notes || 'Follow medical advice, continue prescribed medications, and track symptoms.',
+          notes: apt.notes || 'Follow medical advice, continue prescribed medications, and track symptoms.',
+          isCurrent: apt.status === 'IN_PROGRESS' || (apt.appointment_date && new Date(apt.appointment_date).toDateString() === new Date().toDateString()),
+        });
+      }
+    });
+
+    // Source 3: Clinical Sessions where doctor was assigned
+    (allSessions || []).forEach((sess) => {
+      if (sess.assigned_doctor_id) {
+        const docKey = sess.assigned_doctor_id;
+        if (!consultedDoctorsMap.has(docKey.toLowerCase())) {
+          const directoryDoc = (doctorService.getAllDoctors ? doctorService.getAllDoctors() : []).find(
+            (d) => d.doctor_id?.toLowerCase() === docKey.toLowerCase()
+          );
+          consultedDoctorsMap.set(docKey.toLowerCase(), {
+            id: docKey,
+            name: directoryDoc?.doctor_name || 'Assigned OPD Physician',
+            specialty: directoryDoc?.specialty || opdSystemDisplay,
+            degrees: directoryDoc?.qualification || (patient.opd_type === 'AYUSH' ? 'BAMS, MD' : 'MBBS, MD'),
+            department: directoryDoc?.department || opdSystemDisplay,
+            room: directoryDoc?.room || (patient.opd_type === 'AYUSH' ? 'Room 204 (AYUSH Block)' : 'Room 102 (Main OPD)'),
+            lastVisit: new Date(sess.createdAt).toLocaleDateString(),
+            status: sess.status === 'COMPLETED' ? 'Completed Encounter' : 'Active Clinical Encounter',
+            chiefComplaint: sess.clinical_state?.chief_complaint || 'Triage Consultation',
+            diagnosis: sess.clinical_state?.risk_level || 'Clinical Review',
+            clinicalNotes: 'Under physician care and monitoring.',
+            notes: 'Under physician care and monitoring.',
+            isCurrent: sess.status !== 'COMPLETED',
           });
         }
-      } catch (docErr) {
-        logger.debug('[PatientDashboardService] No matching doctor found for OPD:', docErr.message);
       }
-    }
+    });
+
+    // Final real list of consulted doctors without fake random fallbacks
+    const finalConsultedDoctors = Array.from(consultedDoctorsMap.values());
 
     // 9. Format Appointments
     const formattedUpcomingAppointments = (upcomingAppointments || []).map((a) => ({
@@ -495,9 +699,20 @@ export class PatientDashboardService {
       totalPrescriptions: prescriptions.length,
       unreadNotifications: unreadNotifCount,
       completedVisits: clinicalRecords.length,
+      totalIntakes: formattedIntakeHistory.length,
     };
 
     return {
+      id: resolvedPatientId,
+      patientId: resolvedPatientId,
+      name: fullName,
+      age,
+      gender: patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : 'Other',
+      abhaId: abhaIdentity ? abhaIdentity.identity_reference : null,
+      isAbhaLinked: Boolean(abhaIdentity),
+      opdType: patient.opd_type || 'GENERAL',
+      opdSystem: patient.opd_system || 'GENERAL_MEDICINE',
+      medicalSpecialization: patient.medical_specialization || 'General Medicine',
       patient: {
         id: resolvedPatientId,
         patientId: resolvedPatientId,
@@ -525,13 +740,15 @@ export class PatientDashboardService {
       vitals: formattedVitals,
       vitalsHistory: formattedVitalsHistory,
       currentToken,
+      intakeHistory: formattedIntakeHistory,
+      intakes: formattedIntakeHistory,
       documents: {
         total: reports.length,
         items: reports,
       },
       reports,
       prescriptions,
-      consultedDoctors,
+      consultedDoctors: finalConsultedDoctors,
       allergies,
       chronicConditions,
       timeline,
@@ -700,6 +917,296 @@ export class PatientDashboardService {
     }
 
     return this.getDashboardData(patient.patient_id);
+  }
+
+  /**
+   * Create a new clinical intake encounter for a registered patient without duplicating identity
+   */
+  async createEncounter(patientId, encounterData = {}) {
+    if (!patientId) throw ApiError.badRequest('Patient ID is required to start a new encounter');
+
+    const patient = await Patient.findOne({
+      $or: [
+        { patient_id: patientId },
+        { patient_id: String(patientId).toUpperCase() },
+        { patient_id: String(patientId).toLowerCase() },
+      ],
+    });
+    if (!patient) throw ApiError.notFound(`Patient '${patientId}' not found.`);
+
+    const resolvedPatientId = patient.patient_id;
+    const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const sessionId = `SES-${Date.now().toString(36).toUpperCase()}-${randomHex}`;
+
+    const opdType = encounterData.opd_type || encounterData.opdType || patient.opd_type || 'GENERAL';
+    const opdSystem = encounterData.opd_system || encounterData.opdSystem || patient.opd_system || (opdType === 'AYUSH' ? 'AYURVEDA' : 'GENERAL_MEDICINE');
+    const complaint = encounterData.chief_complaint || encounterData.chiefComplaint || '';
+    const language = encounterData.language || encounterData.preferredLanguage || 'gu-IN';
+
+    const newSession = await ClinicalSession.create({
+      session_id: sessionId,
+      patient_id: resolvedPatientId,
+      language,
+      consultation_type: opdType === 'AYUSH' ? `AYUSH_${opdSystem.toUpperCase()}` : 'GENERAL',
+      opd_type: opdType,
+      opd_system: opdSystem,
+      status: 'STARTED',
+      journey_stage: 'CHECKED_IN',
+      journey_step_index: 0,
+      chief_complaint_category: encounterData.chief_complaint_category || 'OTHER',
+      clinical_state: {
+        chief_complaint: complaint,
+        symptoms: encounterData.symptoms || [],
+        onset: encounterData.onset || '',
+        duration: encounterData.duration || '',
+        severity: encounterData.severity || null,
+        patient_intent: encounterData.patient_intent || 'New clinical consultation',
+      },
+      started_at: new Date(),
+    });
+
+    // Update patient status
+    patient.current_status = 'IN_SESSION';
+    await patient.save();
+
+    return {
+      success: true,
+      sessionId: newSession.session_id,
+      session_id: newSession.session_id,
+      encounterId: newSession.session_id,
+      encounter_id: newSession.session_id,
+      patientId: resolvedPatientId,
+      patient_id: resolvedPatientId,
+      opdType: newSession.opd_type,
+      opdSystem: newSession.opd_system,
+      status: newSession.status,
+      journeyStage: newSession.journey_stage,
+      createdAt: newSession.createdAt,
+    };
+  }
+
+  /**
+   * Get full list of clinical encounters for a patient
+   */
+  async getPatientEncounters(patientId) {
+    if (!patientId) throw ApiError.badRequest('Patient ID is required');
+
+    const sessions = await ClinicalSession.find({
+      $or: [
+        { patient_id: patientId },
+        { patient_id: String(patientId).toUpperCase() },
+        { patient_id: String(patientId).toLowerCase() },
+      ],
+    }).sort({ createdAt: -1 }).lean();
+
+    return (sessions || []).map((s) => ({
+      id: s.session_id,
+      sessionId: s.session_id,
+      encounterId: s.session_id,
+      date: new Date(s.createdAt).toLocaleDateString(),
+      time: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: s.createdAt,
+      opdType: s.opd_type || 'GENERAL',
+      opdSystem: s.opd_system || 'GENERAL_MEDICINE',
+      department: s.opd_type === 'AYUSH' ? `AYUSH — ${(s.opd_system || 'Ayurveda').replace(/_/g, ' ')}` : `General OPD — ${(s.opd_system || 'General Medicine').replace(/_/g, ' ')}`,
+      status: s.status,
+      journeyStage: s.journey_stage,
+      chiefComplaint: s.clinical_state?.chief_complaint || s.clinical_summary?.chief_complaint || (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Intake'),
+      symptoms: s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [],
+      triageLevel: s.triage_level || 'LOW',
+      triageReason: s.triage_reason || '',
+      hasRedFlag: Boolean(s.red_flags?.has_red_flag),
+      redFlagReason: s.red_flags?.reason || null,
+      clinicalSummary: s.clinical_summary || null,
+      startedAt: s.started_at || s.createdAt,
+      completedAt: s.completed_at || null,
+    }));
+  }
+
+  /**
+   * Get full detail bundle for a single encounter
+   */
+  async getEncounterById(sessionId, patientId = null) {
+    if (!sessionId) throw ApiError.badRequest('Session ID is required');
+
+    const session = await ClinicalSession.findOne({ session_id: sessionId }).lean();
+    if (!session) throw ApiError.notFound(`Encounter '${sessionId}' not found`);
+
+    if (patientId && session.patient_id.toUpperCase() !== patientId.toUpperCase()) {
+      throw ApiError.forbidden('Access denied to this clinical encounter');
+    }
+
+    const [record, docs] = await Promise.all([
+      ClinicalRecord.findOne({ session_id: sessionId }).lean(),
+      MedicalDocument.find({
+        $or: [{ session_id: sessionId }, { encounter_id: sessionId }],
+      }).lean(),
+    ]);
+
+    return {
+      session,
+      record,
+      documents: docs || [],
+    };
+  }
+
+  /**
+   * Add a self-reported or clinically documented medical condition / allergy for a patient
+   */
+  async addMedicalHistory(patientId, historyData) {
+    if (!patientId) throw ApiError.badRequest('Patient ID is required');
+
+    const patient = await Patient.findOne({
+      $or: [
+        { patient_id: patientId },
+        { patient_id: String(patientId).toUpperCase() },
+        { patient_id: String(patientId).toLowerCase() },
+      ],
+    });
+    if (!patient) throw ApiError.notFound('Patient not found');
+
+    const { condition, allergy } = historyData || {};
+
+    // Find active session or create baseline session
+    let session = await ClinicalSession.findOne({
+      $or: [
+        { patient_id: patient.patient_id },
+        { patient_id: patient.patient_id.toLowerCase() },
+        { patient_id: patient.patient_id.toUpperCase() },
+      ],
+      status: { $ne: 'COMPLETED' },
+    }).sort({ createdAt: -1 });
+
+    if (!session) {
+      session = await ClinicalSession.create({
+        session_id: `SES-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        patient_id: patient.patient_id,
+        status: 'READY_FOR_DOCTOR',
+        journey_stage: 'CHECKED_IN',
+        clinical_state: {
+          relevant_history: [],
+          allergies: [],
+          symptoms: [],
+          medications: [],
+        },
+        clinical_summary: {
+          past_medical_history: [],
+          allergies: [],
+        },
+      });
+    }
+
+    const state = session.clinical_state || {};
+    const existingHistory = Array.isArray(state.relevant_history) ? [...state.relevant_history] : [];
+    const existingAllergies = Array.isArray(state.allergies) ? [...state.allergies] : [];
+
+    let updated = false;
+
+    if (condition && typeof condition === 'string' && condition.trim()) {
+      const condName = condition.trim();
+      if (!existingHistory.some((h) => h.toLowerCase() === condName.toLowerCase())) {
+        existingHistory.push(condName);
+        updated = true;
+      }
+    }
+
+    if (allergy && typeof allergy === 'string' && allergy.trim()) {
+      const allergyName = allergy.trim();
+      if (!existingAllergies.some((a) => a.toLowerCase() === allergyName.toLowerCase())) {
+        existingAllergies.push(allergyName);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      session.clinical_state = {
+        ...state,
+        relevant_history: existingHistory,
+        allergies: existingAllergies,
+      };
+
+      const summary = session.clinical_summary || {};
+      session.clinical_summary = {
+        ...summary,
+        past_medical_history: existingHistory,
+        allergies: existingAllergies,
+      };
+
+      await session.save();
+    }
+
+    return await this.getDashboardData(patient.patient_id);
+  }
+
+  /**
+   * Fetch live available doctors for appointment scheduling
+   */
+  async getAvailableDoctorsForBooking(filters = {}) {
+    const [directoryDocs, dbDocs] = await Promise.all([
+      doctorService.getAllDoctors ? doctorService.getAllDoctors() : [],
+      User.find({ role: 'DOCTOR' })
+        .select('name email phone specialty sub_specialty opd_type opd_system room on_duty availability_status is_active')
+        .catch(() => []),
+    ]);
+
+    const docsMap = new Map();
+    (directoryDocs || []).forEach((d) => {
+      docsMap.set(d.doctor_id, {
+        doctorId: d.doctor_id,
+        id: d.doctor_id,
+        name: d.doctor_name,
+        doctorName: d.doctor_name,
+        specialization: d.specialty || 'General Medicine',
+        specialty: d.specialty || 'General Medicine',
+        subSpecialty: d.sub_specialty || '',
+        department: d.department || 'General Medicine',
+        hospital: d.hospital || 'Sehat Apex Civil Hospital',
+        room: d.room || 'OPD Room 102',
+        experienceYears: d.experience_years || 10,
+        consultationType: d.consultation_type || 'GENERAL',
+        fixedSlots: d.fixed_slots || ['09:30 AM', '10:30 AM', '11:30 AM', '02:30 PM', '04:00 PM'],
+        availabilityStatus: 'AVAILABLE',
+        onDuty: true,
+      });
+    });
+
+    (dbDocs || []).forEach((u) => {
+      const id = u.doctor_id || u._id.toString();
+      const existing = docsMap.get(id) || {};
+      const docName = u.name || existing.doctorName || existing.name || `Dr. ${u.email?.split('@')[0]}`;
+      const docSpec = u.specialty || existing.specialization || existing.specialty || 'General Medicine';
+      docsMap.set(id, {
+        ...existing,
+        doctorId: id,
+        id: id,
+        name: docName,
+        doctorName: docName,
+        specialization: docSpec,
+        specialty: docSpec,
+        subSpecialty: u.sub_specialty || existing.subSpecialty || '',
+        department: u.department || existing.department || u.specialty || 'General Medicine',
+        room: u.room || existing.room || 'Room 102',
+        fixedSlots: existing.fixedSlots || ['09:30 AM', '10:30 AM', '11:30 AM', '02:30 PM', '04:00 PM'],
+        availabilityStatus: u.availability_status || 'AVAILABLE',
+        onDuty: u.on_duty !== false,
+      });
+    });
+
+    let doctors = Array.from(docsMap.values());
+    if (filters.specialty) {
+      doctors = doctors.filter((d) => d.specialty.toLowerCase().includes(filters.specialty.toLowerCase()));
+    }
+    if (filters.opd_type) {
+      if (filters.opd_type === 'AYUSH') {
+        doctors = doctors.filter(
+          (d) =>
+            (d.consultationType || '').startsWith('AYUSH') ||
+            (d.specialty || '').toLowerCase().includes('ayush') ||
+            (d.specialty || '').toLowerCase().includes('ayur')
+        );
+      }
+    }
+    return doctors;
   }
 }
 

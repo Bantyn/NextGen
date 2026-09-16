@@ -27,6 +27,13 @@ const CLINICAL_SPECIALTY_ROUTING = Object.freeze({
   SEVERE_HEMORRHAGE: ['Emergency Medicine', 'Gastroenterology', 'General Medicine'],
   LOSS_OF_CONSCIOUSNESS: ['Neurology', 'Cardiology', 'Emergency Medicine', 'General Medicine'],
   CHEST_PAIN_TARGETED_ASSESSMENT: ['Cardiology', 'General Medicine', 'Emergency Medicine'],
+  DERMATOLOGY_CUTANEOUS: ['Dermatology', 'General Medicine'],
+  DENTAL_ORAL: ['Dentistry', 'General Medicine'],
+  ORTHOPEDIC_TRAUMA: ['Orthopedics', 'General Medicine'],
+  ENT_DISORDERS: ['ENT', 'General Medicine'],
+  OPHTHALMOLOGY_EYE: ['Ophthalmology', 'General Medicine'],
+  PSYCHIATRY_MENTAL_HEALTH: ['Psychiatry', 'General Medicine'],
+  GASTROINTESTINAL_ABDOMINAL: ['Gastroenterology', 'General Medicine'],
   DEFAULT_FALLBACK: ['Emergency Medicine', 'General Medicine'],
 });
 
@@ -48,11 +55,59 @@ export class RedFlagCaseService {
   }
 
   /**
-   * Determine required specialties from verified clinical category
+   * Determine required specialties from verified clinical category or patient symptoms
    */
-  matchSpecialtiesForCategory(category = '') {
+  matchSpecialtiesForCategory(category = '', symptoms = [], chiefComplaint = '') {
     const key = (category || '').trim().toUpperCase();
-    return CLINICAL_SPECIALTY_ROUTING[key] || CLINICAL_SPECIALTY_ROUTING.DEFAULT_FALLBACK;
+    if (CLINICAL_SPECIALTY_ROUTING[key]) {
+      return CLINICAL_SPECIALTY_ROUTING[key];
+    }
+    if (symptoms.length > 0 || chiefComplaint) {
+      return this.matchSpecialtiesFromSymptoms(symptoms, chiefComplaint);
+    }
+    return CLINICAL_SPECIALTY_ROUTING.DEFAULT_FALLBACK;
+  }
+
+  /**
+   * Symptom to Specialty Clinical Mapping
+   */
+  matchSpecialtiesFromSymptoms(symptoms = [], chiefComplaint = '') {
+    const text = [...symptoms, chiefComplaint].join(' ').toLowerCase();
+    const specialties = new Set();
+
+    if (text.includes('rash') || text.includes('skin') || text.includes('itch') || text.includes('lesion') || text.includes('eczema') || text.includes('derma')) {
+      specialties.add('Dermatology');
+    }
+    if (text.includes('tooth') || text.includes('dental') || text.includes('gum') || text.includes('teeth') || text.includes('oral')) {
+      specialties.add('Dentistry');
+    }
+    if (text.includes('headache') || text.includes('migraine') || text.includes('seizure') || text.includes('numbness') || text.includes('stroke') || text.includes('paralysis')) {
+      specialties.add('Neurology');
+    }
+    if (text.includes('chest pain') || text.includes('palpitation') || text.includes('angina') || text.includes('cardiac') || text.includes('heart')) {
+      specialties.add('Cardiology');
+    }
+    if (text.includes('cough') || text.includes('breath') || text.includes('asthma') || text.includes('wheez') || text.includes('lung') || text.includes('pulmon')) {
+      specialties.add('Pulmonology');
+    }
+    if (text.includes('bone') || text.includes('joint') || text.includes('fracture') || text.includes('knee') || text.includes('back pain') || text.includes('ortho')) {
+      specialties.add('Orthopedics');
+    }
+    if (text.includes('stomach') || text.includes('vomit') || text.includes('diarrhea') || text.includes('abdomen') || text.includes('gastric') || text.includes('acid')) {
+      specialties.add('Gastroenterology');
+    }
+    if (text.includes('ear') || text.includes('nose') || text.includes('throat') || text.includes('sinus') || text.includes('tonsil')) {
+      specialties.add('ENT');
+    }
+    if (text.includes('eye') || text.includes('vision') || text.includes('sight') || text.includes('ocular')) {
+      specialties.add('Ophthalmology');
+    }
+
+    if (specialties.size === 0) {
+      specialties.add('General Medicine');
+    }
+
+    return Array.from(specialties);
   }
 
   /**
@@ -276,15 +331,51 @@ export class RedFlagCaseService {
 
     logger.info(`[CaseClaim] case_id=${caseId} doctor_id=${doctorId} action=CLAIM_ATTEMPT`);
 
-    // Execute atomic update at database layer
-    const claimedCase = await redFlagRepository.claimCaseAtomically(caseId, doctorId);
+    // 1. Inspect existing case state first to accurately differentiate ownership and race conditions
+    const existingCase = await redFlagRepository.findByCaseId(caseId);
+    if (!existingCase) {
+      throw ApiError.notFound(`Emergency case '${caseId}' was not found.`);
+    }
 
-    if (!claimedCase) {
+    // If current doctor already owns this case:
+    if (existingCase.assigned_doctor_id && existingCase.assigned_doctor_id === doctorId) {
+      logger.info(`[CaseClaimResult] case_id=${caseId} doctor_id=${doctorId} status=ALREADY_CLAIMED_BY_YOU`);
+      return {
+        status: 'ALREADY_CLAIMED_BY_YOU',
+        success: true,
+        case: existingCase,
+        message: 'You already claimed this case.',
+      };
+    }
+
+    // If another doctor already claimed this case:
+    if (existingCase.assigned_doctor_id && existingCase.assigned_doctor_id !== doctorId) {
       logger.warn(`[CaseClaimResult] case_id=${caseId} doctor_id=${doctorId} status=ALREADY_ASSIGNED`);
       return {
         status: 'CASE_ALREADY_ASSIGNED',
         success: false,
-        message: 'This emergency case has already been claimed and handled by another physician.',
+        message: 'This case has already been assigned to another doctor.',
+      };
+    }
+
+    // 2. Execute race-safe atomic conditional update at database layer
+    const claimedCase = await redFlagRepository.claimCaseAtomically(caseId, doctorId);
+
+    if (!claimedCase) {
+      const recheckCase = await redFlagRepository.findByCaseId(caseId);
+      if (recheckCase?.assigned_doctor_id === doctorId) {
+        return {
+          status: 'ALREADY_CLAIMED_BY_YOU',
+          success: true,
+          case: recheckCase,
+          message: 'You already claimed this case.',
+        };
+      }
+      logger.warn(`[CaseClaimResult] case_id=${caseId} doctor_id=${doctorId} status=ALREADY_ASSIGNED_RACE`);
+      return {
+        status: 'CASE_ALREADY_ASSIGNED',
+        success: false,
+        message: 'This case has already been assigned to another doctor.',
       };
     }
 

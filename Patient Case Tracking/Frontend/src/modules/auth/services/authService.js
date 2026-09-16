@@ -17,7 +17,7 @@ export const authService = {
 
   /**
    * Register new healthcare staff account
-   * @param {{ name: string, email: string, phone: string, password: string, role: string, department?: string, license?: string }} userData
+   * @param {{ name: string, email: string, phone: string, password: string, role: string, age?: number, gender?: string, department?: string, license?: string }} userData
    */
   async register(userData) {
     return apiClient.post(API_ENDPOINTS.AUTH_REGISTER, userData);
@@ -47,12 +47,18 @@ export const authService = {
   },
 
   /**
-   * Request password recovery OTP/link
-   * @param {string} email
+   * Request password recovery OTP — accepts email or phone
+   * @param {string} emailOrPhone
    */
-  async requestPasswordReset(email) {
-    return apiClient.post(API_ENDPOINTS.AUTH_FORGOT_PASSWORD, { email });
+  async requestPasswordReset(emailOrPhone) {
+    const isPhone = /^[0-9]{10}$/.test(String(emailOrPhone).replace(/[^0-9]/g, ''));
+    if (isPhone) {
+      // Send via phone field (backend will resolve user by phone)
+      return apiClient.post(API_ENDPOINTS.AUTH_FORGOT_PASSWORD, { phone: emailOrPhone });
+    }
+    return apiClient.post(API_ENDPOINTS.AUTH_FORGOT_PASSWORD, { email: emailOrPhone });
   },
+
 
   /**
    * Reset password with verification code

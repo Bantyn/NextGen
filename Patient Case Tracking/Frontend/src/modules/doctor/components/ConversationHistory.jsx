@@ -12,54 +12,13 @@ export const ConversationHistory = ({ messages = [], patientLanguage = 'gu-IN' }
   const [isExpanded, setIsExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fallback sample conversation if no messages were recorded in session
+  // Use real conversation messages from intake session
   const displayMessages = useMemo(() => {
     if (messages && messages.length > 0) {
       return messages;
     }
-    return [
-      {
-        message_id: 'msg-sample-1',
-        sender: 'PATIENT',
-        content: 'હું છેલ્લા બે દિવસથી છાતીમાં દબાણ અને શ્વાસ લેવામાં તકલીફ અનુભવું છું.',
-        language: patientLanguage,
-        turn_number: 1,
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-      },
-      {
-        message_id: 'msg-sample-2',
-        sender: 'AI',
-        content: 'શું આ દુખાવો તમારા ડાબા હાથ, ગરદન કે જડબા તરફ ફેલાય છે? શું તમને ખૂબ પરસેવો કે ચક્કર આવે છે?',
-        language: patientLanguage,
-        turn_number: 2,
-        timestamp: new Date(Date.now() - 3540000).toISOString(),
-      },
-      {
-        message_id: 'msg-sample-3',
-        sender: 'PATIENT',
-        content: 'ના, હાથમાં નથી જતો પણ ચાલતી વખતે છાતી ભારે લાગે છે.',
-        language: patientLanguage,
-        turn_number: 3,
-        timestamp: new Date(Date.now() - 3480000).toISOString(),
-      },
-      {
-        message_id: 'msg-sample-4',
-        sender: 'AI',
-        content: 'શું તમને પહેલાં હાઈ બ્લડ પ્રેશર કે ડાયાબિટીસની કોઈ બીમારી નોંધાયેલી છે? તમે કોઈ નિયમિત દવા લો છો?',
-        language: patientLanguage,
-        turn_number: 4,
-        timestamp: new Date(Date.now() - 3420000).toISOString(),
-      },
-      {
-        message_id: 'msg-sample-5',
-        sender: 'PATIENT',
-        content: 'હા, બ્લડ પ્રેશરની ટેબ્લેટ લઉં છું પણ ક્યારેક ચૂકી જાઉં છું.',
-        language: patientLanguage,
-        turn_number: 5,
-        timestamp: new Date(Date.now() - 3360000).toISOString(),
-      },
-    ];
-  }, [messages, patientLanguage]);
+    return [];
+  }, [messages]);
 
   const filteredMessages = useMemo(() => {
     if (!searchQuery.trim()) return displayMessages;

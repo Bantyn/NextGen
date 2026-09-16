@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   AUTH_ME: '/auth/me',
   AUTH_FORGOT_PASSWORD: '/auth/forgot-password',
   AUTH_RESET_PASSWORD: '/auth/reset-password',
+  AUTH_DEPARTMENTS: '/auth/departments',
   USERS: '/users',
   USER_ROLE: (id) => `/users/${id}/role`,
 
@@ -23,9 +24,13 @@ export const API_ENDPOINTS = {
   PATIENT_DASHBOARD: (id) => id ? `/patient/dashboard?patient_id=${id}` : '/patient/dashboard',
   PATIENT_VITALS: '/patient/vitals',
   PATIENT_APPOINTMENTS: (id) => id ? `/patient/appointments?patient_id=${id}` : '/patient/appointments',
+  PATIENT_DOCTORS: '/patient/doctors',
   PATIENT_NOTIFICATIONS: (id) => id ? `/patient/notifications?patient_id=${id}` : '/patient/notifications',
   PATIENT_NOTIFICATION_READ: (id) => `/patient/notifications/${id}/read`,
   PATIENT_JOURNEY_STEP: '/patient/journey-step',
+  PATIENT_LOGIN: '/patient/login',
+  PATIENT_ENCOUNTERS: (id) => id ? `/patient/encounters?patientId=${id}` : '/patient/encounters',
+  PATIENT_ENCOUNTER_BY_ID: (sessionId, patientId) => `/patient/encounters/${sessionId}${patientId ? `?patientId=${patientId}` : ''}`,
 
   // Consent Management
   CONSENTS: '/consents',
@@ -105,6 +110,9 @@ export const API_ENDPOINTS = {
   CLINICAL_CASE_ACCEPT: (id) => `/clinical-cases/${id}/accept`,
   CLINICAL_CASE_DECLINE: (id) => `/clinical-cases/${id}/decline`,
   CLINICAL_CASE_TRANSFER: (id) => `/clinical-cases/${id}/transfer`,
+  // WhatsApp Messaging
+  WHATSAPP_SEND_OTP: '/whatsapp/send-otp',
+  WHATSAPP_AUTH_CHECK: '/whatsapp/auth-check',
 };
 
 export default API_ENDPOINTS;

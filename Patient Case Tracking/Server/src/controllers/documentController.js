@@ -252,11 +252,42 @@ export const serveDocumentFile = async (req, res) => {
   }
 };
 
+/**
+ * On-demand AI Re-analysis of an existing uploaded document
+ */
+export const reanalyzeDocumentWithAI = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    if (!documentId) {
+      return res.status(400).json({ status: 'error', success: false, message: 'documentId is required' });
+    }
+
+    const result = await documentService.reanalyzeDocument(documentId);
+    return res.status(200).json({
+      status: 'success',
+      success: true,
+      message: 'Medical document successfully re-analyzed using clinical AI',
+      data: result,
+      ...result,
+    });
+  } catch (error) {
+    logger.error('[Reanalyze Document Error]: ' + error.message);
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      status: 'error',
+      success: false,
+      message: error.message || 'Failed to re-analyze document with AI',
+      error: error.message,
+    });
+  }
+};
+
 export default {
   processDocumentUpload,
   getDocumentsByPatient,
   getDocumentById,
   getDocumentSummary,
   serveDocumentFile,
+  reanalyzeDocumentWithAI,
 };
 
