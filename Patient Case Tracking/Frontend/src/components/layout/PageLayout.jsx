@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 
@@ -8,6 +9,16 @@ import { Footer } from './Footer';
  * Embeds the soft multi-color atmospheric mesh gradient at the bottom.
  */
 export const PageLayout = ({ children, onContactClick }) => {
+  const location = useLocation();
+  const isAuthPage = [
+    '/login', 
+    '/register', 
+    '/forgot-password', 
+    '/patient/login',
+    '/patient/register',
+    '/patient/intake'
+  ].includes(location.pathname);
+
   return (
     <div className="relative min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif]">
       {/* Soft Multi-Color Atmospheric Mesh Gradient Glow at the bottom */}
@@ -21,7 +32,7 @@ export const PageLayout = ({ children, onContactClick }) => {
       </div>
 
       {/* Top Navigation */}
-      <Navbar onActionClick={onContactClick} />
+      {!isAuthPage && <Navbar onActionClick={onContactClick} />}
 
       {/* Main Page Content */}
       <main className="relative z-10 w-full flex-grow flex flex-col items-center">
@@ -29,9 +40,10 @@ export const PageLayout = ({ children, onContactClick }) => {
       </main>
 
       {/* Bottom Footer */}
-      <Footer />
+      {!isAuthPage && <Footer />}
     </div>
   );
 };
 
 export default PageLayout;
+

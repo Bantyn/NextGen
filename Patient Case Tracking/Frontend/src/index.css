@@ -50,3 +50,37 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
+
+/* -----------------------------------------------------------------
+ * Skeleton Loading Shimmer — Theme Specification (Linear/Apple aesthetic)
+ * ----------------------------------------------------------------- */
+@keyframes shimmerPulse {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.45) 0%,
+    rgba(241, 245, 249, 0.95) 50%,
+    rgba(226, 232, 240, 0.45) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+[data-theme="dark"] .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0.45) 0%,
+    rgba(51, 65, 85, 0.8) 50%,
+    rgba(30, 41, 59, 0.45) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}

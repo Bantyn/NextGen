@@ -22,6 +22,51 @@ try {
   console.warn('[AssistantService] Could not load static fallback assistant knowledge:', err.message);
 }
 
+// Common Indian & international drug spelling variations and aliases
+const DRUG_SPELLING_MAP = {
+  paracetomol: 'Paracetamol',
+  paracitamol: 'Paracetamol',
+  paracetamol: 'Paracetamol',
+  acetaminophen: 'Paracetamol',
+  crocin: 'Paracetamol',
+  'dolo 650': 'Paracetamol',
+  dolo: 'Paracetamol',
+  calpol: 'Paracetamol',
+  pacimol: 'Paracetamol',
+  pyrigesic: 'Paracetamol',
+  metacin: 'Paracetamol',
+  azithral: 'Azithromycin',
+  azithromicin: 'Azithromycin',
+  azithromycin: 'Azithromycin',
+  azee: 'Azithromycin',
+  cetzine: 'Cetirizine',
+  ceterizine: 'Cetirizine',
+  cetrizine: 'Cetirizine',
+  cetirizine: 'Cetirizine',
+  pantoprazole: 'Pantoprazole',
+  pantocid: 'Pantoprazole',
+  'pan 40': 'Pantoprazole',
+  'pan-40': 'Pantoprazole',
+  ibuprofen: 'Ibuprofen',
+  combiflam: 'Ibuprofen',
+  aspirin: 'Aspirin',
+  amoxicillin: 'Amoxicillin',
+  augmentin: 'Amoxicillin',
+  metformin: 'Metformin',
+  atorvastatin: 'Atorvastatin',
+  omeprazole: 'Omeprazole',
+  acrivastine: 'Acrivastine',
+};
+
+// Generic words that must NEVER be extracted as candidate medicines
+const CANDIDATE_STOPLIST = new Set([
+  'view', 'view medicine', 'details', 'detail', 'info', 'information', 'medicine', 'medicines',
+  'tablet', 'tablets', 'capsule', 'capsules', 'syrup', 'drops', 'ointment', 'injection',
+  'help', 'start', 'session', 'intake', 'patient', 'doctor', 'appointment', 'hospital',
+  'queue', 'contact', 'consult', 'how', 'what', 'why', 'when', 'where', 'used', 'use',
+  'test', 'check', 'book', 'schedule', 'register', 'status', 'prescription'
+]);
+
 /**
  * Detect medicine-related intent and extract candidate medicine entity
  * @param {string} userQuery
@@ -35,9 +80,19 @@ export function detectMedicineIntentAndExtract(userQuery) {
   const clean = userQuery.trim();
   const lower = clean.toLowerCase();
 
+  // GUARD: If it is an explicit appointment booking, schedule, or website intake query, DO NOT classify as medicine!
+  if (
+    /\b(?:book|schedule|make|cancel|reschedule)\s+(?:an?\s+)?(?:appointment|slot|token|consultation)\b/i.test(clean) ||
+    /\bappointment\s+(?:with|for)\b/i.test(clean) ||
+    /\b(?:start|begin)\s+(?:a\s+)?(?:patient\s+)?(?:intake|checkin|session)\b/i.test(clean) ||
+    /\bhow\s+(?:do|can)\s+i\s+(?:start|register|checkin|upload|book)\b/i.test(clean)
+  ) {
+    return { isMedicineQuery: false, intent: 'GENERAL_HELP', medicineName: '' };
+  }
+
   // Known local medicines, brand names, and drug terminology for fast-path identification
   const knownDrugKeywords = [
-    'paracetamol', 'dolo', 'crocin', 'calpol', 'pacimol', 'pyrigesic', 'metacin',
+    'paracetamol', 'paracetomol', 'paracitamol', 'dolo', 'crocin', 'calpol', 'pacimol', 'pyrigesic', 'metacin',
     'azithromycin', 'azithral', 'azee', 'zithromax', 'azimax',
     'cetirizine', 'cetzine', 'zyrtec', 'alerid', 'okacet', 'incid-l',
     'pantoprazole', 'pan 40', 'pantocid', 'protonix', 'pantodac',
@@ -50,28 +105,42 @@ export function detectMedicineIntentAndExtract(userQuery) {
     'દવા', 'ગોલી', 'दवा', 'गोली'
   ];
 
-  const hasKnownDrug = knownDrugKeywords.some((k) => lower.includes(k));
+  // Check with strict whole-word boundaries so 'ointment' never matches inside 'appointment'
+  let matchedKeyword = null;
+  for (const k of knownDrugKeywords) {
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordRegex = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (wordRegex.test(lower)) {
+      matchedKeyword = k;
+      break;
+    }
+  }
+  const hasKnownDrug = Boolean(matchedKeyword);
 
   // Phrasing patterns indicating medicine queries
   const medicineQueryPatterns = [
     /^(?:what\s+is\s+the\s+)?(?:use|uses|indication|indications)\s+(?:of|for)\s+(.+)$/i,
     /^how\s+is\s+(.+)\s+used\??$/i,
-    /^(.+)\s+(?:uses|use|indication|indications)$/i,
+    /^(.+?)\s+is\s+used\s+(?:for|to|t)\b/i,
+    /^what\s+is\s+(.+?)\s+used\s+(?:for|to)\??$/i,
+    /^tell\s+me\s+(?:the\s+)?uses\s+(?:of|for)\s+(.+)$/i,
+    /^(.+?)\s+(?:uses|use|indication|indications)\??$/i,
     /^(?:what\s+are\s+the\s+)?side\s+effects\s+(?:of|for)\s+(.+)$/i,
     /^(?:what\s+are\s+the\s+)?adverse\s+(?:effects|reactions)\s+(?:of|for)\s+(.+)$/i,
-    /^(.+)\s+side\s+effects$/i,
+    /^(.+?)\s+side\s+effects$/i,
     /^(?:what\s+is\s+the\s+)?(?:dose|dosage)\s+(?:of|for)\s+(.+)$/i,
-    /^how\s+much\s+(.+)\s+(?:should\s+i|to)\s+take\??$/i,
-    /^(.+)\s+(?:dosage|dose)$/i,
-    /^is\s+(.+)\s+safe\??$/i,
+    /^how\s+much\s+(.+?)\s+(?:should\s+i|to)\s+take\??$/i,
+    /^(.+?)\s+(?:dosage|dose)$/i,
+    /^is\s+(.+?)\s+safe\??$/i,
     /^can\s+i\s+take\s+(.+?)(?:\s+with\s+.+)?\??$/i,
     /^(?:what\s+are\s+the\s+)?(?:warnings|precautions|contraindications)\s+(?:of|for)\s+(.+)$/i,
-    /^(.+)\s+(?:warnings|precautions|contraindications)$/i,
-    /^what\s+is\s+(.+)\??$/i,
+    /^(.+?)\s+(?:warnings|precautions|contraindications)$/i,
+    /^what\s+is\s+(.+?)\??$/i,
     /^tell\s+me\s+about\s+(.+)$/i,
     /^(?:details|information|info)\s+(?:about|on|for)\s+(.+)$/i,
-    /^(.+)\s+(?:details|information|info|medicine|tablet|capsule|syrup|ointment|drops|drug)$/i,
     /^(?:medicine|tablet|capsule|syrup|drug)\s+(.+)$/i,
+    /^(.+?)\s+(?:details|information|info|medicine|tablet|capsule|syrup|ointment|drops|drug)$/i,
+    /^(.+?)\s+(?:kya\s+hai|kis\s+kaam\s+aati\s+hai|kis\s+liye\s+hai)/i,
   ];
 
   let extractedName = '';
@@ -81,11 +150,15 @@ export function detectMedicineIntentAndExtract(userQuery) {
     const match = clean.replace(/[\?\.\!\,]+$/, '').trim().match(pattern);
     if (match && match[1]) {
       let candidate = match[1].trim();
+      // Strip dosage indicators (e.g. 500mg, 650mg, 10ml) and generic container words
       candidate = candidate
+        .replace(/\b\d+\s*(?:mg|ml|gm|g)\b/gi, '')
         .replace(/\b(?:tablet|tablets|capsule|capsules|syrup|medicine|medicines|drug|drugs)\b/gi, '')
+        .replace(/^(?:the|a|an)\s+/i, '')
         .trim();
-      candidate = candidate.replace(/^(?:the|a|an)\s+/i, '').trim();
-      if (candidate.length >= 2) {
+
+      // Check against candidate stoplist
+      if (candidate.length >= 2 && !CANDIDATE_STOPLIST.has(candidate.toLowerCase())) {
         extractedName = candidate;
         patternMatched = true;
         break;
@@ -93,18 +166,21 @@ export function detectMedicineIntentAndExtract(userQuery) {
     }
   }
 
-  // If no pattern matched, but query has a known drug keyword or is a single short entity
+  // If no pattern matched, but query has a known drug keyword
   if (!extractedName) {
-    if (hasKnownDrug) {
-      // Find the matched drug keyword or strip words
-      for (const k of knownDrugKeywords) {
-        if (k.length > 3 && lower.includes(k)) {
-          extractedName = k;
-          break;
+    if (hasKnownDrug && matchedKeyword) {
+      // If matched keyword is not a generic stop word
+      if (!CANDIDATE_STOPLIST.has(matchedKeyword.toLowerCase())) {
+        extractedName = matchedKeyword;
+      } else {
+        // Strip the generic keyword from query and see if a drug entity remains
+        const stripped = clean
+          .replace(new RegExp(`\\b${matchedKeyword}\\b`, 'gi'), '')
+          .replace(/[\?\.\!\,]+$/, '')
+          .trim();
+        if (stripped.length >= 3 && !CANDIDATE_STOPLIST.has(stripped.toLowerCase())) {
+          extractedName = stripped;
         }
-      }
-      if (!extractedName) {
-        extractedName = clean.replace(/[\?\.\!\,]+$/, '').trim();
       }
     } else {
       // Check if it looks like a drug query (1-3 words, e.g. "Acrivastine")
@@ -137,8 +213,19 @@ export function detectMedicineIntentAndExtract(userQuery) {
         lower.includes('i feel');
 
       if (!isNavigational && !isSymptomOrClinical && words.length <= 3 && clean.length >= 3) {
-        extractedName = clean.replace(/[\?\.\!\,]+$/, '').trim();
+        const candidate = clean.replace(/[\?\.\!\,]+$/, '').trim();
+        if (!CANDIDATE_STOPLIST.has(candidate.toLowerCase())) {
+          extractedName = candidate;
+        }
       }
+    }
+  }
+
+  // Normalize spelling using known dictionary (e.g. Paracetomol -> Paracetamol)
+  if (extractedName) {
+    const normKey = extractedName.toLowerCase().replace(/\b\d+\s*(?:mg|ml|gm|g)\b/gi, '').trim();
+    if (DRUG_SPELLING_MAP[normKey]) {
+      extractedName = DRUG_SPELLING_MAP[normKey];
     }
   }
 
@@ -269,7 +356,7 @@ export async function queryMedicineKnowledge(options = {}) {
     return {
       found: true,
       source: 'local',
-      source_label: 'MediKiosk medicine database',
+      source_label: 'Sehat medicine database',
       source_confidence: 'high',
       intent,
       medicine_name: normalizedLocal.medicine_name,
@@ -318,7 +405,7 @@ export async function queryMedicineKnowledge(options = {}) {
     source_confidence: 'low',
     intent,
     medicine_name: targetMedicine,
-    message: `I couldn't retrieve verified medicine information for "${targetMedicine}" from our local medicine database or official FDA drug labeling. Please consult a qualified doctor or pharmacist for clinical guidance.`,
+    message: `Sorry ! I couldn't retrieve verified medicine information for "${targetMedicine}" from our local medicine database or official FDA drug labeling. Please consult a qualified doctor or pharmacist for clinical guidance.`,
     data: null,
   };
 }
@@ -326,20 +413,33 @@ export async function queryMedicineKnowledge(options = {}) {
 /**
  * Helper to locate medicine in MongoDB or static JSON seed
  */
+/**
+ * Helper to locate medicine in MongoDB or static JSON seed
+ */
 async function findLocalMedicine(searchName) {
   if (!searchName) return null;
-  const clean = searchName.trim().toLowerCase();
+
+  // 0. Normalize drug name & strip trailing dosages
+  let clean = searchName.trim().toLowerCase();
+  clean = clean.replace(/\b\d+\s*(?:mg|ml|gm|g)\b/gi, '').trim();
+
+  // Check alias map
+  const normalizedCandidate = (DRUG_SPELLING_MAP[clean] || clean).toLowerCase();
+
+  const searchTerms = Array.from(new Set([clean, normalizedCandidate])).filter((t) => t.length >= 2);
   const words = clean.split(/[\s,?.!]+/).filter((w) => w.length > 2);
 
   // 1. Try MongoDB if connected
   if (mongoose.connection?.readyState === 1) {
     try {
-      const conditions = [
-        { medicine_id: clean.toUpperCase() },
-        { name: { $regex: clean, $options: 'i' } },
-        { generic_name: { $regex: clean, $options: 'i' } },
-        { brand_names: { $regex: clean, $options: 'i' } },
-      ];
+      const conditions = [];
+      for (const term of searchTerms) {
+        conditions.push({ medicine_id: term.toUpperCase() });
+        conditions.push({ name: { $regex: `^${term}$`, $options: 'i' } });
+        conditions.push({ name: { $regex: term, $options: 'i' } });
+        conditions.push({ generic_name: { $regex: term, $options: 'i' } });
+        conditions.push({ brand_names: { $regex: term, $options: 'i' } });
+      }
       for (const w of words) {
         conditions.push({ name: { $regex: `\\b${w}\\b`, $options: 'i' } });
         conditions.push({ generic_name: { $regex: `\\b${w}\\b`, $options: 'i' } });
@@ -360,9 +460,11 @@ async function findLocalMedicine(searchName) {
       const genL = (m.generic_name || '').toLowerCase();
       const brandsL = (m.brand_names || []).map((b) => b.toLowerCase());
 
-      if (clean === nameL || clean === genL || brandsL.includes(clean)) return true;
-      if (clean.includes(nameL) || clean.includes(genL) || brandsL.some((b) => clean.includes(b))) return true;
-      if (nameL.includes(clean) || genL.includes(clean)) return true;
+      for (const term of searchTerms) {
+        if (term === nameL || term === genL || brandsL.includes(term)) return true;
+        if (term.includes(nameL) || term.includes(genL) || brandsL.some((b) => term.includes(b))) return true;
+        if (nameL.includes(term) || genL.includes(term)) return true;
+      }
       if (words.some((w) => nameL === w || genL.includes(w) || brandsL.includes(w))) return true;
       return false;
     });
@@ -428,10 +530,10 @@ function normalizeLocalMedicine(local) {
     dosage_form: cleanArr(local.dosage_forms),
     requires_prescription: Boolean(local.requires_prescription),
     source: 'local',
-    source_label: 'MediKiosk medicine database',
+    source_label: 'Sehat medicine database',
     source_confidence: 'high',
     source_timestamp: new Date().toISOString(),
-    disclaimer: 'This reference information is sourced from the verified MediKiosk medicine knowledge base for educational purposes and does not replace medical advice from your physician.',
+    disclaimer: 'This reference information is sourced from the verified Sehat medicine knowledge base for educational purposes and does not replace medical advice from your physician.',
   };
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -12,7 +12,8 @@ import {
   HeartPulse,
 } from 'lucide-react';
 import { useAuth } from '../../../core/auth/useAuth';
-import { DUMMY_PATIENTS } from '../../../data/patientDashboardData';
+import { fetchRegisteredPatients } from '../services/patientDashboardService';
+import { Skeleton } from '../../../components/ui';
 
 export const PatientLoginView = () => {
   const navigate = useNavigate();
@@ -23,6 +24,23 @@ export const PatientLoginView = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('123456');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [patientsList, setPatientsList] = useState([]);
+
+  // Load real registered patients from MongoDB Atlas
+  useEffect(() => {
+    setLoadingPatients(true);
+    fetchRegisteredPatients()
+      .then((list) => {
+        if (list && list.length > 0) {
+          setPatientsList(list);
+          if (list[0].abhaId) {
+            setIdentifier(list[0].abhaId);
+          }
+        }
+      })
+      .finally(() => setLoadingPatients(false));
+  }, []);
 
   const handleSendOtp = (e) => {
     e.preventDefault();
@@ -38,13 +56,23 @@ export const PatientLoginView = () => {
     e.preventDefault();
     setIsSubmitting(true);
     setTimeout(() => {
-      const defaultPatient = DUMMY_PATIENTS[0];
+      const matched = patientsList.find(
+        (p) => p.abhaId === identifier || p.phone?.includes(identifier) || p.id === identifier
+      ) || (patientsList.length > 0 ? patientsList[0] : {
+        id: 'PAT-146A5F03',
+        patient_id: 'PAT-146A5F03',
+        name: 'Patient User',
+        phone: '+91 98250 12345',
+        abhaId: identifier,
+      });
+
       loginAsPatient({
-        id: defaultPatient.id,
-        name: defaultPatient.name,
-        email: defaultPatient.email,
-        phone: defaultPatient.phone,
-        abhaId: defaultPatient.abhaId,
+        id: matched.id,
+        patient_id: matched.id,
+        name: matched.name,
+        email: matched.email || `${matched.id.toLowerCase()}@sehat.org`,
+        phone: matched.phone,
+        abhaId: matched.abhaId,
       });
       setIsSubmitting(false);
       navigate('/patient/dashboard');
@@ -54,8 +82,9 @@ export const PatientLoginView = () => {
   const handleFastTrackDemo = (patient) => {
     loginAsPatient({
       id: patient.id,
+      patient_id: patient.id,
       name: patient.name,
-      email: patient.email,
+      email: patient.email || `${patient.id.toLowerCase()}@sehat.org`,
       phone: patient.phone,
       abhaId: patient.abhaId,
     });
@@ -89,29 +118,50 @@ export const PatientLoginView = () => {
           </div>
 
           <div className="space-y-2">
-            {DUMMY_PATIENTS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleFastTrackDemo(p)}
-                className="w-full p-3 rounded-2xl border border-slate-200/90 hover:border-sky-400 hover:bg-sky-50/50 bg-slate-50/70 transition flex items-center justify-between cursor-pointer group text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 text-xs font-bold flex items-center justify-center">
-                    {p.name.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-900 group-hover:text-sky-950">
-                      {p.name}
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {p.currentToken.department} • Token {p.currentToken.token}
-                    </div>
+            {loadingPatients ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="w-full p-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 flex items-center gap-3"
+                >
+                  <Skeleton variant="circular" className="w-8 h-8" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton variant="text" className="w-28 h-3.5" />
+                    <Skeleton variant="text" className="w-40 h-2.5" />
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 group-hover:translate-x-0.5 transition" />
-              </button>
-            ))}
+              ))
+            ) : patientsList.length > 0 ? (
+              patientsList.slice(0, 3).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleFastTrackDemo(p)}
+                  className="w-full p-3 rounded-2xl border border-slate-200/90 hover:border-sky-400 hover:bg-sky-50/50 bg-slate-50/70 transition flex items-center justify-between cursor-pointer group text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 text-xs font-bold flex items-center justify-center">
+                      {p.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900 group-hover:text-sky-950">
+                        {p.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {p.phone} • ID: {p.id}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-sky-600 font-medium opacity-0 group-hover:opacity-100 transition">
+                    Select →
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="text-center py-3 text-xs text-slate-400">
+                No registered demo patients found.
+              </div>
+            )}
           </div>
         </div>
 

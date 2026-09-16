@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   HeartPulse,
@@ -14,6 +14,10 @@ import {
   Upload,
   Search,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Info,
   ExternalLink,
   QrCode,
   Calendar,
@@ -34,19 +38,117 @@ import {
   AlertCircle,
   FlaskConical,
   RefreshCw,
+  Loader2,
+  Trash2,
+  Paperclip,
+  Plus,
+  Bell,
 } from 'lucide-react';
-import { DUMMY_PATIENTS } from '../../../data/patientDashboardData';
 import { useAuth } from '../../../core/auth/useAuth';
+import {
+  fetchRegisteredPatients,
+  fetchPatientDashboardBundle,
+  uploadPatientMedicalDocument,
+  recordPatientVitalsAPI,
+  bookPatientAppointmentAPI,
+  markNotificationReadAPI,
+  updatePatientJourneyStageAPI,
+} from '../services/patientDashboardService';
+import { INITIAL_EMPTY_PATIENT } from '../../../data/patientDashboardData';
+import {
+  Skeleton,
+  SkeletonStats,
+  SkeletonTable,
+  SkeletonPatientProfile,
+  SkeletonCard,
+} from '../../../components/ui';
 
 export const PatientDashboardView = () => {
   const { user, loginAsPatient } = useAuth();
 
-  // 1. State for selected patient profile (synced with auth user if available)
-  const matchedPatient = DUMMY_PATIENTS.find(
-    (p) => p.id === user?.id || p.name === user?.name || p.abhaId === user?.abhaId
+  // 1. State for selected patient profile (synced with real backend data & auth user)
+  const [patientsList, setPatientsList] = useState([]);
+  const [selectedPatientId, setSelectedPatientId] = useState(
+    () => sessionStorage.getItem('selected_patient_id') || user?.patient_id || user?.id || null
   );
-  const [selectedPatientId, setSelectedPatientId] = useState(matchedPatient?.id || 'PAT-9011');
-  const patient = DUMMY_PATIENTS.find((p) => p.id === selectedPatientId) || DUMMY_PATIENTS[0];
+  const [patient, setPatient] = useState(INITIAL_EMPTY_PATIENT);
+  const [loadingPatient, setLoadingPatient] = useState(true);
+  const [patientLoadError, setPatientLoadError] = useState(null);
+  const [isUpdatingJourney, setIsUpdatingJourney] = useState(false);
+
+  // Modals for Vitals Recording, Appointments, Notifications
+  const [showRecordVitalsModal, setShowRecordVitalsModal] = useState(false);
+  const [showBookAppointmentModal, setShowBookAppointmentModal] = useState(false);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [isSubmittingVitals, setIsSubmittingVitals] = useState(false);
+  const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
+  const [vitalsFormError, setVitalsFormError] = useState(null);
+  const [appointmentFormError, setAppointmentFormError] = useState(null);
+  const [vitalsForm, setVitalsForm] = useState({
+    systolic: '',
+    diastolic: '',
+    pulse: '',
+    spo2: '',
+    temperature: '',
+    bloodSugar: '',
+    sugarType: 'RANDOM',
+    weight: '',
+    height: '',
+    notes: '',
+  });
+  const [appointmentForm, setAppointmentForm] = useState({
+    doctorId: 'DOC-MED-01',
+    doctorName: 'Dr. Priya Sharma',
+    doctorSpecialization: 'General Medicine',
+    consultationType: 'IN_PERSON',
+    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+    time: '10:30 AM',
+    reason: 'Follow-up clinical consultation',
+  });
+
+  // Load real registered patients from MongoDB Atlas
+  React.useEffect(() => {
+    let isMounted = true;
+    fetchRegisteredPatients().then((list) => {
+      if (isMounted && list && list.length > 0) {
+        setPatientsList(list);
+        const storedId = sessionStorage.getItem('selected_patient_id');
+        if (storedId && list.some((p) => p.id === storedId)) {
+          setSelectedPatientId(storedId);
+        } else if (!user?.patient_id && !user?.id && !selectedPatientId) {
+          setSelectedPatientId(list[0].id);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  // Load full clinical bundle dynamically from MongoDB Atlas
+  const loadDashboard = React.useCallback(async () => {
+    if (!selectedPatientId) {
+      setLoadingPatient(false);
+      return;
+    }
+    try {
+      setLoadingPatient(true);
+      setPatientLoadError(null);
+      const bundle = await fetchPatientDashboardBundle(selectedPatientId);
+      if (bundle) {
+        setPatient(bundle);
+      }
+    } catch (err) {
+      console.warn('[PatientDashboard] Load bundle failed:', err.message);
+      setPatientLoadError(err.message || 'Unable to retrieve clinical records from server.');
+    } finally {
+      setLoadingPatient(false);
+    }
+  }, [selectedPatientId]);
+
+  React.useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
 
   // 2. Active Tab State: 'overview' | 'reports' | 'doctors' | 'prescriptions' | 'history' | 'vitals'
@@ -58,38 +160,374 @@ export const PatientDashboardView = () => {
 
   // 4. Modals State
   const [selectedReport, setSelectedReport] = useState(null);
+  const [reportModalTab, setReportModalTab] = useState('patient'); // 'patient' | 'extracted' | 'clinical' | 'original'
+  const [isExtractedTextExpanded, setIsExtractedTextExpanded] = useState(false);
+  const [uploadProgressStep, setUploadProgressStep] = useState('IDLE'); // 'IDLE' | 'UPLOADING' | 'VALIDATING' | 'EXTRACTING' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED'
   const [showAbhaModal, setShowAbhaModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [copiedAbha, setCopiedAbha] = useState(false);
   const [uploadSuccessToast, setUploadSuccessToast] = useState(false);
+  const fileInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [uploadForm, setUploadForm] = useState({
-    docType: 'Lab Report',
+    docType: 'Diagnostic Lab Report',
     testName: '',
     date: new Date().toISOString().split('T')[0],
     file: null,
   });
 
-  // Copy ABHA Handler
-  const handleCopyAbha = () => {
-    navigator.clipboard?.writeText(patient.abhaId);
-    setCopiedAbha(true);
-    setTimeout(() => setCopiedAbha(false), 2000);
+  // Handlers for dynamic actions
+  const handleRecordVitalsSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      setIsSubmittingVitals(true);
+      setVitalsFormError(null);
+      await recordPatientVitalsAPI(selectedPatientId, vitalsForm);
+      setShowRecordVitalsModal(false);
+      setVitalsForm({
+        systolic: '',
+        diastolic: '',
+        pulse: '',
+        spo2: '',
+        temperature: '',
+        bloodSugar: '',
+        sugarType: 'RANDOM',
+        weight: '',
+        height: '',
+        notes: '',
+      });
+      await loadDashboard();
+    } catch (err) {
+      setVitalsFormError(err.message || 'Failed to record vitals.');
+    } finally {
+      setIsSubmittingVitals(false);
+    }
   };
 
-  // Filtered reports
-  const filteredReports = patient.reports.filter((rep) => {
+  const handleBookAppointmentSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      setIsSubmittingAppointment(true);
+      setAppointmentFormError(null);
+      await bookPatientAppointmentAPI(selectedPatientId, appointmentForm);
+      setShowBookAppointmentModal(false);
+      setAppointmentForm({
+        doctorId: 'DOC-MED-01',
+        doctorName: 'Dr. Priya Sharma',
+        doctorSpecialization: 'General Medicine',
+        consultationType: 'IN_PERSON',
+        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        time: '10:30 AM',
+        reason: 'Follow-up clinical consultation',
+      });
+      await loadDashboard();
+    } catch (err) {
+      setAppointmentFormError(err.message || 'Failed to schedule appointment.');
+    } finally {
+      setIsSubmittingAppointment(false);
+    }
+  };
+
+  const handleMarkNotificationRead = async (notifId) => {
+    try {
+      await markNotificationReadAPI(notifId);
+      await loadDashboard();
+    } catch (err) {
+      console.warn('Failed to mark notification read:', err.message);
+    }
+  };
+
+  // 6-second background sync for live tracking & real-time updates
+  React.useEffect(() => {
+    if (!selectedPatientId) return;
+    const interval = setInterval(() => {
+      fetchPatientDashboardBundle(selectedPatientId)
+        .then((bundle) => {
+          if (bundle && bundle.currentToken) {
+            setPatient((prev) => ({
+              ...bundle,
+              reports: bundle.reports || prev.reports,
+            }));
+          }
+        })
+        .catch(() => {});
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [selectedPatientId]);
+
+  const handleUpdateJourneyStage = async (targetStageKey) => {
+    if (!selectedPatientId) return;
+    try {
+      setIsUpdatingJourney(true);
+      const stepIdxMap = {
+        CHECKED_IN: 0,
+        VITALS_TAKEN: 1,
+        IN_CONSULTATION: 2,
+        LAB_PENDING: 3,
+        COMPLETED: 4,
+      };
+      if (stepIdxMap[targetStageKey] !== undefined) {
+        setPatient((prev) => ({
+          ...prev,
+          currentToken: prev.currentToken
+            ? {
+                ...prev.currentToken,
+                status: targetStageKey,
+                stageKey: targetStageKey,
+                stepIndex: stepIdxMap[targetStageKey],
+              }
+            : null,
+        }));
+      }
+
+      const updatedBundle = await updatePatientJourneyStageAPI(
+        selectedPatientId,
+        targetStageKey,
+        safePatient?.currentToken?.sessionId
+      );
+
+      if (updatedBundle) {
+        setPatient(updatedBundle);
+      } else {
+        await loadDashboard();
+      }
+    } catch (err) {
+      console.warn('Failed to update journey stage:', err.message);
+      await loadDashboard();
+    } finally {
+      setIsUpdatingJourney(false);
+    }
+  };
+
+  // Theme-compliant Skeleton Loading State based on Planner/Theme.md
+  if (loadingPatient || !patient) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 space-y-8 font-['Plus_Jakarta_Sans',sans-serif]">
+        {/* Skeleton Top Banner / Patient Profile */}
+        <SkeletonPatientProfile />
+
+        {/* Skeleton Live OPD Status Card */}
+        <div className="p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton variant="text" className="w-48 h-5" />
+            <Skeleton variant="text" className="w-24 h-6 rounded-full" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} variant="text" className="h-12 rounded-xl" />
+            ))}
+          </div>
+        </div>
+
+        {/* Skeleton Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} variant="text" className="w-32 h-10 rounded-xl" />
+          ))}
+        </div>
+
+        {/* Skeleton Vitals & Prescriptions Table */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <SkeletonTable rows={5} />
+          </div>
+          <div className="space-y-6">
+            <SkeletonCard lines={4} />
+            <SkeletonCard lines={3} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state display when API fails
+  if (patientLoadError) {
+    return (
+      <div className="w-full max-w-xl mx-auto px-4 py-20 text-center space-y-4 font-['Plus_Jakarta_Sans',sans-serif]">
+        <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-xl font-semibold text-slate-900">Unable to load your health information</h2>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            {patientLoadError}
+          </p>
+        </div>
+        <div className="pt-2">
+          <button
+            onClick={() => loadDashboard()}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-xs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Defensive safe wrapper for patient contracts
+  const safePatient = patient || INITIAL_EMPTY_PATIENT;
+  const patientReports = Array.isArray(safePatient?.reports) ? safePatient.reports : [];
+  const patientPrescriptions = Array.isArray(safePatient?.prescriptions) ? safePatient.prescriptions : [];
+  const patientConsultedDoctors = Array.isArray(safePatient?.consultedDoctors) ? safePatient.consultedDoctors : [];
+  const patientAllergies = Array.isArray(safePatient?.allergies) ? safePatient.allergies : [];
+  const patientChronicConditions = Array.isArray(safePatient?.chronicConditions) ? safePatient.chronicConditions : [];
+  const patientTimeline = Array.isArray(safePatient?.timeline) ? safePatient.timeline : [];
+  const patientVitalsHistory = Array.isArray(safePatient?.vitalsHistory) ? safePatient.vitalsHistory : [];
+  const patientVitals = safePatient?.vitals || null; // Strictly null if not recorded!
+  const currentToken = safePatient?.currentToken || null; // Strictly null if not checked in!
+  const patientAppointments = Array.isArray(safePatient?.appointments?.upcoming) ? safePatient.appointments.upcoming : [];
+  const allAppointments = Array.isArray(safePatient?.appointments?.all) ? safePatient.appointments.all : [];
+  const patientNotifications = Array.isArray(safePatient?.notifications?.items) ? safePatient.notifications.items : [];
+  const unreadNotificationsCount = safePatient?.notifications?.unreadCount || 0;
+
+  // Copy ABHA Handler
+  const handleCopyAbha = () => {
+    if (safePatient?.abhaId) {
+      navigator.clipboard?.writeText(safePatient.abhaId);
+      setCopiedAbha(true);
+      setTimeout(() => setCopiedAbha(false), 2000);
+    }
+  };
+
+  // Medical Document Upload Handlers
+  const handleFileSelect = (selectedFile) => {
+    if (!selectedFile) return;
+    setUploadError(null);
+    if (selectedFile.size > 20 * 1024 * 1024) {
+      setUploadError('File size exceeds the 20MB limit. Please select a smaller document.');
+      return;
+    }
+    setUploadForm((prev) => ({
+      ...prev,
+      file: selectedFile,
+      testName: prev.testName || selectedFile.name.replace(/\.[^/.]+$/, ''),
+    }));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const removeSelectedFile = () => {
+    setUploadForm((prev) => ({ ...prev, file: null }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!uploadForm.file) {
+      setUploadError('Please select or drag a medical document file (PDF, PNG, JPG, WebP).');
+      return;
+    }
+
+    let t1, t2, t3;
+    try {
+      setIsUploading(true);
+      setUploadError(null);
+      setUploadProgressStep('UPLOADING');
+
+      // Visual pipeline progress
+      t1 = setTimeout(() => setUploadProgressStep('VALIDATING'), 600);
+      t2 = setTimeout(() => setUploadProgressStep('EXTRACTING'), 1400);
+      t3 = setTimeout(() => setUploadProgressStep('SUMMARIZING'), 2500);
+
+      const patientId = safePatient.id || safePatient.patient_id;
+      const res = await uploadPatientMedicalDocument(patientId, {
+        file: uploadForm.file,
+        docType: uploadForm.docType,
+        testName: uploadForm.testName.trim() || uploadForm.file.name,
+        sessionId: safePatient.sessionId,
+      });
+
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      setUploadProgressStep('COMPLETED');
+
+      // Optimistically prepend newly uploaded report into patient.reports
+      if (res?.report) {
+        setPatient((prev) => ({
+          ...prev,
+          reports: [res.report, ...(Array.isArray(prev?.reports) ? prev.reports : [])],
+        }));
+      }
+
+      // Close modal and reset form after brief completion state
+      setTimeout(() => {
+        setShowUploadModal(false);
+        setUploadProgressStep('IDLE');
+        setUploadForm({
+          docType: 'Diagnostic Lab Report',
+          testName: '',
+          date: new Date().toISOString().split('T')[0],
+          file: null,
+        });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        // Switch to reports tab to immediately display the document
+        setActiveTab('reports');
+
+        // Trigger success toast
+        setUploadSuccessToast(true);
+        setTimeout(() => setUploadSuccessToast(false), 4000);
+      }, 800);
+    } catch (err) {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      console.error('[PatientDashboardView] Upload error:', err);
+      setUploadProgressStep('FAILED');
+      setUploadError(
+        err.message ||
+        "We couldn't understand this document. Please upload a clearer document or try again."
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Filtered reports with safe fallback (Never null)
+  const filteredReports = patientReports.filter((rep) => {
+    if (!rep) return false;
+    const cat = rep.category || '';
     const matchesCategory =
       reportCategory === 'ALL' ||
-      (reportCategory === 'RADIOLOGY' && rep.category.includes('Radiology')) ||
-      (reportCategory === 'BIOCHEM' && rep.category.includes('Biochemistry')) ||
-      (reportCategory === 'HEMATOLOGY' && rep.category.includes('Hematology')) ||
-      (reportCategory === 'CARDIOLOGY' && rep.category.includes('Cardiology'));
+      (reportCategory === 'RADIOLOGY' && cat.includes('Radiology')) ||
+      (reportCategory === 'BIOCHEM' && cat.includes('Biochemistry')) ||
+      (reportCategory === 'HEMATOLOGY' && cat.includes('Hematology')) ||
+      (reportCategory === 'CARDIOLOGY' && cat.includes('Cardiology'));
 
+    const searchLower = reportSearch.trim().toLowerCase();
     const matchesSearch =
-      !reportSearch.trim() ||
-      rep.title.toLowerCase().includes(reportSearch.toLowerCase()) ||
-      rep.orderedBy.toLowerCase().includes(reportSearch.toLowerCase()) ||
-      rep.facility.toLowerCase().includes(reportSearch.toLowerCase());
+      !searchLower ||
+      (rep.title && rep.title.toLowerCase().includes(searchLower)) ||
+      (rep.orderedBy && rep.orderedBy.toLowerCase().includes(searchLower)) ||
+      (rep.facility && rep.facility.toLowerCase().includes(searchLower));
 
     return matchesCategory && matchesSearch;
   });
@@ -105,16 +543,34 @@ export const PatientDashboardView = () => {
 
   const getStepIndex = (status) => {
     switch (status) {
-      case 'CHECKED_IN': return 0;
-      case 'VITALS_TAKEN': return 1;
-      case 'IN_CONSULTATION': return 2;
-      case 'LAB_PENDING': return 3;
-      case 'COMPLETED': return 4;
-      default: return 2;
+      case 'CHECKED_IN':
+      case 'STARTED':
+      case 'IDENTIFIED':
+        return 0;
+      case 'VITALS_TAKEN':
+      case 'VITALS_RECORDED':
+      case 'PRIORITY_TRIAGE':
+        return 1;
+      case 'IN_CONSULTATION':
+      case 'READY_FOR_DOCTOR':
+      case 'DOCTOR_REVIEW':
+        return 2;
+      case 'LAB_PENDING':
+      case 'DIAGNOSTIC_TESTS':
+      case 'DOCUMENT_PROCESSING':
+        return 3;
+      case 'COMPLETED':
+      case 'CONSULTATION_COMPLETE':
+        return 4;
+      default:
+        return 0;
     }
   };
 
-  const currentStepIdx = getStepIndex(patient.currentToken.status);
+  const currentStepIdx =
+    currentToken?.stepIndex != null
+      ? currentToken.stepIndex
+      : getStepIndex(currentToken?.stageKey || currentToken?.status || 'CHECKED_IN');
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 space-y-8 font-['Plus_Jakarta_Sans',sans-serif]">
@@ -131,7 +587,7 @@ export const PatientDashboardView = () => {
           <div className="flex items-start sm:items-center gap-5">
             <div className="relative">
               <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center font-semibold text-2xl shadow-md ring-4 ring-white">
-                {patient.name.split(' ').map((n) => n[0]).join('')}
+                {(safePatient.name || 'Patient').split(' ').filter(Boolean).map((n) => n[0]).join('') || 'P'}
               </div>
               <span className="absolute -bottom-1 -right-1 p-1 rounded-full bg-emerald-500 text-white ring-2 ring-white" title="ABDM Verified Patient">
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -141,66 +597,159 @@ export const PatientDashboardView = () => {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="text-2xl sm:text-3xl font-semibold text-slate-950 tracking-tight">
-                  {patient.name}
+                  {safePatient.name || 'Patient Profile'}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">
-                  {patient.gender}, {patient.age} yrs
+                  {safePatient.gender || 'Patient'}{safePatient.age != null ? `, ${safePatient.age} yrs` : ''}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                  Blood Group: {patient.bloodGroup}
+                {safePatient.bloodGroup && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                    Blood Group: {safePatient.bloodGroup}
+                  </span>
+                )}
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {safePatient.opdDisplay || (safePatient.opdType === 'AYUSH' ? 'AYUSH OPD' : 'General OPD')}
                 </span>
               </div>
 
-              {/* ABHA ID with Copy Action */}
+              {/* Dynamic ABHA & Contact Info */}
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
-                  <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-                  <span className="text-slate-500">ABHA:</span>
-                  <span className="font-mono font-medium text-slate-900">{patient.abhaId}</span>
-                  <button
-                    onClick={handleCopyAbha}
-                    className="ml-1 text-slate-400 hover:text-slate-700 transition cursor-pointer"
-                    title="Copy ABHA Number"
-                  >
-                    {copiedAbha ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                {safePatient.abhaId ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
+                    <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+                    <span className="text-slate-500">ABHA:</span>
+                    <span className="font-mono font-medium text-slate-900">{safePatient.abhaId}</span>
+                    <button
+                      onClick={handleCopyAbha}
+                      className="ml-1 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                      title="Copy ABHA Number"
+                    >
+                      {copiedAbha ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80">
+                    <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-slate-500">ABHA:</span>
+                    <span className="text-slate-500 italic">Not Linked</span>
+                  </div>
+                )}
 
-                <div className="hidden sm:inline-flex items-center gap-1 text-slate-500">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{patient.address.split(',')[1]?.trim() || 'Ahmedabad'}, Gujarat</span>
-                </div>
+                {safePatient.address && (
+                  <div className="hidden sm:inline-flex items-center gap-1 text-slate-500">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{safePatient.address}</span>
+                  </div>
+                )}
 
-                <div className="hidden md:inline-flex items-center gap-1 text-slate-500">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{patient.phone}</span>
-                </div>
+                {safePatient.phone && (
+                  <div className="hidden md:inline-flex items-center gap-1 text-slate-500">
+                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{safePatient.phone}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Patient Switcher & Action Buttons */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Demo Patient Switcher (for Hackathon showcase) */}
+            {/* Patient Switcher (Populated from MongoDB Atlas) */}
             <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
-              <span className="text-[11px] font-medium text-slate-400 px-2 uppercase tracking-wider">Demo Patient:</span>
+              <span className="text-[11px] font-medium text-slate-400 px-2 uppercase tracking-wider">Patient:</span>
               <select
-                value={selectedPatientId}
+                value={selectedPatientId || ''}
                 onChange={(e) => {
                   setSelectedPatientId(e.target.value);
-                  const p = DUMMY_PATIENTS.find((item) => item.id === e.target.value);
+                  sessionStorage.setItem('selected_patient_id', e.target.value);
+                  const p = patientsList.find((item) => item.id === e.target.value);
                   if (p && user?.role === 'PATIENT') {
                     loginAsPatient(p);
                   }
                 }}
                 className="bg-white border border-slate-200 text-xs font-medium text-slate-800 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer shadow-2xs"
               >
-                {DUMMY_PATIENTS.map((p) => (
+                {patientsList.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.currentToken.department.split('&')[0]})
+                    {p.name} ({p.id})
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Notifications Dropdown Container */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotificationsPanel((prev) => !prev)}
+                className="relative p-2.5 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-950 transition cursor-pointer shadow-2xs"
+                title="System & Clinical Notifications"
+              >
+                <Bell className="w-4 h-4 text-slate-600" />
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotificationsPanel && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-slate-700" />
+                      <span className="text-xs font-semibold text-slate-900">Notifications</span>
+                      {unreadNotificationsCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                          {unreadNotificationsCount} new
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowNotificationsPanel(false)}
+                      className="text-slate-400 hover:text-slate-600 text-xs p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {patientNotifications.length > 0 ? (
+                      patientNotifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => {
+                            if (!n.isRead) handleMarkNotificationRead(n.id);
+                          }}
+                          className={`p-3.5 text-xs transition cursor-pointer hover:bg-slate-50 flex items-start gap-3 ${
+                            !n.isRead ? 'bg-sky-50/40 font-medium' : ''
+                          }`}
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                              !n.isRead ? 'bg-sky-500' : 'bg-slate-300'
+                            }`}
+                          />
+                          <div className="space-y-0.5 flex-1">
+                            <div className="flex items-center justify-between text-slate-900">
+                              <span className="font-semibold">{n.title}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Recent'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 leading-snug">{n.message}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 space-y-1">
+                        <CheckCircle2 className="w-8 h-8 mx-auto text-slate-300" />
+                        <p className="text-xs font-medium text-slate-600">You're all caught up.</p>
+                        <p className="text-[11px] text-slate-400">No new clinical notifications.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -225,83 +774,169 @@ export const PatientDashboardView = () => {
       {/* =========================================================================
           LIVE OPD JOURNEY & QUEUE STATUS TRACKER
           ========================================================================= */}
-      <div className="rounded-2xl bg-white border border-slate-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-700 text-xs font-mono font-bold tracking-wide">
-              TOKEN {patient.currentToken.token}
+      {currentToken ? (
+        <div className="rounded-2xl bg-white border border-slate-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-700 text-xs font-mono font-bold tracking-wide">
+                TOKEN {currentToken.token}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold text-slate-950">
+                    Live OPD Journey & Consultation Status
+                  </h2>
+                  {isUpdatingJourney && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  {currentToken.department} • {currentToken.room}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{currentToken.statusLabel}</span>
+              </div>
+              <span className="text-slate-300 hidden sm:inline">|</span>
+              <span className="text-slate-600 font-medium hidden sm:inline">
+                Doctor: <strong className="text-slate-900">{currentToken.doctor}</strong>
+              </span>
+
+              {/* Live Stage Selector for Testing & Clinic Staff */}
+              <div className="flex items-center gap-1.5 pl-1">
+                <span className="text-[11px] text-slate-400 font-medium hidden md:inline">Change Stage:</span>
+                <select
+                  value={journeySteps[currentStepIdx]?.key || 'CHECKED_IN'}
+                  onChange={(e) => handleUpdateJourneyStage(e.target.value)}
+                  disabled={isUpdatingJourney}
+                  className="px-2 py-1 text-[11px] rounded-lg bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-slate-800 font-medium focus:ring-2 focus:ring-sky-500 focus:outline-none transition cursor-pointer"
+                  title="Manually transition the OPD encounter stage"
+                >
+                  {journeySteps.map((s, i) => (
+                    <option key={s.key} value={s.key}>
+                      Stage {i + 1}: {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 5-Step Horizontal Flow Indicator (Interactive) */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+            {journeySteps.map((step, idx) => {
+              const isCompleted = idx < currentStepIdx;
+              const isCurrent = idx === currentStepIdx;
+
+              return (
+                <div
+                  key={step.key}
+                  onClick={() => handleUpdateJourneyStage(step.key)}
+                  title={`Click to set status to '${step.label}'`}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] active:scale-[0.99] ${
+                    isCurrent
+                      ? 'bg-sky-50/70 border-sky-300 ring-2 ring-sky-500/20 shadow-xs'
+                      : isCompleted
+                      ? 'bg-slate-50/80 border-emerald-200/70 hover:border-emerald-300'
+                      : 'bg-white border-slate-200/60 opacity-60 hover:opacity-100 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span
+                      className={`w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center transition-colors ${
+                        isCurrent
+                          ? 'bg-sky-600 text-white shadow-xs'
+                          : isCompleted
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-slate-200 text-slate-500 group-hover:bg-slate-300'
+                      }`}
+                    >
+                      {isCompleted ? <Check className="w-3 h-3 stroke-[3]" /> : idx + 1}
+                    </span>
+                    {isCurrent && (
+                      <span className="text-[10px] font-semibold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                        Current
+                      </span>
+                    )}
+                    {isCompleted && (
+                      <span className="text-[10px] font-medium text-emerald-700">Done</span>
+                    )}
+                    {!isCompleted && !isCurrent && (
+                      <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-600">Pending</span>
+                    )}
+                  </div>
+                  <div className="text-xs font-semibold text-slate-900 leading-tight group-hover:text-sky-700 transition">
+                    {step.label}
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                    {step.desc}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Dynamic OPD Encounter Details & Progression Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Est. Wait: <strong className="text-slate-800">{currentToken.estimatedWait || 'In Progress'}</strong>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-sky-500" />
+                Queue Position: <strong className="text-slate-800">#{currentToken.queuePosition ?? 1}</strong>
+              </span>
+              {currentToken.stageDesc && (
+                <span className="hidden lg:inline text-slate-500 italic">
+                  ({currentToken.stageDesc})
+                </span>
+              )}
+            </div>
+
+            {currentStepIdx < 4 ? (
+              <button
+                onClick={() => handleUpdateJourneyStage(journeySteps[currentStepIdx + 1].key)}
+                disabled={isUpdatingJourney}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs w-fit"
+              >
+                <span>Advance to: {journeySteps[currentStepIdx + 1].label}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Encounter Completed & Discharged</span>
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white border border-slate-200/80 p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+              <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Live OPD Journey & Consultation Status
-              </h2>
-              <p className="text-xs text-slate-500">
-                {patient.currentToken.department} • {patient.currentToken.room}
-              </p>
+              <h3 className="text-sm font-semibold text-slate-900">No Active OPD Encounter Today</h3>
+              <p className="text-xs text-slate-500">You are not currently queued in an active clinical session. Start check-in to generate a queue token.</p>
             </div>
           </div>
-
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{patient.currentToken.statusLabel}</span>
-            </div>
-            <span className="text-slate-400">|</span>
-            <span className="text-slate-600 font-medium">
-              Doctor: <strong className="text-slate-900">{patient.currentToken.doctor}</strong>
-            </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleUpdateJourneyStage('CHECKED_IN')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition shrink-0 shadow-xs cursor-pointer"
+            >
+              <span>Check In for Today's OPD</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
-
-        {/* 5-Step Horizontal Flow Indicator */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
-          {journeySteps.map((step, idx) => {
-            const isCompleted = idx < currentStepIdx;
-            const isCurrent = idx === currentStepIdx;
-
-            return (
-              <div
-                key={step.key}
-                className={`p-3 rounded-2xl border transition-all ${
-                  isCurrent
-                    ? 'bg-sky-50/70 border-sky-300 ring-2 ring-sky-500/20 shadow-xs'
-                    : isCompleted
-                    ? 'bg-slate-50/80 border-emerald-200/70'
-                    : 'bg-white border-slate-200/60 opacity-60'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span
-                    className={`w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
-                      isCurrent
-                        ? 'bg-sky-600 text-white'
-                        : isCompleted
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {isCompleted ? <Check className="w-3 h-3 stroke-[3]" /> : idx + 1}
-                  </span>
-                  {isCurrent && (
-                    <span className="text-[10px] font-semibold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Current
-                    </span>
-                  )}
-                  {isCompleted && (
-                    <span className="text-[10px] font-medium text-emerald-700">Done</span>
-                  )}
-                </div>
-                <div className="text-xs font-semibold text-slate-900 leading-tight">
-                  {step.label}
-                </div>
-                <div className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                  {step.desc}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* =========================================================================
           NAVIGATION TABS
@@ -313,19 +948,25 @@ export const PatientDashboardView = () => {
             id: 'reports',
             label: 'Diagnostic Reports',
             icon: FlaskConical,
-            count: patient.reports.length,
+            count: patientReports.length,
           },
           {
             id: 'doctors',
             label: 'Consulted Doctors',
             icon: Stethoscope,
-            count: patient.consultedDoctors.length,
+            count: patientConsultedDoctors.length,
+          },
+          {
+            id: 'appointments',
+            label: 'Appointments',
+            icon: Calendar,
+            count: patientAppointments.length,
           },
           {
             id: 'prescriptions',
             label: 'Prescriptions (Rx)',
             icon: Pill,
-            count: patient.prescriptions.length,
+            count: patientPrescriptions.length,
           },
           { id: 'history', label: 'Medical History', icon: Clock },
           { id: 'vitals', label: 'Vitals & Metrics', icon: Activity },
@@ -363,59 +1004,177 @@ export const PatientDashboardView = () => {
           ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* 1. Quick Vitals Summary Matrix */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                <span>Blood Pressure</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          {/* 0. Clinical Risk & Red-Flag Assessment Status Banner (Dynamic) */}
+          <div className="p-4 sm:p-5 rounded-2xl border transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border-slate-200/80">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  safePatient?.health?.riskLevel === 'HIGH' || safePatient?.health?.riskLevel === 'CRITICAL'
+                    ? 'bg-rose-50 text-rose-600 border-rose-200'
+                    : safePatient?.health?.riskLevel === 'MODERATE'
+                    ? 'bg-amber-50 text-amber-600 border-amber-200'
+                    : safePatient?.health?.riskLevel === 'LOW'
+                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                }`}
+              >
+                {safePatient?.health?.riskLevel === 'HIGH' || safePatient?.health?.riskLevel === 'CRITICAL' ? (
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                ) : safePatient?.health?.riskLevel === 'MODERATE' ? (
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                ) : safePatient?.health?.riskLevel === 'LOW' ? (
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <Info className="w-5 h-5 text-slate-400" />
+                )}
               </div>
-              <div className="text-xl sm:text-2xl font-semibold text-slate-900 font-mono">
-                {patient.vitals.bp}
-              </div>
-              <div className="text-[11px] text-emerald-700 font-medium mt-1">
-                {patient.vitals.bpStatus}
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs uppercase tracking-wider font-semibold text-slate-500">
+                    Clinical Risk Assessment
+                  </h4>
+                  {safePatient?.health?.riskLevel ? (
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.2 rounded-full uppercase tracking-wider ${
+                        safePatient.health.riskLevel === 'HIGH' || safePatient.health.riskLevel === 'CRITICAL'
+                          ? 'bg-rose-100 text-rose-800'
+                          : safePatient.health.riskLevel === 'MODERATE'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {safePatient.health.riskLevel} Risk
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium px-2 py-0.2 rounded-full bg-slate-100 text-slate-600">
+                      Not Computed
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-medium text-slate-800">
+                  {safePatient?.health?.riskLevel
+                    ? `Patient evaluated under ${safePatient.health.riskCategory || 'General Clinical'} risk protocol.`
+                    : 'Risk assessment not available'}
+                </p>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                <span>Heart Rate (Pulse)</span>
-                <Activity className="w-3.5 h-3.5 text-rose-500" />
-              </div>
-              <div className="text-xl sm:text-2xl font-semibold text-slate-900 font-mono">
-                {patient.vitals.pulse}
-              </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                Regular Sinus Rhythm
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                <span>Blood Glucose</span>
-                <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                  {patient.vitals.sugarType}
+            <div className="flex items-center gap-3 text-xs text-slate-500 pl-13 sm:pl-0">
+              {safePatient?.health?.lastUpdated ? (
+                <span>
+                  Evaluated: <strong className="text-slate-700">{new Date(safePatient.health.lastUpdated).toLocaleDateString()}</strong>
                 </span>
+              ) : (
+                <span className="text-slate-400">Awaiting clinical intake data</span>
+              )}
+            </div>
+          </div>
+
+          {/* 1. Quick Vitals Summary Matrix */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HeartPulse className="w-4 h-4 text-rose-500" />
+                <h3 className="text-sm font-semibold text-slate-900">Latest Recorded Vitals</h3>
+                {patientVitals?.recordedAt && (
+                  <span className="text-[11px] text-slate-400">
+                    (Updated {new Date(patientVitals.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                )}
               </div>
-              <div className="text-xl sm:text-2xl font-semibold text-slate-900 font-mono">
-                {patient.vitals.sugar}
-              </div>
-              <div className="text-[11px] text-emerald-700 font-medium mt-1">
-                {patient.vitals.sugarStatus}
-              </div>
+              <button
+                onClick={() => setShowRecordVitalsModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record Vitals</span>
+              </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                <span>SpO2 / Temp</span>
-                <span className="text-[10px] text-sky-600 font-medium">Recorded Today</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              {/* Blood Pressure */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>Blood Pressure</span>
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      patientVitals?.bloodPressure?.display || patientVitals?.bp ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}
+                  />
+                </div>
+                <div className="text-lg sm:text-xl font-semibold text-slate-900 font-mono">
+                  {patientVitals?.bloodPressure?.display || patientVitals?.bp || 'No recent reading'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mt-1">
+                  {patientVitals?.bloodPressure ? (patientVitals.bpStatus || 'Recorded reading') : 'Target: 120/80 mmHg'}
+                </div>
               </div>
-              <div className="text-xl sm:text-2xl font-semibold text-slate-900 font-mono">
-                {patient.vitals.spo2} <span className="text-xs text-slate-400 font-normal">/ {patient.vitals.temp}</span>
+
+              {/* Heart Rate / Pulse */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>Heart Rate (Pulse)</span>
+                  <Activity className="w-3.5 h-3.5 text-rose-500" />
+                </div>
+                <div className="text-lg sm:text-xl font-semibold text-slate-900 font-mono">
+                  {patientVitals?.pulse?.value
+                    ? `${patientVitals.pulse.value} bpm`
+                    : patientVitals?.pulse
+                    ? `${patientVitals.pulse} bpm`
+                    : 'Not recorded yet'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mt-1">
+                  {patientVitals?.pulse ? 'Resting Pulse' : 'Normal: 60-100 bpm'}
+                </div>
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                BMI: {patient.vitals.bmi} ({patient.vitals.bmiStatus})
+
+              {/* Blood Glucose */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>Blood Glucose</span>
+                  <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                    {patientVitals?.bloodSugar?.sugarType || patientVitals?.sugarType || 'Random'}
+                  </span>
+                </div>
+                <div className="text-lg sm:text-xl font-semibold text-slate-900 font-mono">
+                  {patientVitals?.bloodSugar?.value
+                    ? `${patientVitals.bloodSugar.value} mg/dL`
+                    : patientVitals?.sugar
+                    ? `${patientVitals.sugar} mg/dL`
+                    : 'Not recorded yet'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mt-1">
+                  {patientVitals?.bloodSugar?.status || (patientVitals?.bloodSugar?.value ? 'Recorded Glucose' : 'Ref: 70-140 mg/dL')}
+                </div>
+              </div>
+
+              {/* SpO2 / Temp / BMI */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>SpO2 / Temp</span>
+                  <span className="text-[10px] text-sky-600 font-medium">
+                    {patientVitals?.recordedAt
+                      ? new Date(patientVitals.recordedAt).toLocaleDateString()
+                      : patientVitals?.lastUpdated || 'No readings'}
+                  </span>
+                </div>
+                <div className="text-lg sm:text-xl font-semibold text-slate-900 font-mono">
+                  {patientVitals?.oxygenSaturation?.value
+                    ? `${patientVitals.oxygenSaturation.value}%`
+                    : patientVitals?.spo2
+                    ? `${patientVitals.spo2}`
+                    : 'Not recorded'}
+                  {patientVitals?.temperature?.value ? (
+                    <span className="text-xs text-slate-400 font-normal"> / {patientVitals.temperature.value}°F</span>
+                  ) : patientVitals?.temp ? (
+                    <span className="text-xs text-slate-400 font-normal"> / {patientVitals.temp}°F</span>
+                  ) : (
+                    ''
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mt-1">
+                  BMI: {patientVitals?.bmi?.value || patientVitals?.bmi || 'Not calculated'}
+                </div>
               </div>
             </div>
           </div>
@@ -425,7 +1184,7 @@ export const PatientDashboardView = () => {
             {/* Left 2 Cols: Consulted Doctor Spotlight & OPD Advice */}
             <div className="lg:col-span-2 space-y-6">
               {/* Primary Active Doctor Card */}
-              {patient.consultedDoctors[0] && (
+              {patientConsultedDoctors[0] ? (
                 <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <span className="text-xs uppercase tracking-wider font-semibold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200">
@@ -441,25 +1200,31 @@ export const PatientDashboardView = () => {
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <img
-                      src={patient.consultedDoctors[0].avatar}
-                      alt={patient.consultedDoctors[0].name}
-                      className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-2xs"
-                    />
+                    {patientConsultedDoctors[0].avatar ? (
+                      <img
+                        src={patientConsultedDoctors[0].avatar}
+                        alt={patientConsultedDoctors[0].name}
+                        className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-2xs"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 font-bold text-lg shadow-2xs">
+                        <Stethoscope className="w-8 h-8 text-sky-600" />
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-semibold text-slate-950">
-                          {patient.consultedDoctors[0].name}
+                          {patientConsultedDoctors[0].name}
                         </h3>
                         <span className="text-[11px] font-medium bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">
                           Verified
                         </span>
                       </div>
                       <p className="text-xs font-medium text-sky-700">
-                        {patient.consultedDoctors[0].specialty}
+                        {patientConsultedDoctors[0].specialty}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {patient.consultedDoctors[0].degrees} • {patient.consultedDoctors[0].department}
+                        {patientConsultedDoctors[0].degrees || 'MBBS'} • {patientConsultedDoctors[0].department || 'General Medicine'}
                       </p>
                     </div>
                   </div>
@@ -468,25 +1233,25 @@ export const PatientDashboardView = () => {
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 font-medium">Chief Complaint:</span>
                       <span className="font-semibold text-slate-900">
-                        {patient.consultedDoctors[0].chiefComplaint}
+                        {patientConsultedDoctors[0].chiefComplaint || 'Primary Clinical Inquiry'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 font-medium">Confirmed Diagnosis:</span>
                       <span className="font-semibold text-sky-800 bg-sky-100/60 px-2 py-0.5 rounded">
-                        {patient.consultedDoctors[0].diagnosis}
+                        {patientConsultedDoctors[0].diagnosis || 'Under Active Clinical Observation'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 pt-1 leading-relaxed border-t border-slate-200/60 mt-2">
                       <strong className="text-slate-800">Doctor's Clinical Notes:</strong>{' '}
-                      {patient.consultedDoctors[0].clinicalNotes}
+                      {patientConsultedDoctors[0].clinicalNotes || patientConsultedDoctors[0].notes || 'Follow medical advice, continue prescribed medications, and track symptoms.'}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
                     <span className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      Next Recommended Follow-up: <strong className="text-slate-900">{patient.consultedDoctors[0].followUp}</strong>
+                      Next Recommended Follow-up: <strong className="text-slate-900">{patientConsultedDoctors[0].followUp || 'In 2 weeks'}</strong>
                     </span>
                     <button
                       onClick={() => setActiveTab('prescriptions')}
@@ -495,6 +1260,21 @@ export const PatientDashboardView = () => {
                       <span>View Prescribed Meds</span>
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                      Primary Consulted Physician
+                    </span>
+                  </div>
+                  <div className="p-6 rounded-2xl bg-slate-50/70 border border-dashed border-slate-200 text-center space-y-2">
+                    <Stethoscope className="w-8 h-8 text-slate-400 mx-auto" />
+                    <h4 className="text-sm font-semibold text-slate-800">Awaiting Physician Consultation</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      Doctor consultation details and clinical examination notes will automatically sync here once your OPD encounter begins.
+                    </p>
                   </div>
                 </div>
               )}
@@ -510,56 +1290,79 @@ export const PatientDashboardView = () => {
                       Digitized and synced with Ayushman Bharat Digital Mission (ABDM)
                     </p>
                   </div>
-                  <button
-                    onClick={() => setActiveTab('reports')}
-                    className="text-xs font-medium text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>View All ({patient.reports.length})</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                  {patientReports.length > 0 && (
+                    <button
+                      onClick={() => setActiveTab('reports')}
+                      className="text-xs font-medium text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>View All ({patientReports.length})</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2.5">
-                  {patient.reports.slice(0, 3).map((rep) => (
-                    <div
-                      key={rep.id}
-                      onClick={() => setSelectedReport(rep)}
-                      className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 transition flex items-center justify-between gap-3 cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sky-600 shadow-2xs group-hover:scale-105 transition-transform">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs sm:text-sm font-semibold text-slate-900 group-hover:text-sky-700 transition">
-                            {rep.title}
-                          </h4>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                            <span>{rep.category}</span>
-                            <span>•</span>
-                            <span>{rep.date}</span>
-                            <span>•</span>
-                            <span>Ordered by {rep.orderedBy}</span>
+                  {patientReports.length > 0 ? (
+                    patientReports.slice(0, 3).map((rep) => (
+                      <div
+                        key={rep.id}
+                        onClick={() => setSelectedReport(rep)}
+                        className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 transition flex items-center justify-between gap-3 cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sky-600 shadow-2xs group-hover:scale-105 transition-transform">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-semibold text-slate-900 group-hover:text-sky-700 transition">
+                              {rep.title}
+                            </h4>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                              <span>{rep.category || 'Clinical'}</span>
+                              <span>•</span>
+                              <span>{rep.date || 'Recent'}</span>
+                              <span>•</span>
+                              <span>Ordered by {rep.orderedBy || 'Attending Doctor'}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        {rep.statusSeverity === 'attention' ? (
-                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
-                            <AlertCircle className="w-3 h-3 text-amber-600" />
-                            <span>Attention</span>
-                          </span>
-                        ) : (
-                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Normal</span>
-                          </span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
+                        <div className="flex items-center gap-2">
+                          {rep.statusSeverity === 'attention' ? (
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
+                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                              <span>Attention</span>
+                            </span>
+                          ) : (
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Normal</span>
+                            </span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition" />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-6 rounded-2xl bg-slate-50/70 border border-dashed border-slate-200 text-center space-y-2.5">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>Not Uploaded</span>
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Diagnostic investigations and test reports have not been uploaded yet for this patient.
+                      </p>
+                      <div>
+                        <button
+                          onClick={() => setShowUploadModal(true)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-sky-700 bg-sky-50 border border-sky-200 hover:bg-sky-100 transition cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Physical Report</span>
+                        </button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
@@ -582,19 +1385,28 @@ export const PatientDashboardView = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {patient.prescriptions[0]?.medications.map((med, idx) => (
-                    <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-900">{med.name}</span>
-                        <span className="text-[10px] font-mono bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-bold">
-                          {med.schedule}
-                        </span>
+                  {((patientPrescriptions[0]?.medications || patientPrescriptions[0]?.medicines) && (patientPrescriptions[0].medications || patientPrescriptions[0].medicines).length > 0) ? (
+                    (patientPrescriptions[0].medications || patientPrescriptions[0].medicines).map((med, idx) => (
+                      <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-900">{med.name}</span>
+                          <span className="text-[10px] font-mono bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-bold">
+                            {med.schedule || '1 - 0 - 1'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {med.timing || 'Daily'} • {med.duration || 'As directed'}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        {med.timing} • {med.duration}
-                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 text-center space-y-1.5">
+                      <span className="inline-block text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        Not Uploaded
+                      </span>
+                      <p className="text-xs text-slate-500">No active medication orders issued for this encounter yet.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -605,12 +1417,18 @@ export const PatientDashboardView = () => {
                   <h4 className="text-xs font-bold uppercase tracking-wider">Allergy & Contraindications</h4>
                 </div>
                 <div className="space-y-2">
-                  {patient.allergies.map((all, idx) => (
-                    <div key={idx} className="text-xs bg-white/80 p-2.5 rounded-xl border border-rose-100">
-                      <div className="font-semibold text-slate-900">{all.allergen}</div>
-                      <div className="text-[11px] text-slate-600 mt-0.5">Reaction: {all.reaction} ({all.severity})</div>
+                  {patientAllergies.length > 0 ? (
+                    patientAllergies.map((all, idx) => (
+                      <div key={idx} className="text-xs bg-white/80 p-2.5 rounded-xl border border-rose-100">
+                        <div className="font-semibold text-slate-900">{all.allergen}</div>
+                        <div className="text-[11px] text-slate-600 mt-0.5">Reaction: {all.reaction} ({all.severity})</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-slate-500 bg-white/80 p-2.5 rounded-xl border border-rose-100">
+                      No known adverse allergies or contraindications recorded.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -621,14 +1439,18 @@ export const PatientDashboardView = () => {
                   <h4 className="text-xs font-semibold">Diagnosed Conditions</h4>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {patient.chronicConditions.map((cond, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200"
-                    >
-                      {cond.name} <span className="text-slate-400">({cond.diagnosedYear})</span>
-                    </span>
-                  ))}
+                  {patientChronicConditions.length > 0 ? (
+                    patientChronicConditions.map((cond, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200"
+                      >
+                        {cond.name} <span className="text-slate-400">({cond.diagnosedYear || 'Recorded'})</span>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400">No chronic medical conditions recorded.</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -678,84 +1500,223 @@ export const PatientDashboardView = () => {
           </div>
 
           {/* Reports Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredReports.map((report) => (
-              <div
-                key={report.id}
-                className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition space-y-3.5 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5" />
+          {filteredReports.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredReports.map((report) => {
+                // Key findings derivation
+                const findingsList =
+                  report.importantFindings && report.importantFindings.length > 0
+                    ? report.importantFindings
+                    : (report.parameters || []).slice(0, 3).map((p) => ({
+                        finding: `${p.name}: ${p.value}`,
+                        status: p.alert ? 'HIGH' : 'NORMAL',
+                        reference_range: p.normalRange,
+                      }));
+
+                const patientMeaning =
+                  report.patientSummary?.meaning ||
+                  (report.patientSummary?.about ? report.patientSummary.about : null) ||
+                  report.summary ||
+                  'Your medical document has been digitized and securely linked to your health record.';
+
+                return (
+                  <div
+                    key={report.id}
+                    className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition space-y-4 flex flex-col justify-between"
+                  >
+                    <div className="space-y-3.5">
+                      {/* 1. Header: Icon, ID, Title, Facility & Confidence */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                                {report.testCode || 'DOC-REP'}
+                              </span>
+                              {report.extractionConfidence && (
+                                <span
+                                  className={`text-[9px] font-semibold px-2 py-0.5 rounded-full ${
+                                    report.extractionConfidence === 'CLEAR'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : report.extractionConfidence === 'PARTIAL'
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  }`}
+                                >
+                                  {report.extractionConfidence === 'CLEAR'
+                                    ? '● Clearly extracted'
+                                    : report.extractionConfidence === 'PARTIAL'
+                                    ? '● Partially extracted'
+                                    : '● Uncertain extraction'}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="text-base font-semibold text-slate-950 leading-snug">
+                              {report.title}
+                            </h3>
+                            <p className="text-[11px] text-slate-400">
+                              {report.date} • {report.facility || 'Apex Healthcare Diagnostics'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {report.statusSeverity === 'attention' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200 px-2.5 py-0.5 rounded-full shrink-0">
+                            <AlertCircle className="w-3 h-3 text-rose-600" />
+                            <span>Attention</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Normal</span>
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-                          {report.testCode}
+
+                      {/* 2. AI Summary Block */}
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                          <Sparkles className="w-3 h-3 text-sky-600" />
+                          <span>AI Summary</span>
+                        </div>
+                        <p className="text-xs text-slate-700 leading-relaxed">
+                          {report.patientSummary?.about || report.summary || 'Your report contains diagnostic investigation results.'}
+                        </p>
+                      </div>
+
+                      {/* 3. Key Findings with 🔴 / 🟢 semantic indicators */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                          Key Findings
                         </span>
-                        <h3 className="text-sm font-semibold text-slate-950 leading-snug">
-                          {report.title}
-                        </h3>
+                        <div className="space-y-1.5">
+                          {findingsList.length > 0 ? (
+                            findingsList.slice(0, 3).map((f, i) => {
+                              const isAbnormal =
+                                f.status === 'LOW' ||
+                                f.status === 'HIGH' ||
+                                f.status === 'CRITICAL' ||
+                                f.severity === 'CRITICAL' ||
+                                f.severity === 'HIGH' ||
+                                f.severity === 'LOW';
+                              return (
+                                <div
+                                  key={i}
+                                  className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-xl border ${
+                                    isAbnormal
+                                      ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+                                      : 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-1.5 font-medium truncate max-w-[220px] sm:max-w-xs">
+                                    <span>{isAbnormal ? '🔴' : '🟢'}</span>
+                                    <span>{f.finding}</span>
+                                  </span>
+                                  <span className="text-[10px] font-mono shrink-0 ml-2">
+                                    {isAbnormal
+                                      ? (f.status === 'LOW' ? 'Below reference range' : f.status === 'HIGH' ? 'Above reference range' : 'Critical/Attention')
+                                      : 'Within range'}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-xs text-slate-400 py-1">No abnormal findings identified.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 4. What It Means */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                          What It Means
+                        </span>
+                        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                          {patientMeaning}
+                        </p>
+                      </div>
+
+                      {/* 5. ⚠️ Important Disclaimer */}
+                      <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/90 text-amber-900 text-[11px] flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span className="leading-snug">
+                          <strong>Important:</strong> Discuss abnormal findings with your doctor. This summary is generated from your uploaded report and is not a diagnosis.
+                        </span>
                       </div>
                     </div>
 
-                    {report.statusSeverity === 'attention' ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
-                        <AlertCircle className="w-3 h-3 text-amber-600" />
-                        <span>Attention</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>Normal</span>
-                      </span>
-                    )}
+                    {/* 6. Action Buttons */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-slate-100 flex-wrap sm:flex-nowrap">
+                      <button
+                        onClick={() => {
+                          setSelectedReport(report);
+                          setReportModalTab('patient');
+                        }}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 active:scale-98 transition cursor-pointer shadow-xs"
+                      >
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>View Full Report</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSelectedReport(report);
+                          setReportModalTab('extracted');
+                        }}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 active:scale-98 transition cursor-pointer shadow-2xs"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-slate-600" />
+                        <span>View Extracted Data</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (report.fileUrl) {
+                            window.open(report.fileUrl, '_blank');
+                          } else {
+                            alert(`Document: ${report.title}`);
+                          }
+                        }}
+                        className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-950 transition cursor-pointer shrink-0"
+                        title="Download or View Document File"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-
-                  <p className="text-xs text-slate-600 line-clamp-2 mt-3 leading-relaxed">
-                    {report.summary}
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100">
-                    <div>
-                      <span className="text-slate-400">Date:</span> {report.date}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Lab:</span> {report.facility.split(' ')[0]}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Doctor:</span> {report.orderedBy}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">File size:</span> {report.fileSize}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    onClick={() => setSelectedReport(report)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
-                  >
-                    <FileCheck className="w-3.5 h-3.5" />
-                    <span>View Test Parameters</span>
-                  </button>
-                  <button
-                    onClick={() => alert(`Simulated Download: ${report.title}.pdf`)}
-                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-950 transition cursor-pointer"
-                    title="Download PDF"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-8 sm:p-12 text-center rounded-3xl bg-white border border-slate-200/90 text-slate-500 space-y-4 shadow-xs">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
+                <FileText className="w-7 h-7" />
               </div>
-            ))}
-          </div>
-
-          {filteredReports.length === 0 && (
-            <div className="p-12 text-center rounded-3xl bg-white border border-slate-200 text-slate-500 text-sm">
-              No diagnostic reports match your search criteria.
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Not Uploaded</span>
+                </div>
+                <h4 className="text-base font-semibold text-slate-900">
+                  No Diagnostic Reports Uploaded Yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Diagnostic lab reports, blood panels, and radiology investigations have not been uploaded for this patient. You can upload physical or digital reports to sync with ABDM.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-medium text-white bg-slate-950 hover:bg-slate-800 active:scale-95 transition cursor-pointer shadow-xs"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload Physical Document / Report</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -776,91 +1737,217 @@ export const PatientDashboardView = () => {
               </p>
             </div>
             <span className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-              {patient.consultedDoctors.length} Registered Consultations
+              {patientConsultedDoctors.length} Registered Consultations
             </span>
           </div>
 
-          <div className="space-y-4">
-            {patient.consultedDoctors.map((doc) => (
-              <div
-                key={doc.id}
-                className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                  <div className="flex items-start sm:items-center gap-4">
-                    <img
-                      src={doc.avatar}
-                      alt={doc.name}
-                      className="w-14 h-14 rounded-2xl object-cover border border-slate-200"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold text-slate-950">{doc.name}</h3>
-                        {doc.isCurrent && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 uppercase tracking-wider">
-                            Current OPD Visit
-                          </span>
-                        )}
+          {patientConsultedDoctors.length > 0 ? (
+            <div className="space-y-4">
+              {patientConsultedDoctors.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div className="flex items-start sm:items-center gap-4">
+                      <img
+                        src={doc.avatar || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300'}
+                        alt={doc.name}
+                        className="w-14 h-14 rounded-2xl object-cover border border-slate-200"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-semibold text-slate-950">{doc.name}</h3>
+                          {doc.isCurrent && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 uppercase tracking-wider">
+                              Current OPD Visit
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-medium text-sky-700">{doc.specialty}</p>
+                        <p className="text-xs text-slate-500">
+                          {doc.degrees || 'MBBS, MD'} • {doc.department || 'General Medicine'}
+                        </p>
                       </div>
-                      <p className="text-xs font-medium text-sky-700">{doc.specialty}</p>
-                      <p className="text-xs text-slate-500">
-                        {doc.degrees} • {doc.hospital}
-                      </p>
+                    </div>
+
+                    <div className="text-left sm:text-right space-y-1">
+                      <span className="inline-block text-xs font-medium bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
+                        {doc.room || 'OPD Room 102'}
+                      </span>
+                      <div className="text-xs text-slate-500">{doc.lastVisit || 'Recent Visit'}</div>
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right space-y-1">
-                    <span className="inline-block text-xs font-medium bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
-                      {doc.visitType}
-                    </span>
-                    <div className="text-xs text-slate-500">{doc.visitDate}</div>
+                  {/* Consultation Clinical Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
+                      <span className="text-slate-500 font-medium">Chief Symptom / Complaint:</span>
+                      <p className="text-slate-900 font-medium">{doc.chiefComplaint || 'Clinical evaluation'}</p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70 space-y-1">
+                      <span className="text-sky-700 font-medium">Clinical Diagnosis:</span>
+                      <p className="text-sky-950 font-semibold">{doc.diagnosis || 'Under Observation'}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-50/60 border border-slate-200/60 text-xs text-slate-700 leading-relaxed">
+                    <strong className="text-slate-900">Doctor's Assessment & Treatment Advice:</strong>{' '}
+                    {doc.clinicalNotes || doc.notes || 'Continue prescribed therapy and monitor symptoms.'}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Follow-up: <strong className="text-slate-900">{doc.followUp || 'In 2 weeks'}</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setActiveTab('prescriptions')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer"
+                      >
+                        <Pill className="w-3.5 h-3.5 text-sky-600" />
+                        <span>View Prescribed Rx</span>
+                      </button>
+                      <button
+                        onClick={() => alert(`Appointment request queued for ${doc.name}`)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>Book Next Slot</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {/* Consultation Clinical Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1">
-                    <span className="text-slate-500 font-medium">Chief Symptom / Complaint:</span>
-                    <p className="text-slate-900 font-medium">{doc.chiefComplaint}</p>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70 space-y-1">
-                    <span className="text-sky-700 font-medium">Clinical Diagnosis:</span>
-                    <p className="text-sky-950 font-semibold">{doc.diagnosis}</p>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-50/60 border border-slate-200/60 text-xs text-slate-700 leading-relaxed">
-                  <strong className="text-slate-900">Doctor's Assessment & Treatment Advice:</strong>{' '}
-                  {doc.clinicalNotes}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Follow-up: <strong className="text-slate-900">{doc.followUp}</strong></span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setActiveTab('prescriptions')}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer"
-                    >
-                      <Pill className="w-3.5 h-3.5 text-sky-600" />
-                      <span>View Prescribed Rx</span>
-                    </button>
-                    <button
-                      onClick={() => alert(`Appointment request queued for ${doc.name}`)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>Book Next Slot</span>
-                    </button>
-                  </div>
-                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 sm:p-12 text-center rounded-3xl bg-white border border-slate-200/90 text-slate-500 space-y-3 shadow-xs">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                <Stethoscope className="w-7 h-7" />
               </div>
-            ))}
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                  <span>No Consultations</span>
+                </div>
+                <h4 className="text-base font-semibold text-slate-900">
+                  No Consultation Encounters Recorded Yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Your doctor consultations and clinical examination encounters will appear here once an attending physician begins your review.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB CONTENT: APPOINTMENTS & CONSULTATION BOOKINGS (DYNAMIC)
+          ========================================================================= */}
+      {activeTab === 'appointments' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">
+                Appointments & Scheduled Consultations
+              </h2>
+              <p className="text-xs text-slate-500">
+                Manage upcoming and previous clinical visits with Modern Medicine and AYUSH specialists
+              </p>
+            </div>
+            <button
+              onClick={() => setShowBookAppointmentModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs shrink-0"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Book New Appointment</span>
+            </button>
           </div>
+
+          {/* Upcoming Appointments */}
+          <div className="space-y-3">
+            <h3 className="text-xs uppercase tracking-wider font-semibold text-slate-400">Upcoming Appointments</h3>
+            {patientAppointments.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {patientAppointments.map((apt) => (
+                  <div
+                    key={apt.id}
+                    className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                        {apt.appointmentNumber || apt.id}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>{apt.status}</span>
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-slate-950">{apt.doctorName}</h4>
+                      <p className="text-xs text-sky-700 font-medium">{apt.doctorSpecialization}</p>
+                      <p className="text-xs text-slate-500">{apt.department || 'General OPD'} • {apt.consultationType}</p>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs text-slate-700">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        {apt.date} at {apt.time}
+                      </span>
+                      <span className="font-medium text-slate-900">{apt.room || 'Room Assigned on Check-in'}</span>
+                    </div>
+
+                    {apt.reason && (
+                      <p className="text-[11px] text-slate-500 italic">Reason: "{apt.reason}"</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center rounded-3xl bg-white border border-slate-200/80 text-slate-500 space-y-3 shadow-xs">
+                <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-slate-800">No upcoming appointments.</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    You have no scheduled clinical consultations or follow-up visits pending.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowBookAppointmentModal(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Book Consultation</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Past Appointments */}
+          {allAppointments.length > patientAppointments.length && (
+            <div className="space-y-3 pt-4">
+              <h3 className="text-xs uppercase tracking-wider font-semibold text-slate-400">Past Consultations</h3>
+              <div className="divide-y divide-slate-100 bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
+                {allAppointments
+                  .filter((a) => a.status === 'COMPLETED' || a.status === 'CANCELLED')
+                  .map((apt) => (
+                    <div key={apt.id} className="p-4 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold text-slate-900">{apt.doctorName}</span>
+                        <div className="text-slate-500">{apt.doctorSpecialization} • {apt.date}</div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                        {apt.status}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -885,68 +1972,91 @@ export const PatientDashboardView = () => {
             </button>
           </div>
 
-          <div className="space-y-6">
-            {patient.prescriptions.map((rx) => (
-              <div
-                key={rx.id}
-                className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                        {rx.id}
-                      </span>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Prescribed by {rx.doctor}
-                      </h3>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {rx.specialty} • Issued on {rx.date} (Valid till {rx.validTill})
-                    </p>
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full w-fit">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>{rx.status}</span>
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  {rx.medications.map((med, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-1">
+          {patientPrescriptions.length > 0 ? (
+            <div className="space-y-6">
+              {patientPrescriptions.map((rx) => {
+                const meds = rx.medications || rx.medicines || [];
+                return (
+                  <div
+                    key={rx.id}
+                    className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                      <div>
                         <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-sky-500" />
-                          <h4 className="text-xs sm:text-sm font-semibold text-slate-950">
-                            {med.name}
-                          </h4>
-                          <span className="text-xs text-slate-500 font-mono">({med.dosage})</span>
+                          <span className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                            {rx.id}
+                          </span>
+                          <h3 className="text-sm font-semibold text-slate-900">
+                            Prescribed by {rx.doctor}
+                          </h3>
                         </div>
-                        <p className="text-xs text-slate-600 pl-4">{med.instructions}</p>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 pl-4">
-                          <span>Timing: <strong>{med.timing}</strong></span>
-                          <span>•</span>
-                          <span>Duration: <strong>{med.duration}</strong></span>
-                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {rx.specialty} • Issued on {rx.date} (Valid till {rx.validTill})
+                        </p>
                       </div>
-
-                      <div className="text-left sm:text-right pl-4 sm:pl-0 space-y-1">
-                        <div className="inline-block px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-white border border-slate-200 text-slate-900">
-                          {med.schedule}
-                        </div>
-                        <div className="text-[10px] text-emerald-700 font-medium">
-                          {med.refill}
-                        </div>
-                      </div>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full w-fit">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>{rx.status}</span>
+                      </span>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="space-y-3">
+                      {meds.map((med, idx) => (
+                        <div
+                          key={idx}
+                          className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-sky-500" />
+                              <h4 className="text-xs sm:text-sm font-semibold text-slate-950">
+                                {med.name}
+                              </h4>
+                              <span className="text-xs text-slate-500 font-mono">({med.dosage})</span>
+                            </div>
+                            <p className="text-xs text-slate-600 pl-4">{med.instructions}</p>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 pl-4">
+                              <span>Timing: <strong>{med.timing}</strong></span>
+                              <span>•</span>
+                              <span>Duration: <strong>{med.duration}</strong></span>
+                            </div>
+                          </div>
+
+                          <div className="text-left sm:text-right pl-4 sm:pl-0 space-y-1">
+                            <div className="inline-block px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-white border border-slate-200 text-slate-900">
+                              {med.schedule || '1 - 0 - 1'}
+                            </div>
+                            <div className="text-[10px] text-emerald-700 font-medium">
+                              {med.refill || 'Authorized'}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-8 sm:p-12 text-center rounded-3xl bg-white border border-slate-200/90 text-slate-500 space-y-3 shadow-xs">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
+                <Pill className="w-7 h-7" />
               </div>
-            ))}
-          </div>
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Not Uploaded</span>
+                </div>
+                <h4 className="text-base font-semibold text-slate-900">
+                  No Prescriptions Uploaded or Issued Yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  No active physician prescriptions have been uploaded or finalized for this patient record yet.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -963,17 +2073,23 @@ export const PatientDashboardView = () => {
                 <span>Chronic Medical Conditions</span>
               </h3>
               <div className="space-y-2">
-                {patient.chronicConditions.map((cond, idx) => (
-                  <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold text-slate-900">{cond.name}</div>
-                      <div className="text-[11px] text-slate-500">Diagnosed: {cond.diagnosedYear}</div>
+                {patientChronicConditions.length > 0 ? (
+                  patientChronicConditions.map((cond, idx) => (
+                    <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-900">{cond.name}</div>
+                        <div className="text-[11px] text-slate-500">Diagnosed: {cond.diagnosedYear || 'Recorded in EMR'}</div>
+                      </div>
+                      <span className="text-[11px] font-medium bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">
+                        {cond.status || 'Active'}
+                      </span>
                     </div>
-                    <span className="text-[11px] font-medium bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">
-                      {cond.status}
-                    </span>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-400 p-3 bg-slate-50 rounded-2xl">
+                    No chronic conditions recorded for this patient.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -983,17 +2099,23 @@ export const PatientDashboardView = () => {
                 <span>Known Allergies & Adverse Reactions</span>
               </h3>
               <div className="space-y-2">
-                {patient.allergies.map((all, idx) => (
-                  <div key={idx} className="p-3 rounded-2xl bg-rose-50/60 border border-rose-200/70 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold text-rose-950">{all.allergen}</div>
-                      <div className="text-[11px] text-slate-600">{all.reaction}</div>
+                {patientAllergies.length > 0 ? (
+                  patientAllergies.map((all, idx) => (
+                    <div key={idx} className="p-3 rounded-2xl bg-rose-50/60 border border-rose-200/70 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-rose-950">{all.allergen}</div>
+                        <div className="text-[11px] text-slate-600">{all.reaction}</div>
+                      </div>
+                      <span className="text-[11px] font-semibold bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full">
+                        {all.severity}
+                      </span>
                     </div>
-                    <span className="text-[11px] font-semibold bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full">
-                      {all.severity}
-                    </span>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-400 p-3 bg-slate-50 rounded-2xl">
+                    No drug or food allergies on record.
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -1008,21 +2130,27 @@ export const PatientDashboardView = () => {
             </p>
 
             <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 pt-2">
-              {patient.timeline.map((item) => (
-                <div key={item.id} className="relative space-y-1">
-                  <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-sky-500 ring-4 ring-white" />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-semibold text-slate-400">{item.date}</span>
-                    <span className="text-[10px] font-medium px-2 py-0.2 rounded-full bg-slate-100 text-slate-700">
-                      {item.category}
-                    </span>
-                    <span className="text-[11px] text-sky-700 font-medium">{item.department}</span>
+              {patientTimeline.length > 0 ? (
+                patientTimeline.map((item) => (
+                  <div key={item.id} className="relative space-y-1">
+                    <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-sky-500 ring-4 ring-white" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-400">{item.date}</span>
+                      <span className="text-[10px] font-medium px-2 py-0.2 rounded-full bg-slate-100 text-slate-700">
+                        {item.category}
+                      </span>
+                      <span className="text-[11px] text-sky-700 font-medium">{item.department}</span>
+                    </div>
+                    <h4 className="text-xs sm:text-sm font-semibold text-slate-900">{item.title}</h4>
+                    <p className="text-xs text-slate-600">{item.description}</p>
+                    <p className="text-[11px] text-slate-400">Attending: {item.doctor}</p>
                   </div>
-                  <h4 className="text-xs sm:text-sm font-semibold text-slate-900">{item.title}</h4>
-                  <p className="text-xs text-slate-600">{item.description}</p>
-                  <p className="text-[11px] text-slate-400">Attending: {item.doctor}</p>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 py-4">
+                  No previous health event milestones recorded in the timeline.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -1033,33 +2161,59 @@ export const PatientDashboardView = () => {
           ========================================================================= */}
       {activeTab === 'vitals' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-slate-950">Vitals & Biometric Trend Log</h2>
               <p className="text-xs text-slate-500">
                 Recorded during check-ins and clinical appointments
               </p>
             </div>
-            <span className="text-xs text-slate-500">
-              Last synced: <strong className="text-slate-800">{patient.vitals.lastUpdated}</strong>
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">
+                Last recorded:{' '}
+                <strong className="text-slate-800">
+                  {patientVitals?.recordedAt
+                    ? new Date(patientVitals.recordedAt).toLocaleString()
+                    : patientVitals?.lastUpdated || 'No readings on record'}
+                </strong>
+              </span>
+              <button
+                onClick={() => setShowRecordVitalsModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record New Reading</span>
+              </button>
+            </div>
           </div>
 
           {/* Detailed Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-2">
               <span className="text-xs text-slate-500">Blood Pressure</span>
-              <div className="text-3xl font-bold font-mono text-slate-950">{patient.vitals.bp}</div>
-              <div className="text-xs text-emerald-700 font-medium">Status: {patient.vitals.bpStatus}</div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-slate-950">
+                {patientVitals?.bloodPressure?.display || patientVitals?.bp || 'No recent reading'}
+              </div>
+              <div className="text-xs text-emerald-700 font-medium">
+                {patientVitals?.bloodPressure ? (patientVitals.bpStatus || 'Recorded reading') : 'Target: 120/80 mmHg'}
+              </div>
               <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
                 Target reference range: 110-125 / 70-85 mmHg
               </p>
             </div>
 
             <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-2">
-              <span className="text-xs text-slate-500">Random Blood Sugar</span>
-              <div className="text-3xl font-bold font-mono text-slate-950">{patient.vitals.sugar}</div>
-              <div className="text-xs text-emerald-700 font-medium">Status: {patient.vitals.sugarStatus}</div>
+              <span className="text-xs text-slate-500">Blood Glucose</span>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-slate-950">
+                {patientVitals?.bloodSugar?.value
+                  ? `${patientVitals.bloodSugar.value} mg/dL`
+                  : patientVitals?.sugar
+                  ? `${patientVitals.sugar} mg/dL`
+                  : 'Not recorded yet'}
+              </div>
+              <div className="text-xs text-emerald-700 font-medium">
+                {patientVitals?.bloodSugar?.sugarType || (patientVitals?.bloodSugar?.value ? 'Recorded Glucose' : 'Ref: 70-140 mg/dL')}
+              </div>
               <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
                 Target reference range: 70 - 140 mg/dL
               </p>
@@ -1067,8 +2221,22 @@ export const PatientDashboardView = () => {
 
             <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-2">
               <span className="text-xs text-slate-500">Body Mass Index (BMI)</span>
-              <div className="text-3xl font-bold font-mono text-slate-950">{patient.vitals.bmi}</div>
-              <div className="text-xs text-sky-700 font-medium">{patient.vitals.weight} / {patient.vitals.height}</div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-slate-950">
+                {patientVitals?.bmi?.value || patientVitals?.bmi || 'Not calculated'}
+              </div>
+              <div className="text-xs text-sky-700 font-medium">
+                {patientVitals?.weight?.value
+                  ? `${patientVitals.weight.value} kg`
+                  : patientVitals?.weight
+                  ? `${patientVitals.weight} kg`
+                  : 'Weight N/A'}{' '}
+                /{' '}
+                {patientVitals?.height?.value
+                  ? `${patientVitals.height.value} cm`
+                  : patientVitals?.height
+                  ? `${patientVitals.height} cm`
+                  : 'Height N/A'}
+              </div>
               <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
                 Normal BMI threshold: 18.5 - 24.9 kg/m²
               </p>
@@ -1090,15 +2258,23 @@ export const PatientDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
-                  {patient.vitalsHistory.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/80">
-                      <td className="py-3 px-3 font-sans font-medium text-slate-900">{row.date}</td>
-                      <td className="py-3 px-3 text-slate-700">{row.bpSys} / {row.bpDia} mmHg</td>
-                      <td className="py-3 px-3 text-slate-700">{row.pulse}</td>
-                      <td className="py-3 px-3 text-slate-700">{row.sugar}</td>
-                      <td className="py-3 px-3 text-slate-700">{row.weight} kg</td>
+                  {patientVitalsHistory.length > 0 ? (
+                    patientVitalsHistory.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/80">
+                        <td className="py-3 px-3 font-sans font-medium text-slate-900">{row.date} {row.time && <span className="text-slate-400 font-normal">({row.time})</span>}</td>
+                        <td className="py-3 px-3 text-slate-700">{row.bp ? `${row.bp} mmHg` : (row.bpSys ? `${row.bpSys}/${row.bpDia} mmHg` : '—')}</td>
+                        <td className="py-3 px-3 text-slate-700">{row.pulse != null ? `${row.pulse} bpm` : '—'}</td>
+                        <td className="py-3 px-3 text-slate-700">{row.sugar != null ? `${row.sugar} mg/dL` : '—'}</td>
+                        <td className="py-3 px-3 text-slate-700">{row.weight != null ? `${row.weight} kg` : '—'}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-4 px-3 text-center text-slate-400 font-sans">
+                        No previous historical vitals recorded.
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1109,93 +2285,540 @@ export const PatientDashboardView = () => {
       {/* =========================================================================
           MODAL 1: REPORT VIEWER (TEST PARAMETERS & REFERENCE RANGES)
           ========================================================================= */}
+      {/* =========================================================================
+          MODAL 1: ADVANCED DOCUMENT INTELLIGENCE DETAIL VIEW
+          ========================================================================= */}
       {selectedReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl p-6 sm:p-8 space-y-6">
-            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-[28px] max-w-4xl w-full max-h-[92vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/50">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded font-bold">
-                    {selectedReport.testCode}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-mono uppercase tracking-wider bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-bold">
+                    {selectedReport.testCode || 'DOC-REP'}
                   </span>
-                  <span className="text-xs text-slate-500">{selectedReport.category}</span>
+                  <span className="text-xs text-slate-500 font-medium">{selectedReport.category}</span>
+                  {selectedReport.extractionConfidence && (
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        selectedReport.extractionConfidence === 'CLEAR'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : selectedReport.extractionConfidence === 'PARTIAL'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-slate-200 text-slate-700 border border-slate-300'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>
+                        {selectedReport.extractionConfidence === 'CLEAR'
+                          ? 'Clearly Extracted'
+                          : selectedReport.extractionConfidence === 'PARTIAL'
+                          ? 'Partially Extracted'
+                          : 'Uncertain Extraction'}
+                      </span>
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-lg sm:text-xl font-semibold text-slate-950">
                   {selectedReport.title}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Conducted at {selectedReport.facility} • {selectedReport.date} at {selectedReport.time}
+                  Conducted at {selectedReport.facility || 'Apex Healthcare Diagnostics'} • {selectedReport.date}
+                  {selectedReport.orderedBy ? ` • Ordered by ${selectedReport.orderedBy}` : ''}
                 </p>
               </div>
 
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedReport.fileUrl && (
+                  <button
+                    onClick={() => window.open(selectedReport.fileUrl, '_blank')}
+                    className="p-2 rounded-xl border border-slate-200 hover:bg-white text-slate-600 hover:text-slate-950 transition cursor-pointer shadow-2xs"
+                    title="Open Document in New Tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedReport(null);
+                    setIsExtractedTextExpanded(false);
+                  }}
+                  className="p-2 rounded-xl hover:bg-slate-200/70 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation Tabs Bar */}
+            <div className="flex items-center gap-2 px-6 pt-3 border-b border-slate-100 bg-white overflow-x-auto text-xs font-medium shrink-0">
               <button
-                onClick={() => setSelectedReport(null)}
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                type="button"
+                onClick={() => setReportModalTab('patient')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  reportModalTab === 'patient'
+                    ? 'border-slate-950 text-slate-950 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
               >
-                <X className="w-5 h-5" />
+                <FileText className="w-3.5 h-3.5" />
+                <span>Patient Explanation</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setReportModalTab('extracted')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  reportModalTab === 'extracted'
+                    ? 'border-slate-950 text-slate-950 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Extracted Clinical Data</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setReportModalTab('clinical')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  reportModalTab === 'clinical'
+                    ? 'border-slate-950 text-slate-950 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Stethoscope className="w-3.5 h-3.5" />
+                <span>AI Clinical Summary</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setReportModalTab('original')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  reportModalTab === 'original'
+                    ? 'border-slate-950 text-slate-950 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Original Document</span>
               </button>
             </div>
 
-            {/* Clinical Summary Note */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1 text-xs">
-              <span className="font-semibold text-slate-900">Pathologist / Radiologist Impression:</span>
-              <p className="text-slate-600 leading-relaxed">{selectedReport.summary}</p>
-            </div>
+            {/* Scrollable Content Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-slate-800">
+              {/* TAB 1: PATIENT EXPLANATION */}
+              {reportModalTab === 'patient' && (
+                <div className="space-y-5 animate-fadeIn">
+                  {/* What this report is about */}
+                  <div className="p-4 rounded-2xl bg-sky-50/60 border border-sky-200/80 space-y-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-800 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-sky-600" />
+                      <span>What this report is about</span>
+                    </span>
+                    <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                      {selectedReport.patientSummary?.about ||
+                        selectedReport.summary ||
+                        'This document contains clinical diagnostic information recorded on ' + selectedReport.date + '.'}
+                    </p>
+                  </div>
 
-            {/* Test Parameters Breakdown Table */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Detailed Test Observations
-              </h4>
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
-                    <tr>
-                      <th className="p-3">Parameter</th>
-                      <th className="p-3">Observed Value</th>
-                      <th className="p-3">Reference Interval</th>
-                      <th className="p-3 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedReport.parameters.map((param, idx) => (
-                      <tr key={idx} className={param.alert ? 'bg-amber-50/40' : ''}>
-                        <td className="p-3 font-medium text-slate-900">{param.name}</td>
-                        <td className="p-3 font-mono font-semibold text-slate-900">{param.value}</td>
-                        <td className="p-3 font-mono text-slate-500">{param.normalRange}</td>
-                        <td className="p-3 text-right">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                              param.alert
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}
-                          >
-                            {param.status}
+                  {/* Important findings */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 block">
+                      Important Findings
+                    </span>
+                    <div className="space-y-2">
+                      {selectedReport.importantFindings && selectedReport.importantFindings.length > 0 ? (
+                        selectedReport.importantFindings.map((f, idx) => {
+                          const isAbnormal =
+                            f.status === 'LOW' ||
+                            f.status === 'HIGH' ||
+                            f.status === 'CRITICAL' ||
+                            f.severity === 'CRITICAL' ||
+                            f.severity === 'HIGH' ||
+                            f.severity === 'LOW';
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs sm:text-sm ${
+                                isAbnormal
+                                  ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+                                  : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{isAbnormal ? '🔴' : '🟢'}</span>
+                                <span className="font-medium">{f.finding}</span>
+                              </div>
+                              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-white/80 border border-current shrink-0 ml-2">
+                                {f.status === 'LOW'
+                                  ? 'Below Reference Range'
+                                  : f.status === 'HIGH'
+                                  ? 'Above Reference Range'
+                                  : f.status === 'CRITICAL'
+                                  ? 'Critical Finding'
+                                  : 'Normal / In Range'}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
+                          All observed parameters are within expected clinical limits or no critical deviations detected.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* What this may mean */}
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                      <span>What this may mean</span>
+                    </span>
+                    <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                      {selectedReport.patientSummary?.meaning ||
+                        'Abnormal indicators could suggest common nutritional or metabolic variations. These findings provide context but cannot alone determine the cause without a physician examination.'}
+                    </p>
+                  </div>
+
+                  {/* What you should do */}
+                  <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 space-y-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>What you should do</span>
+                    </span>
+                    <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                      {selectedReport.patientSummary?.action_advice ||
+                        'Discuss these findings with your treating doctor during your OPD consultation, especially if you experience persistent symptoms, fatigue, or discomfort.'}
+                    </p>
+                  </div>
+
+                  {/* ⚠️ Mandatory Safety Note */}
+                  <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      <strong>Important Notice:</strong>{' '}
+                      {selectedReport.patientSummary?.important_disclaimer ||
+                        'This summary is generated from your uploaded medical document and is not a medical diagnosis. Always consult with a registered physician.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: EXTRACTED CLINICAL DATA */}
+              {reportModalTab === 'extracted' && (
+                <div className="space-y-5 animate-fadeIn">
+                  {/* Extracted Metadata Card */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] uppercase">Patient Name</span>
+                      <strong className="text-slate-900 font-medium">
+                        {selectedReport.extractedData?.patient?.name || safePatient.name || 'Recorded in Report'}
+                      </strong>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] uppercase">Age / Gender</span>
+                      <strong className="text-slate-900 font-medium">
+                        {selectedReport.extractedData?.patient?.age || safePatient.age || '48'} Y /{' '}
+                        {selectedReport.extractedData?.patient?.gender || safePatient.gender || 'Male'}
+                      </strong>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] uppercase">Doctor / Facility</span>
+                      <strong className="text-slate-900 font-medium">
+                        {selectedReport.orderedBy || selectedReport.facility || 'Clinical Provider'}
+                      </strong>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] uppercase">Document Date</span>
+                      <strong className="text-slate-900 font-medium">{selectedReport.date}</strong>
+                    </div>
+                  </div>
+
+                  {/* Diagnoses & Clinical Entities */}
+                  {selectedReport.extractedData && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {selectedReport.extractedData.diagnoses && selectedReport.extractedData.diagnoses.length > 0 && (
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
+                          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                            Extracted Diagnoses / Indications
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedReport.extractedData.diagnoses.map((d, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs font-medium"
+                              >
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedReport.extractedData.medications && selectedReport.extractedData.medications.length > 0 && (
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
+                          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                            Active Medications in Document
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedReport.extractedData.medications.map((m, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs font-medium"
+                              >
+                                {typeof m === 'string' ? m : `${m.name} ${m.dosage || ''}`}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Lab Results Table */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Extracted Lab Investigations & Reference Ranges
+                      </h4>
+                      <span className="text-[10px] text-slate-400">
+                        {((selectedReport.parameters || []).length)} Parameters Identified
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
+                          <tr>
+                            <th className="p-3">Test Investigation</th>
+                            <th className="p-3">Observed Value</th>
+                            <th className="p-3">Reference Range</th>
+                            <th className="p-3 text-right">Semantic Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {((selectedReport.parameters || []).length > 0) ? (
+                            selectedReport.parameters.map((param, idx) => (
+                              <tr key={idx} className={param.alert ? 'bg-rose-50/40' : 'hover:bg-slate-50/60'}>
+                                <td className="p-3 font-medium text-slate-900">
+                                  {param.name}
+                                </td>
+                                <td className="p-3 font-mono font-semibold text-slate-900">
+                                  {param.value}
+                                </td>
+                                <td className="p-3 font-mono text-slate-500">
+                                  {param.normalRange || 'Standard reference'}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <span
+                                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      param.alert
+                                        ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    }`}
+                                  >
+                                    {param.status || 'Normal'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-6 text-center text-slate-400">
+                                No tabular laboratory investigations extracted from this document type.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: AI CLINICAL SUMMARY */}
+              {reportModalTab === 'clinical' && (
+                <div className="space-y-4 animate-fadeIn">
+                  <div className="p-4 rounded-2xl bg-slate-900 text-slate-100 space-y-2">
+                    <div className="flex items-center gap-2 text-sky-400 text-xs font-semibold uppercase tracking-wider">
+                      <Stethoscope className="w-4 h-4" />
+                      <span>Physician Clinical Digest</span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans">
+                      {selectedReport.clinicalSummary?.physician_digest ||
+                        (typeof selectedReport.clinicalSummary === 'string'
+                          ? selectedReport.clinicalSummary
+                          : selectedReport.summary)}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                      <span className="font-semibold text-slate-900 block uppercase tracking-wider text-[10px]">
+                        Patient Overview
+                      </span>
+                      <p className="text-slate-600 leading-relaxed">
+                        {selectedReport.clinicalSummary?.patient_overview ||
+                          `${safePatient.name}, ${safePatient.age}y ${safePatient.gender}. Diagnostic encounter evaluated.`}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                      <span className="font-semibold text-slate-900 block uppercase tracking-wider text-[10px]">
+                        Relevant Medical History
+                      </span>
+                      <p className="text-slate-600 leading-relaxed">
+                        {selectedReport.clinicalSummary?.medical_history ||
+                          (selectedReport.extractedData?.medical_history?.join(', ')) ||
+                          'No prior chronic condition history explicitly noted in this document.'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                      <span className="font-semibold text-slate-900 block uppercase tracking-wider text-[10px]">
+                        Investigations & Results
+                      </span>
+                      <p className="text-slate-600 leading-relaxed">
+                        {selectedReport.clinicalSummary?.investigations ||
+                          `Total parameters analyzed: ${(selectedReport.parameters || []).length}.`}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-1">
+                      <span className="font-semibold text-rose-900 block uppercase tracking-wider text-[10px]">
+                        Possible Risk Indicators & Red Flags
+                      </span>
+                      <p className="text-rose-950 leading-relaxed font-medium">
+                        {selectedReport.clinicalSummary?.risk_indicators ||
+                          (selectedReport.critical
+                            ? 'Abnormal clinical markers detected requiring physician consultation.'
+                            : 'No acute red flags detected in document parameters.')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-sky-50/50 border border-sky-200 text-xs space-y-1">
+                    <span className="font-semibold text-sky-900 block uppercase tracking-wider text-[10px]">
+                      Recommended Follow-up
+                    </span>
+                    <p className="text-slate-700 leading-relaxed">
+                      {selectedReport.clinicalSummary?.recommended_followup ||
+                        'Correlate observed investigation values with patient symptom profile and clinical examination during OPD encounter.'}
+                    </p>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 italic px-1">
+                    Note: Clinical summary strictly preserves factual extracted lab ranges. AI inference is provided as clinical support and does not replace the physician's diagnostic evaluation.
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: ORIGINAL DOCUMENT PREVIEW */}
+              {reportModalTab === 'original' && (
+                <div className="space-y-4 animate-fadeIn">
+                  {selectedReport.fileUrl ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-medium">
+                          Original File: <strong className="text-slate-900">{selectedReport.fileName || selectedReport.title}</strong>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(selectedReport.fileUrl, '_blank')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Open In Full Window</span>
+                          </button>
+                          <a
+                            href={selectedReport.fileUrl}
+                            download={selectedReport.fileName || 'medical_document'}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download Original</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Iframe or Image Preview Container */}
+                      <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center min-h-[420px]">
+                        {selectedReport.fileUrl.toLowerCase().endsWith('.pdf') ? (
+                          <iframe
+                            src={selectedReport.fileUrl}
+                            className="w-full h-[520px] rounded-2xl"
+                            title="Uploaded Medical Document PDF"
+                          />
+                        ) : (
+                          <img
+                            src={selectedReport.fileUrl}
+                            alt="Uploaded Medical Document"
+                            className="max-h-[520px] max-w-full object-contain p-2"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center rounded-3xl bg-slate-50 border border-slate-200 text-slate-500 space-y-3">
+                      <FileText className="w-10 h-10 mx-auto text-slate-400" />
+                      <h4 className="text-sm font-semibold text-slate-800">
+                        Electronic ABDM Diagnostic Record
+                      </h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        This document was received electronically via ABDM FHIR gateway. The extracted parameters and clinical summaries reflect the authenticated lab payload.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Collapsible View Extracted Text (OCR) Section */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsExtractedTextExpanded(!isExtractedTextExpanded)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700 flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                    <span>View Extracted Text (OCR / Machine Text)</span>
+                  </span>
+                  {isExtractedTextExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+
+                {isExtractedTextExpanded && (
+                  <div className="mt-3 p-4 rounded-2xl bg-slate-900 text-slate-200 font-mono text-[11px] leading-relaxed overflow-x-auto max-h-64 border border-slate-800 whitespace-pre-wrap">
+                    {selectedReport.extractedText ||
+                      'No raw OCR text preserved. Parameters were ingested directly as structured entities.'}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Sign-off & Download Action */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="text-slate-500">
-                Sign-off: <strong className="text-slate-800">{selectedReport.labTechnician}</strong>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => alert(`Downloaded: ${selectedReport.title}.pdf`)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Signed PDF</span>
-                </button>
-              </div>
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 text-xs shrink-0">
+              <span className="text-slate-500">
+                ABDM FHIR Resource • Verified Record
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReport(null);
+                  setIsExtractedTextExpanded(false);
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-medium bg-slate-950 text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
+              >
+                Close Document
+              </button>
             </div>
           </div>
         </div>
@@ -1240,12 +2863,12 @@ export const PatientDashboardView = () => {
 
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center font-bold text-xl text-white">
-                  {patient.name.split(' ').map((n) => n[0]).join('')}
+                  {(safePatient.name || 'Patient').split(' ').filter(Boolean).map((n) => n[0]).join('') || 'P'}
                 </div>
                 <div className="space-y-0.5">
-                  <div className="text-base font-semibold text-white">{patient.name}</div>
-                  <div className="text-xs text-slate-300 font-mono">{patient.gender}, Age: {patient.age}</div>
-                  <div className="text-xs text-sky-300 font-mono">DOB: 14/08/1976</div>
+                  <div className="text-base font-semibold text-white">{safePatient.name}</div>
+                  <div className="text-xs text-slate-300 font-mono">{safePatient.gender}, Age: {safePatient.age}</div>
+                  <div className="text-xs text-sky-300 font-mono">ABDM Enrolled</div>
                 </div>
               </div>
 
@@ -1253,9 +2876,9 @@ export const PatientDashboardView = () => {
                 <div>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider">ABHA Number</div>
                   <div className="text-sm font-mono font-bold text-sky-300 tracking-wide">
-                    {patient.abhaId}
+                    {safePatient.abhaId}
                   </div>
-                  <div className="text-[11px] text-slate-300">{patient.abhaAddress}</div>
+                  <div className="text-[11px] text-slate-300">{safePatient.abhaAddress || 'patient@abdm'}</div>
                 </div>
 
                 {/* Simulated QR Code Box */}
@@ -1284,80 +2907,641 @@ export const PatientDashboardView = () => {
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 sm:p-8 space-y-5">
+            {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-sky-600" />
-                <h3 className="text-base font-semibold text-slate-950">Upload Medical Document</h3>
+                <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">Upload Medical Document</h3>
+                  <p className="text-[11px] text-slate-400">PDF, PNG, JPG files are digitized with AI OCR</p>
+                </div>
               </div>
               <button
-                onClick={() => setShowUploadModal(false)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                type="button"
+                onClick={() => {
+                  if (!isUploading) {
+                    setShowUploadModal(false);
+                    removeSelectedFile();
+                    setUploadError(null);
+                  }
+                }}
+                disabled={isUploading}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4 text-left text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Document Type</label>
-                <select
-                  value={uploadForm.docType}
-                  onChange={(e) => setUploadForm({ ...uploadForm, docType: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                >
-                  <option>Diagnostic Lab Report</option>
-                  <option>Radiology / X-Ray / MRI Scan</option>
-                  <option>Physician Prescription</option>
-                  <option>Discharge Summary</option>
-                  <option>Vaccination Certificate</option>
-                </select>
+            {/* Hidden Native File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleFileSelect(e.target.files[0]);
+                }
+              }}
+              className="hidden"
+            />
+
+            {/* Multi-stage Async Processing View */}
+            {uploadProgressStep !== 'IDLE' && uploadProgressStep !== 'FAILED' ? (
+              <div className="py-6 px-4 space-y-6 text-center animate-fadeIn">
+                <div className="w-16 h-16 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center mx-auto shadow-sm">
+                  {uploadProgressStep === 'COMPLETED' ? (
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600 animate-bounce" />
+                  ) : (
+                    <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-base font-semibold text-slate-900">
+                    {uploadProgressStep === 'UPLOADING' && 'Uploading Document...'}
+                    {uploadProgressStep === 'VALIDATING' && 'Validating File & Security...'}
+                    {uploadProgressStep === 'EXTRACTING' && 'Running OCR & Extracting Medical Data...'}
+                    {uploadProgressStep === 'SUMMARIZING' && 'Generating Dual AI Clinical Summaries...'}
+                    {uploadProgressStep === 'COMPLETED' && 'Document Processing Completed!'}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Digitizing your clinical document with multimodal OCR intelligence
+                  </p>
+                </div>
+
+                {/* 5-Step Progress Bar */}
+                <div className="space-y-2.5 max-w-sm mx-auto text-left text-xs">
+                  {[
+                    { key: 'UPLOADING', label: '1. Uploading Document' },
+                    { key: 'VALIDATING', label: '2. Validating File Integrity' },
+                    { key: 'EXTRACTING', label: '3. Extracting Structured Medical Information' },
+                    { key: 'SUMMARIZING', label: '4. AI Clinical & Patient Summary' },
+                    { key: 'COMPLETED', label: '5. Completed & Linked to ABDM' },
+                  ].map((st, idx) => {
+                    const stepOrder = ['UPLOADING', 'VALIDATING', 'EXTRACTING', 'SUMMARIZING', 'COMPLETED'];
+                    const currentIdx = stepOrder.indexOf(uploadProgressStep);
+                    const thisIdx = stepOrder.indexOf(st.key);
+                    const isPassed = currentIdx > thisIdx || uploadProgressStep === 'COMPLETED';
+                    const isCurrent = currentIdx === thisIdx && uploadProgressStep !== 'COMPLETED';
+
+                    return (
+                      <div
+                        key={st.key}
+                        className={`flex items-center gap-2.5 p-2 rounded-xl transition ${
+                          isCurrent
+                            ? 'bg-sky-50 border border-sky-200 text-sky-900 font-medium'
+                            : isPassed
+                            ? 'text-emerald-800'
+                            : 'text-slate-400 opacity-60'
+                        }`}
+                      >
+                        {isPassed ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : isCurrent ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-sky-600 shrink-0" />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0 flex items-center justify-center text-[10px]">
+                            {idx + 1}
+                          </div>
+                        )}
+                        <span className="text-xs">{st.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : uploadProgressStep === 'FAILED' ? (
+              /* Failed Processing State Card (Section 12) */
+              <div className="py-6 px-4 space-y-5 text-center animate-fadeIn">
+                <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+                  <AlertCircle className="w-7 h-7 text-rose-600" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h4 className="text-base font-semibold text-rose-950">
+                    Processing Failed
+                  </h4>
+                  <p className="text-xs text-rose-800 font-medium max-w-sm mx-auto">
+                    We couldn't understand this document. Please upload a clearer document or try again.
+                  </p>
+                  {uploadError && (
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto pt-1 font-mono">
+                      Detail: {uploadError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadProgressStep('IDLE');
+                      setUploadError(null);
+                    }}
+                    className="px-5 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
+                  >
+                    Upload Clearer Document
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      setUploadProgressStep('IDLE');
+                      setUploadError(null);
+                      removeSelectedFile();
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Normal Upload Form */
+              <div className="space-y-4 text-left text-xs">
+                {/* Document Type Dropdown */}
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Document Type</label>
+                  <select
+                    value={uploadForm.docType}
+                    onChange={(e) => setUploadForm({ ...uploadForm, docType: e.target.value })}
+                    disabled={isUploading}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none transition disabled:opacity-60"
+                  >
+                    <option>Diagnostic Lab Report</option>
+                    <option>Radiology / X-Ray / MRI Scan</option>
+                    <option>Physician Prescription</option>
+                    <option>Discharge Summary</option>
+                    <option>Doctor Consultation Document</option>
+                    <option>Vaccination Certificate</option>
+                    <option>Previous Medical Record</option>
+                  </select>
+                </div>
+
+                {/* Test or Document Title Input */}
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Test or Document Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Complete Blood Count & Lipid Profile"
+                    value={uploadForm.testName}
+                    onChange={(e) => setUploadForm({ ...uploadForm, testName: e.target.value })}
+                    disabled={isUploading}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none transition disabled:opacity-60"
+                  />
+                </div>
+
+                {/* Drag and Drop Zone or Selected File Preview */}
+                {!uploadForm.file ? (
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`p-6 rounded-2xl border-2 border-dashed transition cursor-pointer text-center space-y-2.5 ${
+                      isDragging
+                        ? 'border-sky-500 bg-sky-50/80 ring-2 ring-sky-200 scale-[1.01]'
+                        : 'border-slate-200 hover:border-sky-400 bg-slate-50/50 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 text-sky-600 flex items-center justify-center mx-auto shadow-2xs">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-semibold text-slate-800">
+                        Click or drag document to upload
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        PDF, PNG, JPEG up to 20MB • Processed with OCR & AI
+                      </div>
+                    </div>
+                    <div className="inline-flex items-center gap-1 text-[11px] text-sky-700 bg-sky-100/60 font-medium px-2.5 py-1 rounded-full">
+                      <Paperclip className="w-3 h-3" />
+                      <span>Browse Local Files</span>
+                    </div>
+                  </div>
+                ) : (
+                  /* Selected File Card */
+                  <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200/80 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-sky-200 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="overflow-hidden space-y-0.5">
+                        <div className="text-xs font-semibold text-slate-900 truncate max-w-[260px] sm:max-w-xs">
+                          {uploadForm.file.name}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                          <span>
+                            {uploadForm.file.size > 1024 * 1024
+                              ? `${(uploadForm.file.size / (1024 * 1024)).toFixed(2)} MB`
+                              : `${Math.round(uploadForm.file.size / 1024)} KB`}
+                          </span>
+                          <span>•</span>
+                          <span className="text-emerald-700 font-medium flex items-center gap-0.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            Ready for AI Extraction
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={removeSelectedFile}
+                      disabled={isUploading}
+                      className="p-1.5 rounded-lg hover:bg-white text-slate-400 hover:text-rose-600 transition cursor-pointer shrink-0 disabled:opacity-50"
+                      title="Remove file"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload Error Banner */}
+                {uploadError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="leading-snug">{uploadError}</div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmUpload}
+                    disabled={isUploading || !uploadForm.file}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Confirm Upload & Start AI Processing</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isUploading) {
+                        setShowUploadModal(false);
+                        removeSelectedFile();
+                        setUploadError(null);
+                      }
+                    }}
+                    disabled={isUploading}
+                    className="px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 3: RECORD CLINICAL VITALS
+          ========================================================================= */}
+      {showRecordVitalsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleUp">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                  <HeartPulse className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">Record Clinical Vitals</h3>
+                  <p className="text-xs text-slate-500">Record latest biometric parameters to health record</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecordVitalsModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordVitalsSubmit} className="p-6 space-y-4 text-xs">
+              {vitalsFormError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>{vitalsFormError}</div>
+                </div>
+              )}
+
+              {/* BP Systolic & Diastolic */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Systolic BP (mmHg)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 120"
+                    value={vitalsForm.systolic}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, systolic: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Diastolic BP (mmHg)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 80"
+                    value={vitalsForm.diastolic}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, diastolic: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Pulse & SpO2 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Pulse / Heart Rate (bpm)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 74"
+                    value={vitalsForm.pulse}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, pulse: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Oxygen SpO2 (%)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 98"
+                    value={vitalsForm.spo2}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, spo2: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Temperature & Blood Sugar */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Temperature (°F)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 98.6"
+                    value={vitalsForm.temperature}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, temperature: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Blood Sugar (mg/dL)</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      placeholder="e.g. 105"
+                      value={vitalsForm.bloodSugar}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, bloodSugar: e.target.value })}
+                      className="w-2/3 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                    />
+                    <select
+                      value={vitalsForm.sugarType}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, sugarType: e.target.value })}
+                      className="w-1/3 px-2 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-[11px]"
+                    >
+                      <option value="RANDOM">Random</option>
+                      <option value="FASTING">Fasting</option>
+                      <option value="POST_PRANDIAL">PP</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Weight & Height (Auto BMI calculated on server) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Weight (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 68.5"
+                    value={vitalsForm.weight}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, weight: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Height (cm)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 172"
+                    value={vitalsForm.height}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, height: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Test or Document Title</label>
+                <label className="font-semibold text-slate-700 block mb-1">Clinical Notes (Optional)</label>
                 <input
                   type="text"
-                  placeholder="e.g. Vitamin D3 & B12 Screening"
-                  value={uploadForm.testName}
-                  onChange={(e) => setUploadForm({ ...uploadForm, testName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  placeholder="e.g. Patient resting for 15 mins prior to reading"
+                  value={vitalsForm.notes}
+                  onChange={(e) => setVitalsForm({ ...vitalsForm, notes: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
-              {/* Drag and Drop Box */}
-              <div className="p-6 rounded-2xl border-2 border-dashed border-slate-200 hover:border-sky-400 text-center space-y-2 bg-slate-50/50 transition cursor-pointer">
-                <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-sky-600 flex items-center justify-center mx-auto shadow-2xs">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div className="text-xs font-semibold text-slate-800">
-                  Click or drag document to upload
-                </div>
-                <div className="text-[11px] text-slate-400">
-                  PDF, PNG, JPEG up to 15MB • Synced to ABDM Locker
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-3">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setShowUploadModal(false);
-                    setUploadSuccessToast(true);
-                    setTimeout(() => setUploadSuccessToast(false), 3000);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
+                  type="submit"
+                  disabled={isSubmittingVitals}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Confirm Upload & Submit
+                  {isSubmittingVitals ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>Save Vitals to EMR</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowUploadModal(false)}
+                  onClick={() => setShowRecordVitalsModal(false)}
+                  disabled={isSubmittingVitals}
                   className="px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 4: BOOK CONSULTATION APPOINTMENT
+          ========================================================================= */}
+      {showBookAppointmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleUp">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">Book Clinical Consultation</h3>
+                  <p className="text-xs text-slate-500">Schedule an appointment with an attending physician</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBookAppointmentModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
+
+            <form onSubmit={handleBookAppointmentSubmit} className="p-6 space-y-4 text-xs">
+              {appointmentFormError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>{appointmentFormError}</div>
+                </div>
+              )}
+
+              {/* Doctor & Specialty Selection */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Consulting Physician</label>
+                <select
+                  value={appointmentForm.doctorName}
+                  onChange={(e) => {
+                    const sel = e.target.value;
+                    if (sel === 'Dr. Aarav Mehta') {
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        doctorId: 'DOC-AYUSH-01',
+                        doctorName: 'Dr. Aarav Mehta',
+                        doctorSpecialization: 'Ayurveda & Panchakarma Specialist',
+                      });
+                    } else if (sel === 'Dr. Priya Sharma') {
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        doctorId: 'DOC-MED-01',
+                        doctorName: 'Dr. Priya Sharma',
+                        doctorSpecialization: 'General Medicine & Diabetology',
+                      });
+                    } else {
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        doctorId: 'DOC-CARD-02',
+                        doctorName: 'Dr. Rajesh Patel',
+                        doctorSpecialization: 'Cardiology & Preventive Care',
+                      });
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                >
+                  <option value="Dr. Priya Sharma">Dr. Priya Sharma (General Medicine & Diabetology)</option>
+                  <option value="Dr. Aarav Mehta">Dr. Aarav Mehta (AYUSH — Ayurveda & Panchakarma)</option>
+                  <option value="Dr. Rajesh Patel">Dr. Rajesh Patel (Cardiology & Preventive Care)</option>
+                </select>
+              </div>
+
+              {/* Consultation Type */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Consultation Mode</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAppointmentForm({ ...appointmentForm, consultationType: 'IN_PERSON' })}
+                    className={`py-2 px-3 rounded-xl border text-center font-medium transition cursor-pointer ${
+                      appointmentForm.consultationType === 'IN_PERSON'
+                        ? 'bg-slate-950 text-white border-slate-950'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    In-Person Hospital Visit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAppointmentForm({ ...appointmentForm, consultationType: 'TELECONSULTATION' })}
+                    className={`py-2 px-3 rounded-xl border text-center font-medium transition cursor-pointer ${
+                      appointmentForm.consultationType === 'TELECONSULTATION'
+                        ? 'bg-slate-950 text-white border-slate-950'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Video Teleconsult
+                  </button>
+                </div>
+              </div>
+
+              {/* Date & Time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Appointment Date</label>
+                  <input
+                    type="date"
+                    value={appointmentForm.date}
+                    onChange={(e) => setAppointmentForm({ ...appointmentForm, date: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Time Slot</label>
+                  <select
+                    value={appointmentForm.time}
+                    onChange={(e) => setAppointmentForm({ ...appointmentForm, time: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  >
+                    <option>09:30 AM</option>
+                    <option>10:30 AM</option>
+                    <option>11:30 AM</option>
+                    <option>02:00 PM</option>
+                    <option>03:30 PM</option>
+                    <option>04:30 PM</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Reason for Visit</label>
+                <textarea
+                  rows={2}
+                  placeholder="Describe your current symptoms or reason for follow-up"
+                  value={appointmentForm.reason}
+                  onChange={(e) => setAppointmentForm({ ...appointmentForm, reason: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-3">
+                <button
+                  type="submit"
+                  disabled={isSubmittingAppointment}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingAppointment ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Calendar className="w-3.5 h-3.5" />
+                  )}
+                  <span>Confirm Booking</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBookAppointmentModal(false)}
+                  disabled={isSubmittingAppointment}
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

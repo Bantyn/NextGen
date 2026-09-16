@@ -13,6 +13,7 @@ import assistantRoutes from './assistantRoutes.js';
 import whatsappRoutes from './whatsappRoutes.js';
 import clinicalCaseRoutes from './clinicalCaseRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import doctorRoutes from './doctorRoutes.js';
 
 const router = express.Router();
 
@@ -31,6 +32,8 @@ router.use('/assistant', assistantRoutes);
 router.use('/whatsapp', whatsappRoutes);
 router.use('/clinical-cases', clinicalCaseRoutes);
 router.use('/doctors/emergency-cases', clinicalCaseRoutes);
+router.use('/doctor', doctorRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;
+

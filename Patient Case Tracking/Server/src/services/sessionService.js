@@ -19,6 +19,8 @@ export class SessionService {
     language = 'gu-IN',
     consultation_type = 'GENERAL',
     chief_complaint_category = null,
+    opd_type = 'GENERAL',
+    opd_system = 'GENERAL_MEDICINE',
   }) {
     if (!patient_id) {
       throw ApiError.badRequest('patient_id is required to start a clinical session.', 'PATIENT_ID_REQUIRED');
@@ -31,12 +33,15 @@ export class SessionService {
     }
 
     const session_id = this.generateSessionId();
+    const resolvedOpdType = opd_type || (String(consultation_type).startsWith('AYUSH') ? 'AYUSH' : 'GENERAL');
 
     const session = await sessionRepository.create({
       session_id,
       patient_id: patient_id.toUpperCase(),
       language,
       consultation_type,
+      opd_type: resolvedOpdType,
+      opd_system: opd_system || (resolvedOpdType === 'AYUSH' ? 'AYURVEDA' : 'GENERAL_MEDICINE'),
       chief_complaint_category,
       status: SESSION_STATUS.STARTED,
       started_at: new Date(),

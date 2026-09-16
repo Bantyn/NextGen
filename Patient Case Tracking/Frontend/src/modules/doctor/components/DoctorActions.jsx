@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Printer, Edit3, Check, Volume2 } from 'lucide-react';
+import { ArrowLeft, Printer, Edit3, Check, Volume2, Share2 } from 'lucide-react';
 
 /**
  * DoctorActions Component
@@ -14,6 +14,7 @@ export const DoctorActions = ({
   onSignAndComplete,
   onCallNext,
   nextPatientToken,
+  onTransfer,
 }) => {
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap pb-2">
@@ -37,6 +38,17 @@ export const DoctorActions = ({
           >
             <Volume2 className="w-3.5 h-3.5 text-slate-500" />
             <span>Call Next ({nextPatientToken})</span>
+          </button>
+        )}
+
+        {onTransfer && !isVerified && (
+          <button
+            type="button"
+            onClick={onTransfer}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 transition cursor-pointer shadow-2xs"
+          >
+            <Share2 className="w-3.5 h-3.5 text-purple-600" />
+            <span>Transfer Case</span>
           </button>
         )}
 

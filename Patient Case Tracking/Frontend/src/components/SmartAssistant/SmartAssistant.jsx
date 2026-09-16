@@ -151,6 +151,12 @@ export const SmartAssistant = ({ defaultRole = 'PATIENT' }) => {
       if (action.route) window.location.href = action.route;
     } else if (action.type === 'VIEW_OPD_QUEUE') {
       window.location.href = '/opd-queue';
+    } else if (action.type === 'OPEN_MEDICINE') {
+      const medName = action.medicine || action.label?.replace(/^View\s+|\s+Details$/gi, '') || '';
+      handleSendMessage(medName ? `Tell me about ${medName}` : action.label);
+    } else if (action.type === 'BOOK_APPOINTMENT') {
+      const docName = action.doctor_name || action.label?.replace(/^Book\s+(?:with\s+|appointment\s+with\s+)?/gi, '') || '';
+      handleSendMessage(docName ? `Book appointment with ${docName}` : action.label);
     } else if (action.label) {
       handleSendMessage(action.label);
     }

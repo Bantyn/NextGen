@@ -65,6 +65,22 @@ const UserSchema = new mongoose.Schema(
       default: 'AVAILABLE',
       index: true,
     },
+    opd_type: {
+      type: String,
+      enum: ['GENERAL', 'AYUSH'],
+      default: 'GENERAL',
+      index: true,
+    },
+    opd_system: {
+      type: String,
+      default: 'GENERAL_MEDICINE',
+      index: true,
+    },
+    room: {
+      type: String,
+      default: 'Room 104',
+      trim: true,
+    },
   },
   { timestamps: true }
 );

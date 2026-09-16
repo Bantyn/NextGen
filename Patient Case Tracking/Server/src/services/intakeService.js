@@ -275,7 +275,7 @@ export class IntakeService {
 
     if (intent === 'general help') {
       const answers = {
-        'en-IN': 'I am your MediKiosk clinical intake assistant. Please share your symptoms and I will prepare a structured summary for your doctor.',
+        'en-IN': 'I am your Sehat clinical intake assistant. Please share your symptoms and I will prepare a structured summary for your doctor.',
         'hi-IN': 'मैं आपका मेडीकियोस्क सहायक हूँ। कृपया अपनी स्वास्थ्य समस्या के बारे में बताएं, और मैं डॉक्टर के लिए आपकी मेडिकल रिपोर्ट तैयार करूँगा।',
         'gu-IN': 'હું તમારો મેડિકિયોસ્ક ક્લિનિકલ સહાયક છું. કૃપા કરીને તમારી તકલીફ વિશે જણાવો, હું ડૉક્ટર માટે તમારી વિગતો તૈયાર કરીશ.',
       };

@@ -50,6 +50,21 @@ const PatientSchema = new mongoose.Schema(
       default: 'CHECKED_IN',
       index: true,
     },
+    opd_type: {
+      type: String,
+      enum: ['GENERAL', 'AYUSH'],
+      default: 'GENERAL',
+      index: true,
+    },
+    opd_system: {
+      type: String,
+      default: 'GENERAL_MEDICINE',
+      index: true,
+    },
+    medical_specialization: {
+      type: String,
+      default: 'General Medicine',
+    },
   },
   { timestamps: true }
 );

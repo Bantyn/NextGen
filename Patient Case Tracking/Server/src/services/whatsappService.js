@@ -268,7 +268,7 @@ export class WhatsAppService {
         `_કૃપા કરીને રૂમ 104 ની બહાર પ્રતીક્ષા ક્ષેત્રમાં બેસો._`;
     } else {
       messageText =
-        `🏥 *MediKiosk - OPD Registration Successful!*\n\n` +
+        `🏥 *Sehat - OPD Registration Successful!*\n\n` +
         `Namaste *${patientName}*,\n` +
         `Your clinical intake & OPD check-in has been successfully completed.\n\n` +
         `📋 *Your Check-In Summary:*\n` +
@@ -342,6 +342,66 @@ export class WhatsAppService {
         messageText,
         notice: 'OpenWA gateway is sleeping or unreachable, details preserved.',
       };
+    }
+  }
+
+  /**
+   * 5. Send Patient Login OTP via OpenWA Gateway
+   */
+  async sendPatientLoginOtp({ phone, name, otp }) {
+    if (!phone) {
+      return { sent: false, error: 'Phone number is required.' };
+    }
+
+    let cleanNumber = String(phone).replace(/[^0-9]/g, '');
+    if (cleanNumber.length === 10) {
+      cleanNumber = `91${cleanNumber}`;
+    }
+    const chatId = `${cleanNumber}@c.us`;
+
+    const messageText = 
+      `*Sehat Patient Portal Login*\n\n` +
+      `Namaste ${name ? '*' + name + '*' : 'Patient'},\n\n` +
+      `Your One-Time Password (OTP) for logging into the Patient Dashboard is:\n` +
+      `*${otp}*\n\n` +
+      `_This OTP is valid for 5 minutes. Do not share it with anyone._`;
+
+    const openwaBaseUrl = process.env.OPENWA_BASE_URL || 'https://openwa-g0m6.onrender.com';
+    const openwaSessionId = process.env.OPENWA_SESSION_ID || '207513ad-f6c6-4a87-b1c3-269b993de448';
+    const openwaApiKey = process.env.OPENWA_API_KEY || 'owa_k1_ee83737ce065a066177fb0c92f57474e62f46ce48087390bd02f940011a4e59f';
+    const targetUrl = `${openwaBaseUrl}/api/sessions/${openwaSessionId}/messages/send-text`;
+
+    try {
+      logger.info(`[OpenWA]: Dispatching login OTP message to ${chatId}`);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openwaApiKey}`,
+        },
+        body: JSON.stringify({
+          chatId,
+          text: messageText,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const resData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        logger.warn(`[OpenWA]: Failed to send OTP message. HTTP ${response.status}:`, resData);
+        return { sent: false, error: 'OpenWA gateway error' };
+      }
+
+      return { sent: true, chatId };
+    } catch (err) {
+      logger.warn(`[OpenWA]: Could not deliver OTP to ${chatId}: ${err.message}`);
+      return { sent: false, error: err.message };
     }
   }
 }

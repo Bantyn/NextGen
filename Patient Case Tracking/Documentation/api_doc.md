@@ -353,19 +353,69 @@ All responses conform to the enterprise JSON envelope contract:
 
 ---
 
-## 9. 📄 Medical Documents & OCR
+## 9. 📄 Medical Documents & Multimodal Document Intelligence
 
 ### `POST /api/v1/documents/upload`
-- **Description**: Upload prescription image or lab report scan (Multer multipart form).
+- **Description**: Upload medical document (PDF, JPG, JPEG, PNG, WebP up to 20MB) for text extraction, OCR, structured clinical information parsing, dual-level AI summaries (clinical & patient-friendly), and important abnormal finding detection with reference intervals.
+- **Access Control**: Public / Authenticated
 - **Headers**: `Content-Type: multipart/form-data`
 - **Form Data**:
-  - `file`: `[File Attachment]`
-  - `patient_id`: `"PAT-AD16808B"`
-  - `session_id`: `"SES-3DB65058"`
-  - `document_type`: `"PRESCRIPTION"`
+  - `file`: `[File Attachment - PDF / Image]`
+  - `patient_id`: `"PAT-AD16808B"` (optional)
+  - `session_id`: `"SES-3DB65058"` (optional)
+  - `document_type`: `"LAB_REPORT" | "PRESCRIPTION" | "DISCHARGE_SUMMARY" | "IMAGING_REPORT" | "CONSULTATION_NOTE" | "OTHER"`
+  - `title`: `"Complete Blood Count (CBC)"` (optional)
+- **Success Response (200 OK)**:
+```json
+{
+  "status": "success",
+  "document_id": "doc-1726310000-123456",
+  "patient_id": "PAT-AD16808B",
+  "document_type": "LAB_REPORT",
+  "file_name": "blood_test_report.pdf",
+  "file_url": "/uploads/doc-1726310000.pdf",
+  "extracted_data": {
+    "patient": { "name": "Ramesh Patel", "age": 48, "gender": "Male" },
+    "lab_results": [
+      { "test_name": "Hemoglobin (Hb)", "observed_value": "11.2", "reference_range": "13.0 - 17.0", "unit": "g/dL", "flag": "LOW" }
+    ]
+  },
+  "clinical_summary": {
+    "physician_digest": "Patient Overview: Ramesh Patel (48y, Male)...\nImportant Abnormal Findings: Hemoglobin (Hb): 11.2 g/dL (Ref: 13.0 - 17.0, Flag: LOW)."
+  },
+  "patient_summary": {
+    "title": "Hemoglobin & Diagnostic Panel",
+    "meaning": "Certain values are outside standard reference intervals.",
+    "plain_text": "📄 What this report is about\n...\n⚠️ Important: This summary is generated from your uploaded report and is not a diagnosis."
+  },
+  "important_findings": [
+    { "finding": "Hemoglobin (Hb): 11.2 g/dL", "status": "LOW", "severity": "IMPORTANT" }
+  ],
+  "processing_status": "COMPLETED",
+  "confidence_score": 0.94,
+  "extraction_confidence": "CLEAR"
+}
+```
+
+### `GET /api/v1/documents/patient/:patientId`
+- **Description**: Retrieve all processed medical documents and extraction intelligence for a specific patient.
+- **Access Control**: Authenticated Patient / Doctor / Staff
+- **Success Response (200 OK)**: Array of `MedicalDocument` objects.
+
+### `GET /api/v1/documents/:documentId`
+- **Description**: Retrieve full document record, extracted clinical parameters, dual summaries, and verification state.
+- **Success Response (200 OK)**: Single `MedicalDocument` object.
+
+### `GET /api/v1/documents/:documentId/summary`
+- **Description**: Fast clinical digest and patient-friendly explanation for dashboard cards and quick views.
+- **Success Response (200 OK)**: Summary object with `clinical_summary`, `patient_summary`, and `important_findings`.
+
+### `GET /api/v1/documents/:documentId/file`
+- **Description**: Securely serve original uploaded document file (PDF or Image) with anti-path-traversal protection.
+- **Success Response (200 OK)**: Streamed file binary with appropriate Content-Type.
 
 ### `POST /api/v1/documents/process-base64`
-- **Description**: Submit base64 encoded document image for instant OCR processing.
+- **Description**: Submit base64 encoded document image or PDF for instant OCR & clinical structuring.
 
 ---
 
@@ -1123,5 +1173,91 @@ Central administrative control layer for hospital operations, live queue managem
 ### `GET /api/v1/admin/audit-logs`
 - **Description**: Paginated stream of security and administrative audit logs with filter by action, resource, or actor.
 - **Access Control**: Authenticated (`ADMIN`)
+
+---
+
+## 16. 🩺 Doctor Workspace & Clinical Consultation APIs (`/api/v1/doctor`)
+
+Central authenticated clinical workspace providing live OPD queue access, patient case bundle assembly, consultation notes and prescription management, prescription templates, and availability toggles.
+
+### `GET /api/v1/doctor/dashboard`
+- **Description**: Real-time summary statistics for the authenticated doctor's OPD session.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Headers**: `Authorization: Bearer <token>`
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalOPD": 28,
+    "awaitingReview": 2,
+    "emergencyTriage": 0,
+    "completedToday": 24,
+    "averageWaitMins": 12,
+    "timestamp": "2026-09-10T16:09:08.685Z"
+  }
+}
+```
+
+### `GET /api/v1/doctor/queue`
+- **Description**: Live OPD patient queue with demographic details, token, priority level, and session status.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+- **Query Params**: `tab` (`ALL`, `PENDING`, `RED_FLAG`, `APPROVED`), `search`
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "sessionId": "SES-3DB65058",
+      "patientId": "PAT-AD16808B",
+      "token": "TK-101",
+      "patientName": "Ramesh Patel",
+      "age": 46,
+      "gender": "MALE",
+      "chiefComplaint": "Chest discomfort and persistent dry cough",
+      "language": "gu-IN",
+      "triageLevel": "ROUTINE",
+      "status": "PENDING_REVIEW",
+      "checkInTime": "09:15 AM",
+      "waitTime": "12 mins"
+    }
+  ]
+}
+```
+
+### `GET /api/v1/doctor/cases/:sessionId`
+- **Description**: Full authorized clinical case workspace bundle (Patient demographics, AI clinical summary, turn-by-turn conversation messages, medical documents, structured history).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/notes`
+- **Description**: Save physician's clinical notes, assessment, treatment plan, and follow-up.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/prescribe`
+- **Description**: Attach structured physician prescription to the patient encounter.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `POST /api/v1/doctor/cases/:sessionId/complete`
+- **Description**: Finalize and digitally sign consultation encounter. Sets review status to `APPROVED` and marks session `COMPLETED`.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `PATCH /api/v1/doctor/availability`
+- **Description**: Update doctor's live duty state and availability (`AVAILABLE`, `IN_CONSULTATION`, `ON_BREAK`, `OFF_DUTY`).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/templates` & `POST /api/v1/doctor/templates`
+- **Description**: Prescription templates CRUD for rapid standard regimen prescribing.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/analytics`
+- **Description**: Physician clinical telemetry (Cases handled, consultation duration, specialty breakdown).
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+### `GET /api/v1/doctor/colleagues`
+- **Description**: List available on-duty hospital specialists and colleagues for clinical case transfer or escalation.
+- **Access Control**: Authenticated (`DOCTOR`, `ADMIN`)
+
+
 
 

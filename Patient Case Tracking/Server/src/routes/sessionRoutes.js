@@ -14,7 +14,9 @@ const router = express.Router();
 const initSessionSchema = z.object({
   patient_id: z.string().min(1, 'patient_id is required'),
   language: z.string().optional(),
-  consultation_type: z.enum(['GENERAL', 'AYUSH_AYURVEDA']).optional(),
+  consultation_type: z.string().optional(),
+  opd_type: z.enum(['GENERAL', 'AYUSH']).optional(),
+  opd_system: z.string().optional(),
   chief_complaint_category: z.string().nullable().optional(),
 });
 
