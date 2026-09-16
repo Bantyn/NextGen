@@ -10,14 +10,19 @@ export const getPatientDashboard = async (req, res, next) => {
   try {
     let patientId = null;
 
-    // Strict Authorization: If logged in as PATIENT, strictly enforce own ID
+    // Authorization: If logged in as PATIENT, enforce identity ownership
     if (req.user?.role === 'PATIENT') {
       const ownId = (req.user.patient_id || req.user.id || '').toUpperCase();
       const requestedId = (req.params.id || req.query.patient_id || req.query.patientId || '').toUpperCase();
-      if (requestedId && requestedId !== ownId) {
-        throw ApiError.forbidden("Access denied: You are not authorized to view another patient's medical records.", 'FORBIDDEN_ACCESS');
+
+      if (requestedId && ownId && requestedId !== ownId) {
+        // Verify if requestedId belongs to the same patient via phone, identity or alias
+        const isSamePatient = await patientDashboardService.verifyPatientOwnership(ownId, requestedId);
+        if (!isSamePatient) {
+          throw ApiError.forbidden("Access denied: You are not authorized to view another patient's medical records.", 'FORBIDDEN_ACCESS');
+        }
       }
-      patientId = req.user.patient_id || req.user.id;
+      patientId = requestedId || ownId;
     } else {
       // Staff / Doctor / Admin / Dev Kiosk mode allows passing patient_id
       patientId = req.params.id || req.query.patient_id || req.query.patientId || req.user?.patient_id || req.user?.id;

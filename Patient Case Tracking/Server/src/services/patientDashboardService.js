@@ -1264,6 +1264,59 @@ export class PatientDashboardService {
       throw error;
     }
   }
+
+  /**
+   * Verify whether a requested patientId belongs to the authenticated patient identity
+   */
+  async verifyPatientOwnership(ownId, requestedId) {
+    if (!ownId || !requestedId) return false;
+    if (ownId.toUpperCase() === requestedId.toUpperCase()) return true;
+
+    try {
+      // Check if both IDs belong to records with matching phone or identity links
+      const [ownPatient, requestedPatient] = await Promise.all([
+        Patient.findOne({
+          $or: [
+            { patient_id: ownId },
+            { patient_id: ownId.toUpperCase() },
+            { patient_id: ownId.toLowerCase() },
+          ],
+        }).lean(),
+        Patient.findOne({
+          $or: [
+            { patient_id: requestedId },
+            { patient_id: requestedId.toUpperCase() },
+            { patient_id: requestedId.toLowerCase() },
+          ],
+        }).lean(),
+      ]);
+
+      if (ownPatient && requestedPatient) {
+        // If they share the same phone number, they are the same individual
+        if (ownPatient.phone && requestedPatient.phone && ownPatient.phone === requestedPatient.phone) {
+          return true;
+        }
+      }
+
+      // Check PatientIdentity linkages
+      const identities = await PatientIdentity.find({
+        patient_id: { $in: [ownId, requestedId] },
+      }).lean();
+
+      if (identities.length >= 2) {
+        const refs = identities.map((i) => i.identity_reference);
+        const uniqueRefs = new Set(refs);
+        if (uniqueRefs.size < refs.length) {
+          return true; // share the same ABHA or Aadhaar
+        }
+      }
+
+      return false;
+    } catch (err) {
+      logger.warn('[PatientDashboardService] verifyPatientOwnership error:', err.message);
+      return false;
+    }
+  }
 }
 
 export const patientDashboardService = new PatientDashboardService();

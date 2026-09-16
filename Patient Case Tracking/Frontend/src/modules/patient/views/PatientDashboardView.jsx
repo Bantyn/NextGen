@@ -73,9 +73,12 @@ export const PatientDashboardView = () => {
 
   // 1. State for selected patient profile (synced with real backend data & auth user)
   const [patientsList, setPatientsList] = useState([]);
-  const [selectedPatientId, setSelectedPatientId] = useState(
-    () => sessionStorage.getItem('selected_patient_id') || user?.patient_id || user?.id || null
-  );
+  const [selectedPatientId, setSelectedPatientId] = useState(() => {
+    if (user?.role === 'PATIENT' && (user.patient_id || user.id)) {
+      return user.patient_id || user.id;
+    }
+    return sessionStorage.getItem('selected_patient_id') || user?.patient_id || user?.id || null;
+  });
   const [patient, setPatient] = useState(INITIAL_EMPTY_PATIENT);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [patientLoadError, setPatientLoadError] = useState(null);
@@ -221,11 +224,18 @@ export const PatientDashboardView = () => {
     fetchRegisteredPatients().then((list) => {
       if (isMounted && list && list.length > 0) {
         setPatientsList(list);
-        const storedId = sessionStorage.getItem('selected_patient_id');
-        if (storedId && list.some((p) => p.id === storedId)) {
-          setSelectedPatientId(storedId);
-        } else if (!user?.patient_id && !user?.id && !selectedPatientId) {
-          setSelectedPatientId(list[0].id);
+        // If user is a logged-in patient, their ID takes precedence
+        if (user?.role === 'PATIENT' && (user.patient_id || user.id)) {
+          const authPatientId = user.patient_id || user.id;
+          setSelectedPatientId(authPatientId);
+          sessionStorage.setItem('selected_patient_id', authPatientId);
+        } else {
+          const storedId = sessionStorage.getItem('selected_patient_id');
+          if (storedId && list.some((p) => p.id === storedId)) {
+            setSelectedPatientId(storedId);
+          } else if (!selectedPatientId) {
+            setSelectedPatientId(list[0].id);
+          }
         }
       }
     });
