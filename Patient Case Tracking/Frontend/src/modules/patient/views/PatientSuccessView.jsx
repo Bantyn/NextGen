@@ -116,6 +116,14 @@ export const PatientSuccessView = () => {
                 </>
               )}
             </div>
+            <div className="text-xs text-slate-500 mt-1">
+              Assigned to: <span className="font-medium text-slate-700">
+                {summary.opdMode === 'AYUSH' ? 'Vaidya Rajesh Kumar' : 'Dr. Sarah Mitchell'}
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {summary.opdMode === 'AYUSH' ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'}
+            </div>
           </div>
         </div>
 
