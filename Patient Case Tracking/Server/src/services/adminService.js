@@ -80,10 +80,9 @@ export class AdminService {
       AuditLog.find().sort({ createdAt: -1 }).limit(5).catch(() => []),
     ]);
 
-    // Live Doctor Availability Metrics
-    const allDoctors = doctorService.getAllDoctors();
+    // Live Doctor Availability Metrics — DB only (no hardcoded directory)
     const dbDoctors = await User.find({ role: 'DOCTOR' }).catch(() => []);
-    const availableCount = allDoctors.length + dbDoctors.filter((d) => d.availability_status === 'AVAILABLE').length;
+    const availableCount = dbDoctors.filter((d) => d.availability_status === 'AVAILABLE' && d.on_duty !== false).length;
 
     return {
       kpis: {
@@ -96,8 +95,9 @@ export class AdminService {
         completed_today: completedSessions,
         documents_processed: totalDocuments,
         doctors_available: availableCount,
-        doctors_on_duty: allDoctors.length,
-        ai_conversations_today: Math.max(todayPatients * 3, 14),
+        doctors_on_duty: dbDoctors.filter((d) => d.on_duty !== false).length,
+        total_doctors: dbDoctors.length,
+        ai_conversations_today: Math.max(todayPatients * 3, 0),
       },
       recent_activity: recentAuditLogs,
       timestamp: new Date().toISOString(),
@@ -124,13 +124,20 @@ export class AdminService {
       User.find({ role: 'DOCTOR' }).catch(() => []),
     ]);
 
-    // Merge Directory doctors with live DB status
-    const verifiedDoctors = doctorService.getAllDoctors().map((d) => {
-      const dbMatch = dbDoctors.find((u) => u.doctor_id === d.doctor_id || u.email === d.email);
+    const verifiedDoctors = dbDoctors.map((u) => {
+      const id = u.doctor_id || u._id.toString();
       return {
-        ...d,
-        on_duty: dbMatch ? dbMatch.on_duty !== false : true,
-        availability_status: dbMatch?.availability_status || 'AVAILABLE',
+        doctor_id: id,
+        doctor_name: u.name,
+        email: u.email,
+        phone: u.phone,
+        specialty: u.specialty || 'General Medicine',
+        sub_specialty: u.sub_specialty || '',
+        on_duty: u.on_duty !== false,
+        availability_status: u.availability_status || 'AVAILABLE',
+        is_active: u.is_active !== false,
+        source: 'DATABASE',
+        room: u.room || 'Room 101',
       };
     });
 
@@ -159,33 +166,24 @@ export class AdminService {
    * 3. Doctor Roster & Availability Management
    */
   async getDoctorsList() {
-    const [directoryDocs, dbDocs] = await Promise.all([
-      doctorService.getAllDoctors(),
-      User.find({ role: 'DOCTOR' }).catch(() => []),
-    ]);
+    const dbDocs = await User.find({ role: 'DOCTOR' }).catch(() => []);
 
-    const docsMap = new Map();
-    directoryDocs.forEach((d) => docsMap.set(d.doctor_id, { ...d, source: 'DIRECTORY', on_duty: true, availability_status: 'AVAILABLE' }));
-
-    dbDocs.forEach((u) => {
+    return dbDocs.map((u) => {
       const id = u.doctor_id || u._id.toString();
-      const existing = docsMap.get(id) || {};
-      docsMap.set(id, {
-        ...existing,
+      return {
         doctor_id: id,
         doctor_name: u.name,
         email: u.email,
         phone: u.phone,
-        specialty: u.specialty || existing.specialty || 'General Medicine',
-        sub_specialty: u.sub_specialty || existing.sub_specialty || '',
+        specialty: u.specialty || 'General Medicine',
+        sub_specialty: u.sub_specialty || '',
         on_duty: u.on_duty !== false,
         availability_status: u.availability_status || 'AVAILABLE',
         is_active: u.is_active !== false,
         source: 'DATABASE',
-      });
+        room: u.room || 'Room 101',
+      };
     });
-
-    return Array.from(docsMap.values());
   }
 
   async updateDoctorStatus(doctorId, updates = {}, actorId = 'ADMIN') {
@@ -630,6 +628,73 @@ export class AdminService {
     });
 
     return updated;
+  }
+  /**
+   * 13. Institutional Analytics — Real dynamic data from DB
+   */
+  async getAnalytics() {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [
+      totalSessions,
+      todaySessions,
+      completedSessions,
+      emergencyCases,
+      routineSessions,
+      urgentSessions,
+      totalPatients,
+      totalDoctors,
+      activeDoctors,
+      avgWaitData,
+    ] = await Promise.all([
+      ClinicalSession.countDocuments().catch(() => 0),
+      ClinicalSession.countDocuments({ createdAt: { $gte: todayStart } }).catch(() => 0),
+      ClinicalSession.countDocuments({ status: { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] } }).catch(() => 0),
+      ClinicalSession.countDocuments({ 'red_flags.has_red_flag': true }).catch(() => 0),
+      ClinicalSession.countDocuments({ triage_level: { $in: ['ROUTINE', 'LOW', null] } }).catch(() => 0),
+      ClinicalSession.countDocuments({ triage_level: { $in: ['HIGH', 'URGENT', 'HIGH PRIORITY'] } }).catch(() => 0),
+      Patient.countDocuments().catch(() => 0),
+      User.countDocuments({ role: 'DOCTOR' }).catch(() => 0),
+      User.countDocuments({ role: 'DOCTOR', on_duty: true }).catch(() => 0),
+      ClinicalSession.aggregate([
+        { $match: { started_at: { $exists: true }, updatedAt: { $exists: true }, status: { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] } } },
+        { $project: { wait_ms: { $subtract: ['$updatedAt', '$started_at'] } } },
+        { $group: { _id: null, avg_wait: { $avg: '$wait_ms' } } },
+      ]).catch(() => []),
+    ]);
+
+    const avgWaitMs = avgWaitData?.[0]?.avg_wait || 0;
+    const avgWaitMins = Math.round(avgWaitMs / 60000);
+
+    const moderate = Math.max(0, totalSessions - routineSessions - urgentSessions - emergencyCases);
+    const intakeCompletionRate = totalSessions > 0 ? ((completedSessions / totalSessions) * 100).toFixed(1) : '0.0';
+    const doctorLoad = activeDoctors > 0 ? Math.round(completedSessions / activeDoctors) : 0;
+    const emergencyRate = totalSessions > 0 ? ((emergencyCases / totalSessions) * 100).toFixed(1) : '0.0';
+
+    return {
+      kpis: {
+        avg_wait_mins: avgWaitMins || 0,
+        intake_completion_rate: parseFloat(intakeCompletionRate),
+        doctor_consultation_load: doctorLoad,
+        emergency_escalation_rate: parseFloat(emergencyRate),
+      },
+      triage_distribution: [
+        { label: 'Routine OPD', count: routineSessions, total: totalSessions },
+        { label: 'Moderate Wait', count: moderate, total: totalSessions },
+        { label: 'Urgent Attention', count: urgentSessions, total: totalSessions },
+        { label: 'Emergency / Red Flag', count: emergencyCases, total: totalSessions },
+      ],
+      opd_summary: {
+        total_sessions: totalSessions,
+        today_sessions: todaySessions,
+        completed_sessions: completedSessions,
+        total_patients: totalPatients,
+        total_doctors: totalDoctors,
+        active_doctors: activeDoctors,
+      },
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 

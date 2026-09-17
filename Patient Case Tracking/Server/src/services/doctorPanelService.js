@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { ClinicalSession } from '../models/ClinicalSession.js';
 import { ClinicalRecord } from '../models/ClinicalRecord.js';
 import { Patient } from '../models/Patient.js';
+import { PatientIdentity } from '../models/PatientIdentity.js';
 import { CaseMessage } from '../models/CaseMessage.js';
 import { MedicalDocument } from '../models/MedicalDocument.js';
 import { RedFlagCase, RED_FLAG_STATUS } from '../models/RedFlagCase.js';
@@ -117,30 +118,71 @@ export class DoctorPanelService {
       ],
     }).select('name email specialty sub_specialty opd_type opd_system room on_duty availability_status').catch(() => null);
 
+    const doctorScope = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+
+    const emergencyScope = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+        { assigned_doctor_id: null, triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
+        { assigned_doctor_id: null, 'red_flags.has_red_flag': true },
+      ],
+    };
+
     const [totalToday, waitingCount, inConsultationCount, emergencyCount, completedToday] = await Promise.all([
-      ClinicalSession.countDocuments({ status: { $ne: 'CANCELLED' } }).catch(() => 0),
       ClinicalSession.countDocuments({
-        $or: [
-          { status: { $in: ['STARTED', 'IDENTIFIED', 'IN_PROGRESS', 'CONSENT_PENDING'] } },
-          { journey_stage: 'CHECKED_IN' },
-        ],
-        status: { $nin: ['COMPLETED', 'CONSULTATION_COMPLETE', 'CANCELLED'] },
-      }).catch(() => 0),
-      ClinicalSession.countDocuments({
-        $or: [
-          { status: { $in: ['READY_FOR_DOCTOR', 'DOCTOR_REVIEW'] } },
-          { journey_stage: 'IN_CONSULTATION' },
+        $and: [
+          emergencyScope,
+          { status: { $ne: 'CANCELLED' } },
         ],
       }).catch(() => 0),
       ClinicalSession.countDocuments({
-        $or: [
-          { triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
-          { 'red_flags.has_red_flag': true },
+        $and: [
+          doctorScope,
+          {
+            $or: [
+              { status: { $in: ['STARTED', 'IDENTIFIED', 'IN_PROGRESS', 'CONSENT_PENDING'] } },
+              { journey_stage: 'CHECKED_IN' },
+            ],
+            status: { $nin: ['COMPLETED', 'CONSULTATION_COMPLETE', 'CANCELLED'] },
+          },
         ],
-        status: { $nin: ['COMPLETED', 'CONSULTATION_COMPLETE', 'CANCELLED'] },
       }).catch(() => 0),
       ClinicalSession.countDocuments({
-        status: { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] },
+        $and: [
+          doctorScope,
+          {
+            $or: [
+              { status: { $in: ['READY_FOR_DOCTOR', 'DOCTOR_REVIEW'] } },
+              { journey_stage: 'IN_CONSULTATION' },
+            ],
+          },
+        ],
+      }).catch(() => 0),
+      ClinicalSession.countDocuments({
+        $and: [
+          emergencyScope,
+          {
+            $or: [
+              { triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
+              { 'red_flags.has_red_flag': true },
+            ],
+            status: { $nin: ['COMPLETED', 'CONSULTATION_COMPLETE', 'CANCELLED'] },
+          },
+        ],
+      }).catch(() => 0),
+      ClinicalSession.countDocuments({
+        $and: [
+          doctorScope,
+          { status: { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] } },
+        ],
       }).catch(() => 0),
     ]);
 
@@ -178,21 +220,46 @@ export class DoctorPanelService {
    * 2. Fetch Live OPD Queue with Clinical Details
    */
   async getDoctorOPDQueue(doctorId, { tab = 'ALL', search = '' } = {}) {
-    const filter = {};
+    const doctorUser = await User.findOne({
+      $or: [
+        { doctor_id: doctorId },
+        { email: doctorId },
+        ...(mongoose.Types.ObjectId.isValid(doctorId) ? [{ _id: doctorId }] : []),
+      ],
+    }).select('specialty opd_type opd_system').catch(() => null);
 
+    const ownershipFilter = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+        {
+          assigned_doctor_id: null,
+          $or: [
+            { triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
+            { 'red_flags.has_red_flag': true },
+            ...(doctorUser?.opd_system ? [{ opd_system: doctorUser.opd_system }] : []),
+          ],
+        },
+      ],
+    };
+
+    const tabFilter = {};
     if (tab === 'PENDING') {
-      filter.status = { $in: ['STARTED', 'IDENTIFIED', 'IN_PROGRESS', 'READY_FOR_DOCTOR', 'DOCTOR_REVIEW'] };
+      tabFilter.status = { $in: ['STARTED', 'IDENTIFIED', 'IN_PROGRESS', 'READY_FOR_DOCTOR', 'DOCTOR_REVIEW'] };
     } else if (tab === 'RED_FLAG' || tab === 'triage') {
-      filter.$or = [
+      tabFilter.$or = [
         { triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
         { 'red_flags.has_red_flag': true },
       ];
     } else if (tab === 'APPROVED' || tab === 'COMPLETED' || tab === 'archive') {
-      filter.status = { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] };
+      tabFilter.status = { $in: ['COMPLETED', 'CONSULTATION_COMPLETE'] };
     } else {
       // ALL active + completed
-      filter.status = { $ne: 'CANCELLED' };
+      tabFilter.status = { $ne: 'CANCELLED' };
     }
+
+    const filter = { $and: [ownershipFilter, tabFilter] };
 
     const sessions = await ClinicalSession.find(filter)
       .sort({ updatedAt: -1 })
@@ -215,14 +282,16 @@ export class DoctorPanelService {
         s.triage_level === 'HIGH' ||
         Boolean(s.red_flags?.has_red_flag);
 
+      const realAge = p.age != null ? p.age : (p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
+
       return {
         id: s.session_id,
         sessionId: s.session_id,
         patientId: s.patient_id,
         token: token,
         patientName: fullName,
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 42,
-        gender: p.gender || 'OTHER',
+        age: realAge,
+        gender: p.gender || null,
         chiefComplaint: s.clinical_state?.chief_complaint || s.chief_complaint_category || 'Clinical Intake Assessment',
         language: s.language || 'gu-IN',
         triageLevel: isRedFlag ? 'RED_FLAG' : s.triage_level || 'ROUTINE',
@@ -252,26 +321,139 @@ export class DoctorPanelService {
   }
 
   /**
-   * 3. Fetch Full Clinical Case Workspace Bundle
+   * 3. Fetch Comprehensive Clinical Case Workspace Bundle
    */
   async getPatientClinicalBundle(sessionId, doctorId, userRole) {
     if (!sessionId) {
       throw ApiError.badRequest('Session ID is required');
     }
 
-    const [session, record, messages, documents, redFlag] = await Promise.all([
-      ClinicalSession.findOne({ session_id: sessionId }),
-      ClinicalRecord.findOne({ session_id: sessionId }),
-      CaseMessage.find({ session_id: sessionId }).sort({ turn_number: 1, createdAt: 1 }),
-      MedicalDocument.find({ session_id: sessionId }),
-      RedFlagCase.findOne({ clinical_session_id: sessionId }),
-    ]);
+    const cleanId = String(sessionId).trim();
 
+    // 1. Try finding by session_id in ClinicalSession
+    let session = await ClinicalSession.findOne({
+      $or: [
+        { session_id: cleanId },
+        { session_id: cleanId.toUpperCase() },
+        { session_id: cleanId.toLowerCase() },
+      ],
+    });
+
+    // 2. If not found by session_id, check RedFlagCase
+    let redFlag = null;
     if (!session) {
-      throw ApiError.notFound(`Clinical session '${sessionId}' was not found.`);
+      redFlag = await RedFlagCase.findOne({
+        $or: [
+          { case_id: cleanId },
+          { case_id: cleanId.toUpperCase() },
+          { clinical_session_id: cleanId },
+          { clinical_session_id: cleanId.toUpperCase() },
+        ],
+      });
+      if (redFlag?.clinical_session_id) {
+        session = await ClinicalSession.findOne({
+          $or: [
+            { session_id: redFlag.clinical_session_id },
+            { session_id: redFlag.clinical_session_id.toUpperCase() },
+          ],
+        });
+      }
+    } else {
+      redFlag = await RedFlagCase.findOne({
+        $or: [
+          { clinical_session_id: session.session_id },
+          { case_id: session.session_id },
+        ],
+      });
     }
 
-    const patient = await Patient.findOne({ patient_id: session.patient_id }).catch(() => null);
+    // 3. If session is still not found, check by patient_id
+    if (!session) {
+      session = await ClinicalSession.findOne({
+        $or: [
+          { patient_id: cleanId },
+          { patient_id: cleanId.toUpperCase() },
+        ],
+      }).sort({ createdAt: -1 });
+    }
+
+    if (!session) {
+      throw ApiError.notFound(`Clinical case '${sessionId}' was not found.`);
+    }
+
+    // 4. Authorization check for non-admin doctors
+    if (userRole === 'DOCTOR' && doctorId) {
+      const isAssigned = session.assigned_doctor_id && session.assigned_doctor_id.toLowerCase() === doctorId.toLowerCase();
+      const isRedFlagClaimant = redFlag?.assigned_doctor_id && redFlag.assigned_doctor_id.toLowerCase() === doctorId.toLowerCase();
+      const isUnassigned = !session.assigned_doctor_id || session.status === 'READY_FOR_DOCTOR' || redFlag?.status === 'BROADCASTING';
+
+      const hasAppointment = await Appointment.findOne({
+        patient_id: session.patient_id,
+        $or: [
+          { doctor_id: doctorId },
+          { doctor_id: String(doctorId).toUpperCase() },
+          { doctor_id: String(doctorId).toLowerCase() },
+        ],
+      }).catch(() => null);
+
+      const hasRecord = await ClinicalRecord.findOne({
+        patient_id: session.patient_id,
+        reviewed_by: doctorId,
+      }).catch(() => null);
+
+      if (!isAssigned && !isRedFlagClaimant && !isUnassigned && !hasAppointment && !hasRecord) {
+        throw ApiError.forbidden('Access denied: You are not authorized to view this patient case.', 'UNAUTHORIZED_CASE_ACCESS');
+      }
+    }
+
+    // 5. Query patient details and resolve linked patient records by registered phone
+    const patient = await Patient.findOne({
+      $or: [
+        { patient_id: session.patient_id },
+        { patient_id: session.patient_id.toUpperCase() },
+        { patient_id: session.patient_id.toLowerCase() },
+      ],
+    }).catch(() => null);
+
+    const relatedPatientIds = [session.patient_id];
+    if (patient?.phone) {
+      const linkedPatients = await Patient.find({ phone: patient.phone }).select('patient_id').lean().catch(() => []);
+      linkedPatients.forEach((p) => {
+        if (p.patient_id && !relatedPatientIds.includes(p.patient_id)) {
+          relatedPatientIds.push(p.patient_id);
+        }
+      });
+    }
+
+    const [abhaDoc, allRecords, messages, documents, allSessions] = await Promise.all([
+      PatientIdentity.findOne({
+        patient_id: { $in: relatedPatientIds },
+        identity_type: 'ABHA',
+      }).catch(() => null),
+      ClinicalRecord.find({
+        $or: [
+          { session_id: session.session_id },
+          { patient_id: { $in: relatedPatientIds } },
+        ],
+      }).sort({ createdAt: -1 }).catch(() => []),
+      CaseMessage.find({
+        $or: [
+          { session_id: session.session_id },
+          { session_id: cleanId },
+        ],
+      }).sort({ turn_number: 1, createdAt: 1 }).catch(() => []),
+      MedicalDocument.find({
+        $or: [
+          { session_id: session.session_id },
+          { session_id: cleanId },
+          { patient_id: { $in: relatedPatientIds } },
+        ],
+      }).sort({ createdAt: -1 }).catch(() => []),
+      ClinicalSession.find({
+        patient_id: { $in: relatedPatientIds },
+      }).sort({ createdAt: -1 }).catch(() => []),
+    ]);
+
     const clinicalState = session.clinical_state || {};
     const patientName = patient ? `${patient.first_name} ${patient.last_name || ''}`.trim() : `Patient ${session.patient_id}`;
 
@@ -282,12 +464,12 @@ export class DoctorPanelService {
       Boolean(session.red_flags?.has_red_flag) ||
       Boolean(redFlag);
 
-    // Turn-by-turn conversation messages formatted for clinical review
+    // Turn-by-turn conversation messages formatted for clinical review (ensuring m.message is mapped)
     const formattedMessages = messages.map((m) => ({
       message_id: m.message_id || m._id.toString(),
       sender: m.sender || 'PATIENT',
-      content: m.content || m.text,
-      language: m.language || session.language,
+      content: m.message || m.content || m.text || '',
+      language: m.language || session.language || 'gu-IN',
       turn_number: m.turn_number,
       timestamp: m.createdAt,
     }));
@@ -296,11 +478,14 @@ export class DoctorPanelService {
     const formattedDocuments = documents.map((d) => {
       const structured = d.structured_data || d.extracted_data || {};
       const fileUrl = d.file_url || (d.file_name ? `/uploads/${d.file_name}` : null);
-      const clinicalSummaryText = typeof d.clinical_summary === 'object' && d.clinical_summary?.physician_digest
-        ? d.clinical_summary.physician_digest
-        : typeof d.clinical_summary === 'string'
-        ? d.clinical_summary
-        : d.extracted_text ? d.extracted_text.slice(0, 300) : 'Diagnostic medical record digitized and verified.';
+      const clinicalSummaryText =
+        typeof d.clinical_summary === 'object' && d.clinical_summary?.physician_digest
+          ? d.clinical_summary.physician_digest
+          : typeof d.clinical_summary === 'string'
+          ? d.clinical_summary
+          : d.extracted_text
+          ? d.extracted_text.slice(0, 300)
+          : 'Diagnostic medical record digitized and verified.';
 
       const extractedValues = [];
       if (structured.lab_investigations && Array.isArray(structured.lab_investigations)) {
@@ -350,23 +535,67 @@ export class DoctorPanelService {
       };
     });
 
-    // Structured Clinical History
+    // Multi-source aggregation for Conditions and Allergies
+    const conditionsSet = new Set();
+    const allergiesSet = new Set();
+
+    (session.clinical_state?.relevant_history || []).forEach((h) => h && conditionsSet.add(h.trim()));
+    (session.clinical_summary?.past_medical_history || []).forEach((h) => h && conditionsSet.add(h.trim()));
+    (session.clinical_state?.allergies || []).forEach((a) => a && allergiesSet.add(a.trim()));
+    (session.clinical_summary?.allergies || []).forEach((a) => a && allergiesSet.add(a.trim()));
+
+    (allSessions || []).forEach((s) => {
+      (s.clinical_state?.relevant_history || []).forEach((h) => h && conditionsSet.add(h.trim()));
+      (s.clinical_summary?.past_medical_history || []).forEach((h) => h && conditionsSet.add(h.trim()));
+      (s.clinical_state?.allergies || []).forEach((a) => a && allergiesSet.add(a.trim()));
+    });
+
+    (allRecords || []).forEach((r) => {
+      (r.structured_history?.past_medical_history || []).forEach((c) => {
+        const name = typeof c === 'string' ? c : c?.name;
+        if (name) conditionsSet.add(name.trim());
+      });
+      (r.structured_history?.allergies || []).forEach((a) => {
+        const allergen = typeof a === 'string' ? a : a?.allergen;
+        if (allergen) allergiesSet.add(allergen.trim());
+      });
+    });
+
+    (documents || []).forEach((d) => {
+      (d.extracted_data?.diagnoses || []).forEach((diag) => diag && conditionsSet.add(diag.trim()));
+      (d.extracted_data?.medical_history || []).forEach((h) => h && conditionsSet.add(h.trim()));
+      (d.extracted_data?.allergies || []).forEach((a) => a && allergiesSet.add(a.trim()));
+    });
+
+    const allConditions = Array.from(conditionsSet);
+    const allAllergies = Array.from(allergiesSet);
+
+    // Current encounter record
+    const currentRecord = allRecords.find((r) => r.session_id === session.session_id) || allRecords[0];
+    const sessionPrescriptions = currentRecord?.physician_prescription || [];
+
+    // Structured Clinical History matching frontend expectation
     const history = {
+      chiefComplaint: clinicalState.chief_complaint || session.chief_complaint_category || 'Primary clinical presentation',
       hpi: {
-        onset: clinicalState.onset || 'Sudden onset within past 24 hours',
-        duration: clinicalState.duration || '2-3 days',
+        site: clinicalState.body_site || 'Primary area of reported discomfort',
         location: clinicalState.body_site || 'Primary area of reported discomfort',
-        character: clinicalState.severity ? `${clinicalState.severity} severity presentation` : 'Moderate, throbbing/dull ache',
-        severity: clinicalState.severity || '7/10',
-        course: clinicalState.course || 'Progressive with moderate physical exertion',
-        aggravating: 'Physical exertion, climbing stairs, exposure to dust',
-        relieving: 'Rest, oral hydration, supportive posture',
-        associated: clinicalState.associated_symptoms?.join(', ') || 'Mild fatigue, intermittent cough',
+        onset: clinicalState.onset || 'Acute presentation',
+        duration: clinicalState.duration || 'Acute',
+        timeCourse: clinicalState.duration || clinicalState.course || 'Acute presentation',
+        character: clinicalState.severity ? `${clinicalState.severity} severity presentation` : 'Moderate, localized discomfort',
+        radiation: 'None reported',
+        severity: clinicalState.severity || 'Moderate',
+        course: clinicalState.course || 'Progressive with physical exertion',
+        exacerbating: 'Physical exertion, movement, exposure to irritants',
+        relieving: 'Rest, hydration, supportive posture',
+        associated: clinicalState.associated_symptoms?.length > 0 ? clinicalState.associated_symptoms.join(', ') : 'None reported',
       },
-      medicalHistory: clinicalState.relevant_history?.join(', ') || 'No major prior hospital admissions documented.',
+      pastMedicalHistory: allConditions.length > 0 ? allConditions.join(', ') : 'No prior medical conditions documented.',
+      medicalHistory: allConditions.length > 0 ? allConditions.join(', ') : 'No prior medical conditions documented.',
       surgicalHistory: 'None reported by patient.',
       medications: clinicalState.medications?.length > 0 ? clinicalState.medications.join(', ') : 'No regular chronic medications documented.',
-      allergies: clinicalState.allergies?.length > 0 ? clinicalState.allergies.join(', ') : 'Allergy information not documented.',
+      allergies: allAllergies.length > 0 ? allAllergies.join(', ') : 'No known allergies documented (NKDA).',
       familyHistory: 'Non-contributory for early cardiovascular or hereditary disorders.',
       lifestyle: {
         sleep: '6-7 hours, unrefreshing',
@@ -376,9 +605,15 @@ export class DoctorPanelService {
       },
     };
 
-    // AI Clinical Summary
+    // AI Clinical Summary with structured fields for UI
     const aiClinicalSummary = {
       chiefComplaint: clinicalState.chief_complaint || session.chief_complaint_category || 'Primary clinical presentation',
+      historyOfPresentIllness: `${clinicalState.chief_complaint || 'Patient presents with acute symptoms'}. Duration: ${clinicalState.duration || 'acute'}. Location: ${clinicalState.body_site || 'primary site'}. Severity: ${clinicalState.severity || 'moderate'}.`,
+      relevantMedicalHistory: allConditions.length > 0 ? allConditions.join(', ') : 'None reported.',
+      currentMedications: clinicalState.medications?.length > 0 ? clinicalState.medications.join(', ') : 'None reported.',
+      allergies: allAllergies.length > 0 ? allAllergies.join(', ') : 'None reported (NKDA).',
+      investigations: formattedDocuments.length > 0 ? `${formattedDocuments.length} diagnostic documents uploaded and processed.` : 'No prior investigations or lab reports recorded.',
+      redFlags: isRedFlag ? (session.red_flags?.reason || redFlag?.trigger?.reason || 'Critical clinical findings detected during intake.') : 'None detected. Vitals stable.',
       keyFindings: [
         `Risk Severity Assessment: ${isRedFlag ? 'EMERGENCY / HIGH' : 'ROUTINE OPD'}`,
         `Reported Duration: ${clinicalState.duration || 'Acute'}`,
@@ -388,24 +623,27 @@ export class DoctorPanelService {
         'Acute Clinical Presentation requiring physician confirmation',
         'Secondary supportive evaluation recommended',
       ],
-      redFlagNotice: isRedFlag ? session.red_flags?.reason || redFlag?.trigger?.reason || 'Urgent clinical attention indicated' : null,
+      redFlagNotice: isRedFlag ? (session.red_flags?.reason || redFlag?.trigger?.reason || 'Urgent clinical attention indicated') : null,
     };
+
+    const token = session.token || (session.session_id ? `TK-${session.session_id.slice(-4).toUpperCase()}` : 'TK-101');
 
     return {
       sessionId: session.session_id,
       patientId: session.patient_id,
-      token: 'TK-104',
+      token,
       patientName,
-      age: patient?.date_of_birth ? Math.floor((Date.now() - new Date(patient.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 46,
-      gender: patient?.gender || 'MALE',
-      phone: patient?.phone || '+91 98765 43210',
-      abhaId: patient?.patient_id ? `91-${patient.patient_id.slice(-4)}-8821-4901` : '91-4432-8812-9901',
+      chiefComplaint: clinicalState.chief_complaint || session.chief_complaint_category || history?.chiefComplaint || 'Primary clinical presentation',
+      age: patient?.age != null ? patient.age : (patient?.date_of_birth ? Math.floor((Date.now() - new Date(patient.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null),
+      gender: patient?.gender || null,
+      phone: patient?.phone || '',
+      abhaId: abhaDoc?.identity_reference || null,
       status: session.status === 'COMPLETED' || session.status === 'CONSULTATION_COMPLETE' ? 'APPROVED' : 'PENDING_REVIEW',
       triageLevel: isRedFlag ? 'RED_FLAG' : session.triage_level || 'ROUTINE',
       triage: isRedFlag ? 'red-flag' : 'routine',
       priorityAlertReason: isRedFlag ? session.red_flags?.reason || redFlag?.trigger?.reason : null,
-      doctorRxNotes: record?.doctor_notes || '',
-      prescriptions: record?.physician_prescription || [],
+      doctorRxNotes: currentRecord?.doctor_notes || '',
+      prescriptions: sessionPrescriptions,
       history,
       aiClinicalSummary,
       ayushPariksha: {
@@ -416,6 +654,8 @@ export class DoctorPanelService {
       },
       documents: formattedDocuments,
       conversationMessages: formattedMessages,
+      conversation: formattedMessages,
+      messages: formattedMessages,
       assignedDoctorId: session.assigned_doctor_id,
     };
   }
@@ -462,14 +702,47 @@ export class DoctorPanelService {
   /**
    * 5. Save Physician Prescription
    */
-  async savePhysicianPrescription(sessionId, doctorId, medicines = [], actorId = 'DOCTOR') {
-    if (!sessionId) throw ApiError.badRequest('Session ID is required');
+  async savePhysicianPrescription(sessionId, doctorId, medicines = [], actorId = 'DOCTOR', patientId = null) {
+    if (!sessionId && !patientId) throw ApiError.badRequest('Session ID or Patient ID is required');
 
-    const session = await ClinicalSession.findOne({ session_id: sessionId });
-    if (!session) throw ApiError.notFound(`Session '${sessionId}' not found.`);
+    let session = sessionId ? await ClinicalSession.findOne({ session_id: sessionId }) : null;
+
+    // If session not found or sessionId looks like a patient ID, resolve/find the patient and active session
+    if (!session) {
+      const targetPatientId = patientId || sessionId;
+      const patient = await Patient.findOne({
+        $or: [
+          { patient_id: targetPatientId },
+          { patient_id: String(targetPatientId).toUpperCase() },
+          { patient_id: String(targetPatientId).toLowerCase() },
+        ],
+      });
+
+      if (patient) {
+        // Find latest session for this patient or create an active one
+        session = await ClinicalSession.findOne({ patient_id: patient.patient_id }).sort({ createdAt: -1 });
+        if (!session) {
+          session = await ClinicalSession.create({
+            session_id: `SES-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            patient_id: patient.patient_id,
+            assigned_doctor_id: doctorId,
+            status: 'DOCTOR_REVIEW',
+            journey_stage: 'IN_CONSULTATION',
+            opd_type: patient.opd_type || 'GENERAL',
+            opd_system: patient.opd_system || 'GENERAL_MEDICINE',
+          });
+        }
+      }
+    }
+
+    if (!session) throw ApiError.notFound(`Clinical session or patient record '${sessionId || patientId}' was not found.`);
+
+    const targetSessionId = session.session_id;
+    const targetPatientId = session.patient_id;
 
     const formattedMeds = medicines.map((m) => ({
       medicine_name: m.medicine_name,
+      generic_name: m.generic_name || '',
       dosage: m.dosage || '1 tab',
       frequency: m.frequency || 'OD',
       duration: m.duration || '5 days',
@@ -477,23 +750,42 @@ export class DoctorPanelService {
     }));
 
     const record = await ClinicalRecord.findOneAndUpdate(
-      { session_id: sessionId },
+      { session_id: targetSessionId },
       {
         $set: {
-          session_id: sessionId,
-          patient_id: session.patient_id,
+          session_id: targetSessionId,
+          patient_id: targetPatientId,
           physician_prescription: formattedMeds,
+          review_status: 'APPROVED',
+          reviewed_by: mongoose.Types.ObjectId.isValid(actorId) ? actorId : null,
+          reviewed_at: new Date(),
+        },
+        $setOnInsert: {
+          record_id: `REC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
         },
       },
       { upsert: true, returnDocument: 'after' }
     );
 
+    // Synchronize to ClinicalSession as well so patient dashboard and session history see prescriptions
+    await ClinicalSession.findOneAndUpdate(
+      { session_id: targetSessionId },
+      {
+        $set: {
+          prescriptions: formattedMeds,
+          assigned_doctor_id: doctorId,
+          status: 'DOCTOR_REVIEW',
+          journey_stage: 'IN_CONSULTATION',
+        },
+      }
+    ).catch(() => {});
+
     await auditRepository.create({
       user_id: doctorId || actorId,
       action: 'PRESCRIPTION_SAVED',
       resource: 'ClinicalRecord',
-      resource_id: record.record_id || sessionId,
-      details: { prescription_count: formattedMeds.length },
+      resource_id: record.record_id || targetSessionId,
+      details: { prescription_count: formattedMeds.length, patient_id: targetPatientId },
     });
 
     return { success: true, prescription: formattedMeds, record };
@@ -721,569 +1013,8 @@ export class DoctorPanelService {
    * 11. Auto-Seed Initial Dynamic Clinical Dataset if Database is Empty
    */
   async ensureSeedClinicalData(currentDoctorId = null) {
-    try {
-      const sessionCount = await ClinicalSession.countDocuments();
-      if (sessionCount > 0) return;
-
-      logger.info('[DoctorPanel]: Seeding comprehensive initial clinical OPD dataset...');
-
-      // Ensure active doctor has doctor_id set
-      if (currentDoctorId) {
-        await User.findOneAndUpdate(
-          {
-            $or: [
-              { doctor_id: currentDoctorId },
-              { email: currentDoctorId },
-              ...(mongoose.Types.ObjectId.isValid(currentDoctorId) ? [{ _id: currentDoctorId }] : []),
-            ],
-          },
-          {
-            $set: {
-              doctor_id: 'DOC-CLINIC-01',
-              specialty: 'General Medicine & Ayush Clinical Integration',
-              opd_type: 'GENERAL',
-              opd_system: 'GENERAL_MEDICINE',
-              room: 'Room 104',
-              on_duty: true,
-              availability_status: 'AVAILABLE',
-            },
-          }
-        ).catch(() => {});
-      }
-
-      const seedPatients = [
-        {
-          patient_id: 'PAT-701A1',
-          first_name: 'Ramesh',
-          last_name: 'Kumar',
-          date_of_birth: new Date(1974, 4, 12),
-          gender: 'MALE',
-          phone: '+91 98234 11201',
-          blood_group: 'B+',
-          address: 'Sector 4, Gandhinagar, Gujarat',
-        },
-        {
-          patient_id: 'PAT-702B2',
-          first_name: 'Sunita',
-          last_name: 'Sharma',
-          date_of_birth: new Date(1982, 8, 20),
-          gender: 'FEMALE',
-          phone: '+91 98765 22302',
-          blood_group: 'O+',
-          address: 'Navrangpura, Ahmedabad, Gujarat',
-        },
-        {
-          patient_id: 'PAT-703C3',
-          first_name: 'Vikram',
-          last_name: 'Mehta',
-          date_of_birth: new Date(1968, 1, 15),
-          gender: 'MALE',
-          phone: '+91 97123 33403',
-          blood_group: 'A+',
-          address: 'Alkapuri, Vadodara, Gujarat',
-        },
-        {
-          patient_id: 'PAT-704D4',
-          first_name: 'Meera',
-          last_name: 'Patel',
-          date_of_birth: new Date(1997, 6, 8),
-          gender: 'FEMALE',
-          phone: '+91 99245 44504',
-          blood_group: 'AB+',
-          address: 'Satellite Road, Ahmedabad, Gujarat',
-        },
-        {
-          patient_id: 'PAT-705E5',
-          first_name: 'Ananya',
-          last_name: 'Rao',
-          date_of_birth: new Date(1991, 11, 3),
-          gender: 'FEMALE',
-          phone: '+91 98451 55605',
-          blood_group: 'O-',
-          address: 'Bodakdev, Ahmedabad, Gujarat',
-        },
-        {
-          patient_id: 'PAT-706F6',
-          first_name: 'Rajesh',
-          last_name: 'Verma',
-          date_of_birth: new Date(1978, 2, 28),
-          gender: 'MALE',
-          phone: '+91 94260 66706',
-          blood_group: 'B-',
-          address: 'GIDC Industrial Area, Surat, Gujarat',
-        },
-        {
-          patient_id: 'PAT-707G7',
-          first_name: 'Priya',
-          last_name: 'Nair',
-          date_of_birth: new Date(1993, 9, 14),
-          gender: 'FEMALE',
-          phone: '+91 99099 77807',
-          blood_group: 'A-',
-          address: 'Vastrapur Lake, Ahmedabad, Gujarat',
-        },
-        {
-          patient_id: 'PAT-708H8',
-          first_name: 'Amit',
-          last_name: 'Joshi',
-          date_of_birth: new Date(1965, 7, 22),
-          gender: 'MALE',
-          phone: '+91 98250 88908',
-          blood_group: 'B+',
-          address: 'Race Course Road, Rajkot, Gujarat',
-        },
-        {
-          patient_id: 'PAT-709I9',
-          first_name: 'Deepa',
-          last_name: 'Gupta',
-          date_of_birth: new Date(1999, 3, 5),
-          gender: 'FEMALE',
-          phone: '+91 97234 99009',
-          blood_group: 'O+',
-          address: 'Ring Road, Surat, Gujarat',
-        },
-      ];
-
-      for (const p of seedPatients) {
-        await Patient.findOneAndUpdate(
-          { patient_id: p.patient_id },
-          { $set: p },
-          { upsert: true }
-        );
-      }
-
-      // Realistic Clinical Sessions distributed across all 7 stages
-      const seedSessions = [
-        {
-          session_id: 'SES-REG-01',
-          patient_id: 'PAT-708H8',
-          opd_type: 'AYUSH',
-          opd_system: 'AYURVEDA',
-          status: 'STARTED',
-          journey_stage: 'CHECKED_IN',
-          chief_complaint_category: 'BODY_JOINT_PAIN',
-          triage_level: 'ROUTINE',
-          clinical_state: {
-            chief_complaint: 'Chronic lower back stiffness and sciatica radiating to right calf',
-            onset: '6 months gradual',
-            severity: 'Moderate 5/10',
-            duration: '6 months',
-          },
-        },
-        {
-          session_id: 'SES-REG-02',
-          patient_id: 'PAT-707G7',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'IDENTIFIED',
-          journey_stage: 'CHECKED_IN',
-          chief_complaint_category: 'STOMACH_PAIN',
-          triage_level: 'LOW',
-          clinical_state: {
-            chief_complaint: 'Recurrent epigastric burning sensation and postprandial fullness',
-            onset: '4 days',
-            severity: 'Mild 4/10',
-            duration: '4 days',
-          },
-        },
-        {
-          session_id: 'SES-WAIT-01',
-          patient_id: 'PAT-701A1',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'IN_PROGRESS',
-          journey_stage: 'CHECKED_IN',
-          chief_complaint_category: 'FEVER',
-          triage_level: 'MODERATE',
-          clinical_state: {
-            chief_complaint: 'Persistent moderate fever with intermittent chills and dry hacking cough',
-            onset: '3 days acute',
-            severity: '6/10',
-            duration: '3 days',
-          },
-        },
-        {
-          session_id: 'SES-WAIT-02',
-          patient_id: 'PAT-702B2',
-          opd_type: 'AYUSH',
-          opd_system: 'AYURVEDA',
-          status: 'IN_PROGRESS',
-          journey_stage: 'CHECKED_IN',
-          chief_complaint_category: 'BODY_JOINT_PAIN',
-          triage_level: 'ROUTINE',
-          clinical_state: {
-            chief_complaint: 'Bilateral knee crepitus, morning stiffness exceeding 30 minutes',
-            onset: '2 months progressive',
-            severity: '5/10',
-            duration: '2 months',
-          },
-        },
-        {
-          session_id: 'SES-AI-01',
-          patient_id: 'PAT-709I9',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'HISTORY_IN_PROGRESS',
-          journey_stage: 'VITALS_TAKEN',
-          chief_complaint_category: 'COUGH_COLD',
-          triage_level: 'LOW',
-          clinical_state: {
-            chief_complaint: 'Sore throat, nasal congestion, and mild frontal headache',
-            onset: '2 days',
-            severity: '4/10',
-            duration: '48 hours',
-          },
-        },
-        {
-          session_id: 'SES-TRIAGE-01',
-          patient_id: 'PAT-703C3',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'PRIORITY_TRIAGE',
-          journey_stage: 'VITALS_TAKEN',
-          chief_complaint_category: 'CHEST_PAIN',
-          triage_level: 'EMERGENCY',
-          red_flags: {
-            has_red_flag: true,
-            severity: 'CRITICAL',
-            reason: 'Acute retrosternal chest pressure radiating to left jaw with cold diaphoresis',
-            triggered_at: new Date(),
-          },
-          clinical_state: {
-            chief_complaint: 'Sudden severe crushing chest tightness, shortness of breath and diaphoresis',
-            onset: '45 mins ago sudden',
-            severity: 'Severe 9/10',
-            duration: '45 minutes',
-          },
-        },
-        {
-          session_id: 'SES-CONSULT-01',
-          patient_id: 'PAT-704D4',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'READY_FOR_DOCTOR',
-          journey_stage: 'IN_CONSULTATION',
-          chief_complaint_category: 'HEADACHE',
-          triage_level: 'MODERATE',
-          clinical_state: {
-            chief_complaint: 'Unilateral pulsating hemicranial headache with photophobia and nausea',
-            onset: '18 hours',
-            severity: '7/10',
-            duration: '18 hours',
-          },
-        },
-        {
-          session_id: 'SES-RX-01',
-          patient_id: 'PAT-705E5',
-          opd_type: 'AYUSH',
-          opd_system: 'HOMOEOPATHY',
-          status: 'DOCTOR_REVIEW',
-          journey_stage: 'IN_CONSULTATION',
-          chief_complaint_category: 'SKIN_PROBLEM',
-          triage_level: 'ROUTINE',
-          clinical_state: {
-            chief_complaint: 'Recurrent itchy urticarial wheals triggered by temperature changes',
-            onset: '1 month intermittent',
-            severity: '5/10',
-            duration: '4 weeks',
-          },
-        },
-        {
-          session_id: 'SES-COMP-01',
-          patient_id: 'PAT-706F6',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          status: 'COMPLETED',
-          journey_stage: 'COMPLETED',
-          completed_at: new Date(),
-          chief_complaint_category: 'OTHER',
-          triage_level: 'ROUTINE',
-          clinical_state: {
-            chief_complaint: 'Routine quarterly Type-2 Diabetes and hypertension medication review',
-            onset: 'Chronic established',
-            severity: '3/10',
-            duration: '5 years',
-          },
-        },
-      ];
-
-      for (const s of seedSessions) {
-        await ClinicalSession.findOneAndUpdate(
-          { session_id: s.session_id },
-          { $set: s },
-          { upsert: true }
-        );
-      }
-
-      // Seed Vitals Records
-      const seedVitals = [
-        {
-          vitals_id: 'VIT-001',
-          patient_id: 'PAT-701A1',
-          session_id: 'SES-WAIT-01',
-          blood_pressure: { systolic: 124, diastolic: 82 },
-          pulse: { value: 86 },
-          spo2: { value: 98 },
-          temperature: { value: 101.2 },
-          weight: { value: 72 },
-          height: { value: 170 },
-        },
-        {
-          vitals_id: 'VIT-002',
-          patient_id: 'PAT-703C3',
-          session_id: 'SES-TRIAGE-01',
-          blood_pressure: { systolic: 168, diastolic: 104 },
-          pulse: { value: 112 },
-          spo2: { value: 93 },
-          temperature: { value: 98.6 },
-          weight: { value: 84 },
-          height: { value: 172 },
-        },
-        {
-          vitals_id: 'VIT-003',
-          patient_id: 'PAT-704D4',
-          session_id: 'SES-CONSULT-01',
-          blood_pressure: { systolic: 118, diastolic: 76 },
-          pulse: { value: 78 },
-          spo2: { value: 99 },
-          temperature: { value: 98.4 },
-          weight: { value: 58 },
-          height: { value: 162 },
-        },
-        {
-          vitals_id: 'VIT-004',
-          patient_id: 'PAT-706F6',
-          session_id: 'SES-COMP-01',
-          blood_pressure: { systolic: 130, diastolic: 84 },
-          pulse: { value: 72 },
-          spo2: { value: 98 },
-          temperature: { value: 98.2 },
-          blood_sugar: { value: 138, type: 'FASTING' },
-          weight: { value: 76 },
-          height: { value: 168 },
-        },
-      ];
-
-      for (const v of seedVitals) {
-        await VitalsRecord.findOneAndUpdate(
-          { vitals_id: v.vitals_id },
-          { $set: v },
-          { upsert: true }
-        );
-      }
-
-      // Seed Clinical Record for completed & in-consultation cases
-      await ClinicalRecord.findOneAndUpdate(
-        { session_id: 'SES-COMP-01' },
-        {
-          $set: {
-            session_id: 'SES-COMP-01',
-            patient_id: 'PAT-706F6',
-            review_status: 'APPROVED',
-            reviewed_at: new Date(),
-            doctor_notes: 'Glycemic profile stable. HbA1c 7.1%. Blood pressure well controlled on monotherapy. Continue lifestyle moderation.',
-            physician_prescription: [
-              {
-                medicine_name: 'Metformin 500mg ER',
-                dosage: '1 tablet',
-                frequency: 'Twice daily (BD)',
-                duration: '30 days',
-                instructions: 'Take after meals',
-              },
-              {
-                medicine_name: 'Telmisartan 40mg',
-                dosage: '1 tablet',
-                frequency: 'Once daily morning (OD)',
-                duration: '30 days',
-                instructions: 'Before breakfast',
-              },
-            ],
-          },
-        },
-        { upsert: true }
-      );
-
-      // Seed RedFlagCase for emergency broadcast
-      await RedFlagCase.findOneAndUpdate(
-        { clinical_session_id: 'SES-TRIAGE-01' },
-        {
-          $set: {
-            case_id: 'RFC-TRIAGE-901',
-            clinical_session_id: 'SES-TRIAGE-01',
-            patient_id: 'PAT-703C3',
-            status: RED_FLAG_STATUS.BROADCASTING,
-            priority: 'EMERGENCY',
-            trigger: {
-              rule_id: 'RUL-CARDIAC-01',
-              reason: 'Suspected Acute Coronary Syndrome (ACS) with retrosternal crushing pain and diaphoresis',
-            },
-            vitals_snapshot: {
-              blood_pressure: { systolic: 168, diastolic: 104 },
-              pulse: { value: 112 },
-              spo2: { value: 93 },
-            },
-          },
-        },
-        { upsert: true }
-      );
-
-      // Seed Doctor Notifications
-      await DoctorNotification.findOneAndUpdate(
-        { notification_id: 'NOTIF-01' },
-        {
-          $set: {
-            notification_id: 'NOTIF-01',
-            case_id: 'SES-TRIAGE-01',
-            doctor_id: 'SYSTEM',
-            priority: 'EMERGENCY',
-            reason: 'Priority Emergency: Chest Pain & Diaphoresis',
-            preview_data: {
-              age: '58 yrs',
-              gender: 'Male',
-              chief_complaint: 'Acute retrosternal chest pain with diaphoresis',
-              risk_level: 'CRITICAL',
-            },
-          },
-        },
-        { upsert: true }
-      );
-
-      // Seed Diagnostic Medical Documents
-      const seedDocs = [
-        {
-          document_id: 'DOC-LAB-01',
-          patient_id: 'PAT-703C3',
-          session_id: 'SES-TRIAGE-01',
-          document_type: 'LAB_REPORT',
-          file_name: 'Cardiac_Biomarkers_Troponin.pdf',
-          file_url: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&q=80',
-          processing_status: 'COMPLETED',
-          confidence_score: 0.96,
-          clinical_summary: 'Serum Troponin-I mildly elevated at 0.18 ng/mL. Immediate 12-lead ECG and physician evaluation indicated.',
-          extracted_data: {
-            lab_investigations: [
-              { test_name: 'High-Sensitivity Troponin I', observed_value: '0.18', unit: 'ng/mL', reference_range: '< 0.04', flag: 'HIGH' },
-              { test_name: 'Creatine Kinase-MB (CK-MB)', observed_value: '28', unit: 'U/L', reference_range: '0 - 25', flag: 'HIGH' },
-            ],
-          },
-          requires_doctor_verification: true,
-        },
-        {
-          document_id: 'DOC-LAB-02',
-          patient_id: 'PAT-706F6',
-          session_id: 'SES-COMP-01',
-          document_type: 'LAB_REPORT',
-          file_name: 'Comprehensive_Metabolic_HbA1c.pdf',
-          file_url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80',
-          processing_status: 'COMPLETED',
-          confidence_score: 0.98,
-          clinical_summary: 'HbA1c 7.1%, Fasting Blood Glucose 138 mg/dL, Serum Creatinine 0.9 mg/dL within acceptable range.',
-          extracted_data: {
-            lab_investigations: [
-              { test_name: 'Glycated Hemoglobin (HbA1c)', observed_value: '7.1', unit: '%', reference_range: '< 5.7', flag: 'HIGH' },
-              { test_name: 'Fasting Plasma Glucose', observed_value: '138', unit: 'mg/dL', reference_range: '70 - 100', flag: 'HIGH' },
-              { test_name: 'Serum Creatinine', observed_value: '0.9', unit: 'mg/dL', reference_range: '0.7 - 1.2', flag: 'NORMAL' },
-            ],
-          },
-          requires_doctor_verification: false,
-        },
-      ];
-
-      for (const d of seedDocs) {
-        await MedicalDocument.findOneAndUpdate(
-          { document_id: d.document_id },
-          { $set: d },
-          { upsert: true }
-        );
-      }
-
-      // Seed Doctor Appointments
-      const today = new Date();
-      const seedAppointments = [
-        {
-          appointment_id: 'APT-TODAY-01',
-          patient_id: 'PAT-701A1',
-          doctor_id: 'DOC-CLINIC-01',
-          doctor_name: 'Dr. Aarav Sharma',
-          doctor_specialization: 'General Medicine',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          appointment_date: today,
-          appointment_time: '09:30 AM',
-          status: 'CONFIRMED',
-          room: 'Room 104',
-          reason: 'Fever & persistent cough evaluation',
-        },
-        {
-          appointment_id: 'APT-TODAY-02',
-          patient_id: 'PAT-704D4',
-          doctor_id: 'DOC-CLINIC-01',
-          doctor_name: 'Dr. Aarav Sharma',
-          doctor_specialization: 'General Medicine',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          appointment_date: today,
-          appointment_time: '10:15 AM',
-          status: 'CONFIRMED',
-          room: 'Room 104',
-          reason: 'Acute migraine follow-up consultation',
-        },
-        {
-          appointment_id: 'APT-TODAY-03',
-          patient_id: 'PAT-702B2',
-          doctor_id: 'DOC-CLINIC-01',
-          doctor_name: 'Dr. Aarav Sharma',
-          doctor_specialization: 'Ayush Kayachikitsa',
-          opd_type: 'AYUSH',
-          opd_system: 'AYURVEDA',
-          appointment_date: today,
-          appointment_time: '11:00 AM',
-          status: 'UPCOMING',
-          room: 'Room 104',
-          reason: 'Sandhigata Vata (Osteoarthritis) Ayurvedic consultation',
-        },
-        {
-          appointment_id: 'APT-UPCOMING-01',
-          patient_id: 'PAT-706F6',
-          doctor_id: 'DOC-CLINIC-01',
-          doctor_name: 'Dr. Aarav Sharma',
-          doctor_specialization: 'General Medicine',
-          opd_type: 'GENERAL',
-          opd_system: 'GENERAL_MEDICINE',
-          appointment_date: new Date(Date.now() + 86400000 * 2),
-          appointment_time: '10:00 AM',
-          status: 'UPCOMING',
-          room: 'Room 104',
-          reason: 'Quarterly diabetic lipid profile review',
-        },
-        {
-          appointment_id: 'APT-COMPLETED-01',
-          patient_id: 'PAT-705E5',
-          doctor_id: 'DOC-CLINIC-01',
-          doctor_name: 'Dr. Aarav Sharma',
-          doctor_specialization: 'Homoeopathy',
-          opd_type: 'AYUSH',
-          opd_system: 'HOMOEOPATHY',
-          appointment_date: today,
-          appointment_time: '08:45 AM',
-          status: 'COMPLETED',
-          room: 'Room 104',
-          reason: 'Allergic rhinitis constitutional review',
-        },
-      ];
-
-      for (const a of seedAppointments) {
-        await Appointment.findOneAndUpdate(
-          { appointment_id: a.appointment_id },
-          { $set: a },
-          { upsert: true }
-        );
-      }
-
-      logger.info('[DoctorPanel]: Successfully seeded comprehensive initial clinical OPD dataset.');
-    } catch (err) {
-      logger.error('[DoctorPanel]: Error seeding initial clinical data:', err);
-    }
+    // Runtime auto-seeding removed in favor of idempotent one-time seeder: `npm run db:seed`
+    return;
   }
 
   /**
@@ -1292,7 +1023,21 @@ export class DoctorPanelService {
   async getDoctorOPDPipeline(doctorId, { search = '', filter = 'ALL' } = {}) {
     await this.ensureSeedClinicalData(doctorId);
 
-    const sessions = await ClinicalSession.find({ status: { $ne: 'CANCELLED' } })
+    const sessions = await ClinicalSession.find({
+      status: { $ne: 'CANCELLED' },
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+        {
+          assigned_doctor_id: null,
+          $or: [
+            { triage_level: { $in: ['EMERGENCY', 'HIGH PRIORITY', 'HIGH', 'RED_FLAG'] } },
+            { 'red_flags.has_red_flag': true },
+          ],
+        },
+      ],
+    })
       .sort({ updatedAt: -1 })
       .limit(80)
       .catch(() => []);
@@ -1353,6 +1098,8 @@ export class DoctorPanelService {
         stage = 'waiting';
       }
 
+      const realAge = p.age != null ? p.age : (p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
+
       const caseItem = {
         id: s.session_id,
         caseId: s.session_id,
@@ -1360,8 +1107,8 @@ export class DoctorPanelService {
         patientId: s.patient_id,
         token,
         patientName: fullName,
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 38,
-        gender: p.gender || 'OTHER',
+        age: realAge,
+        gender: p.gender || null,
         phone: p.phone || '',
         chiefComplaint: s.clinical_state?.chief_complaint || s.chief_complaint_category || 'Clinical Consultation',
         triageLevel: isRedFlag ? 'EMERGENCY' : s.triage_level || 'ROUTINE',
@@ -1477,7 +1224,15 @@ export class DoctorPanelService {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const filter = {};
+    const doctorFilter = {
+      $or: [
+        { doctor_id: doctorId },
+        { doctor_id: String(doctorId).toUpperCase() },
+        { doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+
+    const filter = { ...doctorFilter };
     if (tab === 'TODAY') {
       filter.appointment_date = { $gte: todayStart, $lte: todayEnd };
       filter.status = { $ne: 'CANCELLED' };
@@ -1498,13 +1253,14 @@ export class DoctorPanelService {
     let results = appointments.map((a) => {
       const p = patientMap.get(a.patient_id) || {};
       const fullName = p.first_name ? `${p.first_name} ${p.last_name || ''}`.trim() : a.patient_id;
+      const realAge = p.age != null ? p.age : (p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
       return {
         id: a.appointment_id,
         appointmentId: a.appointment_id,
         patientId: a.patient_id,
         patientName: fullName,
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 40,
-        gender: p.gender || 'OTHER',
+        age: realAge,
+        gender: p.gender || null,
         phone: p.phone || '',
         date: a.appointment_date ? new Date(a.appointment_date).toISOString().split('T')[0] : '',
         time: a.appointment_time,
@@ -1529,10 +1285,10 @@ export class DoctorPanelService {
     }
 
     const [todayCount, upcomingCount, completedCount, cancelledCount] = await Promise.all([
-      Appointment.countDocuments({ appointment_date: { $gte: todayStart, $lte: todayEnd }, status: { $ne: 'CANCELLED' } }).catch(() => 0),
-      Appointment.countDocuments({ appointment_date: { $gt: todayEnd }, status: { $ne: 'CANCELLED' } }).catch(() => 0),
-      Appointment.countDocuments({ status: 'COMPLETED' }).catch(() => 0),
-      Appointment.countDocuments({ status: 'CANCELLED' }).catch(() => 0),
+      Appointment.countDocuments({ ...doctorFilter, appointment_date: { $gte: todayStart, $lte: todayEnd }, status: { $ne: 'CANCELLED' } }).catch(() => 0),
+      Appointment.countDocuments({ ...doctorFilter, appointment_date: { $gt: todayEnd }, status: { $ne: 'CANCELLED' } }).catch(() => 0),
+      Appointment.countDocuments({ ...doctorFilter, status: 'COMPLETED' }).catch(() => 0),
+      Appointment.countDocuments({ ...doctorFilter, status: 'CANCELLED' }).catch(() => 0),
     ]);
 
     return {
@@ -1581,12 +1337,21 @@ export class DoctorPanelService {
       throw ApiError.badRequest(`Invalid status: ${status}`);
     }
 
+    const query = { appointment_id: appointmentId };
+    if (doctorId) {
+      query.$or = [
+        { doctor_id: doctorId },
+        { doctor_id: String(doctorId).toUpperCase() },
+        { doctor_id: String(doctorId).toLowerCase() },
+      ];
+    }
+
     const updated = await Appointment.findOneAndUpdate(
-      { appointment_id: appointmentId },
+      query,
       { $set: { status } },
       { returnDocument: 'after' }
     );
-    if (!updated) throw ApiError.notFound(`Appointment '${appointmentId}' not found.`);
+    if (!updated) throw ApiError.notFound(`Appointment '${appointmentId}' not found or not authorized for Doctor ${doctorId}.`);
     return updated;
   }
 
@@ -1596,14 +1361,74 @@ export class DoctorPanelService {
   async getDoctorPatients(doctorId, { search = '', page = 1, limit = 50 } = {}) {
     await this.ensureSeedClinicalData(doctorId);
 
-    const filter = {};
+    // 1. Determine all authorized patient IDs for this specific physician
+    const doctorMatch = {
+      $or: [
+        { doctor_id: doctorId },
+        { doctor_id: String(doctorId).toUpperCase() },
+        { doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+
+    const sessionDoctorMatch = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+
+    // Resolve doctor's User ObjectId if available, for querying ClinicalRecord.reviewed_by
+    const doctorUser = await User.findOne({
+      $or: [
+        { doctor_id: doctorId },
+        ...(mongoose.Types.ObjectId.isValid(doctorId) ? [{ _id: doctorId }] : []),
+      ],
+    }).select('_id').lean().catch(() => null);
+
+    const doctorObjectId = doctorUser?._id || (mongoose.Types.ObjectId.isValid(doctorId) ? doctorId : null);
+
+    const [apptPids, sessionPids, redFlagPids, recordPids] = await Promise.all([
+      Appointment.distinct('patient_id', doctorMatch).catch(() => []),
+      ClinicalSession.distinct('patient_id', sessionDoctorMatch).catch(() => []),
+      RedFlagCase.distinct('patient_id', sessionDoctorMatch).catch(() => []),
+      doctorObjectId ? ClinicalRecord.distinct('patient_id', { reviewed_by: doctorObjectId }).catch(() => []) : Promise.resolve([]),
+    ]);
+
+    const authorizedPatientIds = Array.from(
+      new Set([...apptPids, ...sessionPids, ...redFlagPids, ...recordPids].filter(Boolean))
+    );
+
+    // If doctor has no authorized patients yet, return empty list
+    if (authorizedPatientIds.length === 0) {
+      return { patients: [], total: 0, page, limit };
+    }
+
+    const filter = { patient_id: { $in: authorizedPatientIds } };
     if (search && search.trim()) {
       const q = search.trim();
-      filter.$or = [
-        { first_name: { $regex: q, $options: 'i' } },
-        { last_name: { $regex: q, $options: 'i' } },
-        { patient_id: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } },
+      // Match ABHA identities (ABHA Number or ABHA Address or reference)
+      const matchingAbhas = await PatientIdentity.find({
+        identity_type: 'ABHA',
+        $or: [
+          { identity_reference: { $regex: q, $options: 'i' } },
+          { abha_number: { $regex: q, $options: 'i' } },
+          { abha_address: { $regex: q, $options: 'i' } },
+        ],
+      }).select('patient_id').lean().catch(() => []);
+      const abhaPatientIds = matchingAbhas.map((m) => m.patient_id).filter(Boolean);
+
+      filter.$and = [
+        { patient_id: { $in: authorizedPatientIds } },
+        {
+          $or: [
+            { first_name: { $regex: q, $options: 'i' } },
+            { last_name: { $regex: q, $options: 'i' } },
+            { patient_id: { $regex: q, $options: 'i' } },
+            { phone: { $regex: q, $options: 'i' } },
+            ...(abhaPatientIds.length > 0 ? [{ patient_id: { $in: abhaPatientIds } }] : []),
+          ],
+        },
       ];
     }
 
@@ -1612,11 +1437,12 @@ export class DoctorPanelService {
       Patient.countDocuments(filter).catch(() => 0),
     ]);
 
-    // Aggregate latest session and vitals for each patient
+    // Aggregate latest session, vitals, and real ABHA identities for each patient
     const pids = patients.map((p) => p.patient_id);
-    const [sessions, vitals] = await Promise.all([
+    const [sessions, vitals, abhaIdentities] = await Promise.all([
       ClinicalSession.find({ patient_id: { $in: pids } }).sort({ createdAt: -1 }).catch(() => []),
       VitalsRecord.find({ patient_id: { $in: pids } }).sort({ recorded_at: -1 }).catch(() => []),
+      PatientIdentity.find({ patient_id: { $in: pids }, identity_type: 'ABHA' }).catch(() => []),
     ]);
 
     const latestSessionMap = new Map();
@@ -1629,19 +1455,27 @@ export class DoctorPanelService {
       if (!latestVitalsMap.has(v.patient_id)) latestVitalsMap.set(v.patient_id, v);
     });
 
+    const abhaMap = new Map();
+    abhaIdentities.forEach((idDoc) => {
+      if (idDoc.identity_reference) abhaMap.set(idDoc.patient_id, idDoc.identity_reference);
+    });
+
     const formatted = patients.map((p) => {
       const s = latestSessionMap.get(p.patient_id);
       const v = latestVitalsMap.get(p.patient_id);
       const isRedFlag = s?.triage_level === 'EMERGENCY' || s?.triage_level === 'HIGH' || Boolean(s?.red_flags?.has_red_flag);
+      const realAge = p.age != null ? p.age : (p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
+
       return {
         id: p.patient_id,
         patientId: p.patient_id,
+        sessionId: s?.session_id || null,
         name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 42,
-        gender: p.gender || 'OTHER',
+        age: realAge,
+        gender: p.gender || null,
         phone: p.phone || '',
         bloodGroup: p.blood_group || 'O+',
-        abhaId: `91-${p.patient_id.slice(-4)}-8821-4901`,
+        abhaId: abhaMap.get(p.patient_id) || null,
         latestComplaint: s?.clinical_state?.chief_complaint || s?.chief_complaint_category || 'General Follow-up',
         riskStatus: isRedFlag ? 'High Priority' : s?.triage_level === 'MODERATE' ? 'Moderate' : 'Low',
         lastVisit: s?.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'Recent',
@@ -1659,16 +1493,57 @@ export class DoctorPanelService {
     return { patients: formatted, total, page, limit };
   }
 
-  async getPatientClinicalProfile(patientId) {
+  async getPatientClinicalProfile(patientId, doctorId = null, userRole = 'DOCTOR') {
     if (!patientId) throw ApiError.badRequest('Patient ID is required');
 
-    const [patient, sessions, records, vitalsList, documents, appointments] = await Promise.all([
+    // Server-side authorization check: verify that this doctor has an authorized clinical relationship with the patient
+    if (userRole !== ROLES.ADMIN && doctorId) {
+      const doctorMatch = {
+        $or: [
+          { doctor_id: doctorId },
+          { doctor_id: String(doctorId).toUpperCase() },
+          { doctor_id: String(doctorId).toLowerCase() },
+        ],
+      };
+      const sessionDoctorMatch = {
+        $or: [
+          { assigned_doctor_id: doctorId },
+          { assigned_doctor_id: String(doctorId).toUpperCase() },
+          { assigned_doctor_id: String(doctorId).toLowerCase() },
+        ],
+      };
+      const doctorUser = await User.findOne({
+        $or: [
+          { doctor_id: doctorId },
+          ...(mongoose.Types.ObjectId.isValid(doctorId) ? [{ _id: doctorId }] : []),
+        ],
+      }).select('_id').lean().catch(() => null);
+
+      const doctorObjectId = doctorUser?._id || (mongoose.Types.ObjectId.isValid(doctorId) ? doctorId : null);
+
+      const [hasAppt, hasSession, hasRedFlag, hasRecord] = await Promise.all([
+        Appointment.exists({ patient_id: patientId, ...doctorMatch }),
+        ClinicalSession.exists({ patient_id: patientId, ...sessionDoctorMatch }),
+        RedFlagCase.exists({ patient_id: patientId, ...sessionDoctorMatch }),
+        doctorObjectId ? ClinicalRecord.exists({ patient_id: patientId, reviewed_by: doctorObjectId }) : Promise.resolve(null),
+      ]);
+
+      if (!hasAppt && !hasSession && !hasRedFlag && !hasRecord) {
+        throw ApiError.forbidden(
+          `Access denied. Doctor '${doctorId}' is not authorized to access clinical records for patient '${patientId}'.`,
+          'UNAUTHORIZED_PATIENT_ACCESS'
+        );
+      }
+    }
+
+    const [patient, sessions, records, vitalsList, documents, appointments, abhaIdentity] = await Promise.all([
       Patient.findOne({ patient_id: patientId }).catch(() => null),
       ClinicalSession.find({ patient_id: patientId }).sort({ createdAt: -1 }).catch(() => []),
       ClinicalRecord.find({ patient_id: patientId }).sort({ createdAt: -1 }).catch(() => []),
       VitalsRecord.find({ patient_id: patientId }).sort({ recorded_at: -1 }).catch(() => []),
       MedicalDocument.find({ patient_id: patientId }).sort({ createdAt: -1 }).catch(() => []),
       Appointment.find({ patient_id: patientId }).sort({ appointment_date: -1 }).catch(() => []),
+      PatientIdentity.findOne({ patient_id: patientId, identity_type: 'ABHA' }).catch(() => null),
     ]);
 
     if (!patient) throw ApiError.notFound(`Patient '${patientId}' not found.`);
@@ -1676,17 +1551,18 @@ export class DoctorPanelService {
     const latestSession = sessions[0] || {};
     const latestVitals = vitalsList[0] || {};
     const isRedFlag = latestSession.triage_level === 'EMERGENCY' || Boolean(latestSession.red_flags?.has_red_flag);
+    const realAge = patient.age != null ? patient.age : (patient.date_of_birth ? Math.floor((Date.now() - new Date(patient.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
 
     return {
       patient: {
         patientId: patient.patient_id,
         name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
-        age: patient.date_of_birth ? Math.floor((Date.now() - new Date(patient.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 42,
-        gender: patient.gender || 'OTHER',
+        age: realAge,
+        gender: patient.gender || null,
         phone: patient.phone || '',
         bloodGroup: patient.blood_group || 'O+',
-        address: patient.address || 'Ahmedabad, Gujarat',
-        abhaId: `91-${patient.patient_id.slice(-4)}-8821-4901`,
+        address: patient.address || 'Not provided',
+        abhaId: abhaIdentity?.identity_reference || null,
         riskStatus: isRedFlag ? 'High Priority' : latestSession.triage_level === 'MODERATE' ? 'Moderate' : 'Routine',
       },
       vitals: vitalsList.map((v) => ({
@@ -1718,15 +1594,23 @@ export class DoctorPanelService {
         notes: r.doctor_notes || '',
         status: r.review_status,
       })),
-      documents: documents.map((d) => ({
-        documentId: d.document_id,
-        name: d.file_name || 'Medical Document.pdf',
-        type: d.document_type || 'LAB_REPORT',
-        url: d.file_url,
-        summary: d.clinical_summary,
-        date: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'Recent',
-        isVerified: !d.requires_doctor_verification,
-      })),
+      documents: documents.map((d) => {
+        const docSummaryText = typeof d.clinical_summary === 'string'
+          ? d.clinical_summary
+          : (d.clinical_summary?.physician_digest || d.clinical_summary?.patient_overview || 'Diagnostic parameters verified.');
+        const rawUrl = d.file_url || (d.document_id ? `/api/v1/documents/${d.document_id}/file` : null);
+        const resolvedUrl = rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `http://localhost:5000${rawUrl}`) : null;
+        return {
+          documentId: d.document_id,
+          name: d.file_name || 'Medical Document.pdf',
+          type: d.document_type || 'LAB_REPORT',
+          url: resolvedUrl,
+          summary: docSummaryText,
+          structuredSummary: d.clinical_summary || null,
+          date: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'Recent',
+          isVerified: !d.requires_doctor_verification,
+        };
+      }),
       appointments: appointments.map((a) => ({
         appointmentId: a.appointment_id,
         date: a.appointment_date ? new Date(a.appointment_date).toLocaleDateString() : '',
@@ -1743,7 +1627,13 @@ export class DoctorPanelService {
   async getDoctorConsultations(doctorId, { tab = 'ALL', search = '' } = {}) {
     await this.ensureSeedClinicalData(doctorId);
 
-    const filter = {};
+    const filter = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
     if (tab === 'ACTIVE') {
       filter.status = { $in: ['READY_FOR_DOCTOR', 'DOCTOR_REVIEW'] };
     } else if (tab === 'COMPLETED') {
@@ -1763,13 +1653,14 @@ export class DoctorPanelService {
       const p = patientMap.get(s.patient_id) || {};
       const r = recordMap.get(s.session_id) || {};
       const isRedFlag = s.triage_level === 'EMERGENCY' || Boolean(s.red_flags?.has_red_flag);
+      const realAge = p.age != null ? p.age : (p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : null);
       return {
         id: s.session_id,
         sessionId: s.session_id,
         patientId: s.patient_id,
         patientName: `${p.first_name || ''} ${p.last_name || ''}`.trim() || s.patient_id,
-        age: p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / (365.25 * 24 * 3600 * 1000)) : 38,
-        gender: p.gender || 'OTHER',
+        age: realAge,
+        gender: p.gender || null,
         chiefComplaint: s.clinical_state?.chief_complaint || s.chief_complaint_category || 'Clinical Encounter',
         doctorNotes: r.doctor_notes || '',
         prescriptionCount: r.physician_prescription?.length || 0,
@@ -1800,7 +1691,38 @@ export class DoctorPanelService {
   async getDoctorReports(doctorId, { search = '' } = {}) {
     await this.ensureSeedClinicalData(doctorId);
 
-    const documents = await MedicalDocument.find().sort({ createdAt: -1 }).limit(60).catch(() => []);
+    // 1. Authorize patient scope for this physician
+    const doctorMatch = {
+      $or: [
+        { doctor_id: doctorId },
+        { doctor_id: String(doctorId).toUpperCase() },
+        { doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+    const sessionDoctorMatch = {
+      $or: [
+        { assigned_doctor_id: doctorId },
+        { assigned_doctor_id: String(doctorId).toUpperCase() },
+        { assigned_doctor_id: String(doctorId).toLowerCase() },
+      ],
+    };
+
+    const [apptPids, sessionPids, redFlagPids] = await Promise.all([
+      Appointment.distinct('patient_id', doctorMatch).catch(() => []),
+      ClinicalSession.distinct('patient_id', sessionDoctorMatch).catch(() => []),
+      RedFlagCase.distinct('patient_id', sessionDoctorMatch).catch(() => []),
+    ]);
+
+    const authorizedPatientIds = Array.from(new Set([...apptPids, ...sessionPids, ...redFlagPids].filter(Boolean)));
+
+    if (authorizedPatientIds.length === 0) {
+      return [];
+    }
+
+    const documents = await MedicalDocument.find({ patient_id: { $in: authorizedPatientIds } })
+      .sort({ createdAt: -1 })
+      .limit(60)
+      .catch(() => []);
     const patientIds = documents.map((d) => d.patient_id).filter(Boolean);
     const patients = await Patient.find({ patient_id: { $in: patientIds } }).catch(() => []);
     const patientMap = new Map(patients.map((p) => [p.patient_id, p]));
@@ -1808,6 +1730,9 @@ export class DoctorPanelService {
     let results = documents.map((d) => {
       const p = patientMap.get(d.patient_id) || {};
       const structured = d.structured_data || d.extracted_data || {};
+      const rawUrl = d.file_url || (d.document_id ? `/api/v1/documents/${d.document_id}/file` : null);
+      const resolvedUrl = rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `http://localhost:5000${rawUrl}`) : null;
+
       return {
         id: d.document_id || d._id.toString(),
         documentId: d.document_id || d._id.toString(),
@@ -1817,7 +1742,7 @@ export class DoctorPanelService {
         name: d.file_name || `${d.document_type || 'Medical Report'}.pdf`,
         type: d.document_type || 'LAB_REPORT',
         date: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'Recent',
-        url: d.file_url,
+        url: resolvedUrl,
         ocrStatus: d.processing_status || 'COMPLETED',
         confidence: d.confidence_score ? Math.round(d.confidence_score * 100) : 95,
         clinicalSummary: typeof d.clinical_summary === 'string' ? d.clinical_summary : d.clinical_summary?.physician_digest || 'Diagnostic parameters verified.',
@@ -1865,8 +1790,14 @@ export class DoctorPanelService {
     await this.ensureSeedClinicalData(doctorId);
 
     const [notifs, redFlags] = await Promise.all([
-      DoctorNotification.find({ status: { $ne: 'WITHDRAWN' } }).sort({ createdAt: -1 }).limit(30).catch(() => []),
-      RedFlagCase.find({ status: { $in: [RED_FLAG_STATUS.DETECTED, RED_FLAG_STATUS.BROADCASTING] } }).sort({ createdAt: -1 }).catch(() => []),
+      DoctorNotification.find({ doctor_id: doctorId, status: { $ne: 'WITHDRAWN' } }).sort({ createdAt: -1 }).limit(30).catch(() => []),
+      RedFlagCase.find({
+        $or: [
+          { assigned_doctor_id: doctorId },
+          { assigned_doctor_id: null, eligible_doctors: doctorId },
+          { assigned_doctor_id: null, status: { $in: [RED_FLAG_STATUS.DETECTED, RED_FLAG_STATUS.BROADCASTING] } },
+        ],
+      }).sort({ createdAt: -1 }).catch(() => []),
     ]);
 
     const formatted = [

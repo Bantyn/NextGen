@@ -1,6 +1,16 @@
 import express from 'express';
 import { z } from 'zod';
-import { createPatient, searchPatients, getPatientById, attachIdentity } from '../controllers/patientController.js';
+import {
+  createPatient,
+  searchPatients,
+  getPatientById,
+  attachIdentity,
+  checkPhone,
+  initiateAbha,
+  verifyAbhaOtp,
+  linkAbha,
+  getAbhaStatus,
+} from '../controllers/patientController.js';
 import {
   getPatientDashboard,
   recordPatientVitals,
@@ -9,7 +19,14 @@ import {
   getPatientNotifications,
   markNotificationRead,
   updateJourneyStep,
+  createPatientEncounter,
+  getPatientEncounters,
+  getPatientEncounterById,
+  addPatientMedicalHistory,
+  getAvailableDoctors,
+  recommendDoctor,
 } from '../controllers/patientDashboardController.js';
+import { patientLogin } from '../controllers/authController.js';
 import { optionalAuthenticate } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validateMiddleware.js';
 
@@ -22,6 +39,7 @@ const createPatientSchema = z.object({
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   phone: z.string().min(8, 'Phone number must be at least 8 digits'),
   address: z.string().optional(),
+  blood_group: z.enum(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', 'UNKNOWN']).optional(),
   opd_type: z.enum(['GENERAL', 'AYUSH']).optional(),
   opd_system: z.string().optional(),
   medical_specialization: z.string().optional(),
@@ -43,14 +61,39 @@ const attachIdentitySchema = z.object({
 // Patient endpoints allow kiosk/staff interaction with optional authentication
 router.use(optionalAuthenticate);
 
-// 1. Dashboard Aggregation Endpoints (must come before /:id)
+// 0. Dedicated Patient Login Endpoint
+router.post('/login', patientLogin);
+router.get('/check-phone/:phone', checkPhone);
+
+// Dedicated ABHA Routes
+router.post('/abha/initiate', initiateAbha);
+router.post('/abha/verify-otp', verifyAbhaOtp);
+router.post('/abha/link', linkAbha);
+router.get('/abha/status', getAbhaStatus);
+
+// 1. Clinical Encounters / Intakes (Separating Patient Identity from Encounter)
+router.post('/encounters', createPatientEncounter);
+router.get('/encounters', getPatientEncounters);
+router.get('/encounters/:sessionId', getPatientEncounterById);
+router.post('/intakes', createPatientEncounter);
+router.get('/intakes', getPatientEncounters);
+router.get('/intakes/:sessionId', getPatientEncounterById);
+
+// 2. Dashboard Aggregation Endpoints (must come before /:id)
 router.get('/dashboard', getPatientDashboard);
 router.get('/dashboard/:id', getPatientDashboard);
 
 // 2. Vitals Recording & History
 router.post('/vitals', recordPatientVitals);
 
-// 3. Appointments
+// 2B. Medical History & Allergy Self-Reporting
+router.post('/medical-history', addPatientMedicalHistory);
+router.post('/medical-history/:id', addPatientMedicalHistory);
+router.post('/:id/medical-history', addPatientMedicalHistory);
+
+// 3. Appointments & Live Doctor Roster
+router.get('/doctors', getAvailableDoctors);
+router.post('/recommend-doctor', recommendDoctor);
 router.get('/appointments', getPatientAppointments);
 router.get('/appointments/:id', getPatientAppointments);
 router.post('/appointments', createPatientAppointment);

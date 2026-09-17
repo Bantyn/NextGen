@@ -36,6 +36,19 @@ const UserSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    age: {
+      type: Number,
+      min: [0, 'Age cannot be negative'],
+      max: [150, 'Age cannot exceed 150'],
+      default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['MALE', 'FEMALE', 'OTHER'],
+      default: 'OTHER',
+      uppercase: true,
+      trim: true,
+    },
     // Doctor profile & live availability fields
     doctor_id: {
       type: String,
@@ -84,6 +97,9 @@ const UserSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Sparse unique index for user mobile numbers
+UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
 
 // Do not return password_hash in toJSON transformation
 UserSchema.methods.toJSON = function () {

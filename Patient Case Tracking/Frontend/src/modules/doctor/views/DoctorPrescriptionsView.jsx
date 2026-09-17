@@ -22,8 +22,8 @@ export const DoctorPrescriptionsView = () => {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [patients, setPatients] = useState([]);
-  const [selectedPatientId, setSelectedPatientId] = useState('PAT-701A1');
-  const [sessionId, setSessionId] = useState('SES-WAIT-01');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [medicines, setMedicines] = useState([
     {
       medicine_name: 'Paracetamol 500mg',
@@ -47,7 +47,11 @@ export const DoctorPrescriptionsView = () => {
           getDoctorPatients(),
         ]);
         setTemplates(tpls || []);
-        if (ptsRes?.patients) setPatients(ptsRes.patients);
+        if (ptsRes?.patients && ptsRes.patients.length > 0) {
+          setPatients(ptsRes.patients);
+          setSelectedPatientId(ptsRes.patients[0].patientId);
+          setSessionId(ptsRes.patients[0].sessionId || '');
+        }
       } catch (err) {
         console.error('Failed to load prescription metadata:', err);
       }
@@ -98,6 +102,12 @@ export const DoctorPrescriptionsView = () => {
     );
   };
 
+  const handleSelectPatient = (pId) => {
+    setSelectedPatientId(pId);
+    const p = patients.find((pt) => pt.patientId === pId || pt.id === pId);
+    setSessionId(p?.sessionId || '');
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (medicines.length === 0 || !medicines[0].medicine_name) {
@@ -106,7 +116,8 @@ export const DoctorPrescriptionsView = () => {
     }
     try {
       setSaving(true);
-      await savePrescription(sessionId, medicines);
+      const targetSession = sessionId || selectedPatientId;
+      await savePrescription(targetSession, medicines, selectedPatientId);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 4000);
     } catch (err) {
@@ -163,12 +174,12 @@ export const DoctorPrescriptionsView = () => {
               <label className="block text-xs font-bold text-slate-700 mb-1">Select Patient</label>
               <select
                 value={selectedPatientId}
-                onChange={(e) => setSelectedPatientId(e.target.value)}
+                onChange={(e) => handleSelectPatient(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-sky-500/20"
               >
                 {patients.map((p) => (
                   <option key={p.patientId} value={p.patientId}>
-                    {p.name} ({p.age}y {p.gender[0]}) - {p.patientId}
+                    {p.name} ({p.age != null ? `${p.age}y` : 'Age N/A'} {p.gender ? `• ${p.gender[0]}` : ''}) - {p.patientId}
                   </option>
                 ))}
               </select>

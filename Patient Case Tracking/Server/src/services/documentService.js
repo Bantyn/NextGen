@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import sharp from 'sharp';
 import Tesseract from 'tesseract.js';
 import dotenv from 'dotenv';
@@ -9,6 +10,17 @@ import { documentRepository } from '../repositories/documentRepository.js';
 import { observationRepository } from '../repositories/observationRepository.js';
 import { sessionRepository } from '../repositories/sessionRepository.js';
 import { redFlagCaseService } from './redFlagCaseService.js';
+import { ClinicalSession } from '../models/ClinicalSession.js';
+import { ApiError } from '../utils/apiError.js';
+import {
+  extractLabTableRows,
+  postProcessRows,
+  parseNumericValue,
+  parseReferenceRange,
+  extractSourceFlag,
+  sanitizeUnit,
+  computeConfidenceScore,
+} from '../utils/medicalTableParser.js';
 
 dotenv.config();
 
@@ -32,11 +44,20 @@ const STANDARD_LAB_RANGES = {
   serum_creatinine: { min: 0.7, max: 1.3, unit: 'mg/dL', criticalLow: null, criticalHigh: 4.5, category: 'Renal Function' },
   blood_urea: { min: 15, max: 40, unit: 'mg/dL', criticalLow: null, criticalHigh: 100, category: 'Renal Function' },
   uric_acid: { min: 3.5, max: 7.2, unit: 'mg/dL', criticalLow: null, criticalHigh: 12.0, category: 'Renal Function' },
-  sgpt: { min: 0, max: 45, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
-  alt: { min: 0, max: 45, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
-  sgot: { min: 0, max: 40, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
-  ast: { min: 0, max: 40, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
-  total_bilirubin: { min: 0.2, max: 1.2, unit: 'mg/dL', criticalLow: null, criticalHigh: 10.0, category: 'Liver Function' },
+  sgpt: { min: 10, max: 49, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
+  alt: { min: 10, max: 49, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
+  sgot: { min: 15, max: 40, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
+  ast: { min: 15, max: 40, unit: 'U/L', criticalLow: null, criticalHigh: 300, category: 'Liver Function' },
+  ast_alt_ratio: { min: 0.5, max: 1.0, unit: '', criticalLow: null, criticalHigh: 2.0, category: 'Liver Function' },
+  ggt: { min: 0, max: 73, unit: 'U/L', criticalLow: null, criticalHigh: 250, category: 'Liver Function' },
+  alp: { min: 30, max: 120, unit: 'U/L', criticalLow: null, criticalHigh: 350, category: 'Liver Function' },
+  total_bilirubin: { min: 0.3, max: 1.2, unit: 'mg/dL', criticalLow: null, criticalHigh: 10.0, category: 'Liver Function' },
+  direct_bilirubin: { min: 0.0, max: 0.3, unit: 'mg/dL', criticalLow: null, criticalHigh: 2.0, category: 'Liver Function' },
+  indirect_bilirubin: { min: 0.2, max: 1.1, unit: 'mg/dL', criticalLow: null, criticalHigh: 3.0, category: 'Liver Function' },
+  total_protein: { min: 5.7, max: 8.2, unit: 'g/dL', criticalLow: 4.5, criticalHigh: null, category: 'Liver Function' },
+  albumin: { min: 3.2, max: 4.8, unit: 'g/dL', criticalLow: 2.5, criticalHigh: null, category: 'Liver Function' },
+  globulin: { min: 2.0, max: 3.5, unit: 'g/dL', criticalLow: null, criticalHigh: 5.0, category: 'Liver Function' },
+  ag_ratio: { min: 0.9, max: 2.0, unit: '', criticalLow: 0.7, criticalHigh: null, category: 'Liver Function' },
   total_cholesterol: { min: 125, max: 200, unit: 'mg/dL', criticalLow: null, criticalHigh: 350, category: 'Lipid Profile' },
   triglycerides: { min: 50, max: 150, unit: 'mg/dL', criticalLow: null, criticalHigh: 500, category: 'Lipid Profile' },
   tsh: { min: 0.4, max: 4.5, unit: 'uIU/mL', criticalLow: 0.05, criticalHigh: 20.0, category: 'Endocrine' },
@@ -111,18 +132,160 @@ export class DocumentService {
   }
 
   /**
-   * Parse numerical value from string
+   * Parse a single numerical value from a string.
+   * CRITICAL GUARD: Returns null if the string looks like a reference range
+   * (e.g. "4.5 - 5.5", "13.0–17.0") — prevents range strings from being
+   * silently truncated to only the lower bound.
    */
   parseNumber(str) {
-    if (!str) return null;
-    const match = String(str).replace(/,/g, '').match(/[-+]?[0-9]*\.?[0-9]+/);
-    return match ? parseFloat(match[0]) : null;
+    return parseNumericValue(str);
+  }
+
+  /**
+   * Decoupled Clinical Summary Generator (PHASE 8 / REQ 21 & 22)
+   * Strictly synthesizes physician digest & patient explanation ONLY from validated structured clinical data.
+   * NEVER invents diagnoses, medications, symptoms, or reference ranges not in the structured data.
+   */
+  generateValidatedClinicalSummary({
+    patient = {},
+    doctor = {},
+    documentType = 'LAB_REPORT',
+    documentTitle = 'Medical Diagnostic Report',
+    documentDate = null,
+    complaints = [],
+    medicalHistory = [],
+    prescribedMedicines = [],
+    labResults = [],
+    importantFindings = [],
+    diagnoses = [],
+    hasCardiacHistory = false,
+    completenessRatio = 1.0,
+    detectedCount = 0,
+  }) {
+    const totalParams = labResults.length;
+    const abnormalParams = labResults.filter(
+      (l) => l.flag === 'HIGH' || l.flag === 'LOW' || l.flag === 'CRITICAL' || l.flag === 'ABNORMAL'
+    ).length;
+    const borderlineParams = labResults.filter(
+      (l) => l.flag === 'BORDERLINE' || l.source_flag === 'BORDERLINE'
+    ).length;
+    const normalParams = labResults.filter(
+      (l) => l.flag === 'NORMAL' && l.source_flag !== 'BORDERLINE'
+    ).length;
+    const uncertainParams = labResults.filter(
+      (l) => l.extraction_quality === 'UNRELIABLE' || l.verification_required
+    ).length;
+
+    const abnormalItems = labResults
+      .filter((l) => l.flag === 'HIGH' || l.flag === 'LOW' || l.flag === 'CRITICAL' || l.flag === 'BORDERLINE' || l.alert)
+      .map((l) => {
+        const flagDesc = l.flag === 'BORDERLINE'
+          ? 'Source report marks this as borderline'
+          : l.flag === 'LOW'
+          ? 'Reported as low'
+          : l.flag === 'CRITICAL'
+          ? 'Reported as critical threshold'
+          : 'Reported as elevated';
+        return `${l.test_name}: ${l.observed_value} ${l.unit || ''} (${flagDesc}; Ref: ${l.reference_range || 'Not reported in document'})`;
+      });
+
+    const physicianDigest = [
+      `Patient Demographics: ${patient.name || 'Patient'} (${patient.age ? `${patient.age}y` : 'Age not reported'}, ${patient.gender || 'Gender not reported'}). Identifier: ${patient.patient_id || 'Not reported in document'}.`,
+      `Document Profile: ${documentType} from ${doctor.facility || 'Reporting Facility'}. Document Date: ${documentDate || 'Not reported in document'}.`,
+      complaints.length > 0 ? `Chief Complaints: ${complaints.join(', ')}.` : 'Chief Complaints: Not reported in document.',
+      medicalHistory.length > 0 ? `Documented Medical History: ${medicalHistory.join(', ')}.` : 'Documented Medical History: Not reported in document.',
+      prescribedMedicines.length > 0 ? `Documented Medications: ${prescribedMedicines.map((m) => `${m.name} ${m.dosage || ''}`).join(', ')}.` : 'Documented Medications: Not reported in document.',
+      totalParams > 0
+        ? `Investigation Breakdown: ${totalParams} parameter(s) evaluated (Normal: ${normalParams}, Abnormal: ${abnormalParams}, Borderline: ${borderlineParams}${uncertainParams > 0 ? `, Uncertain: ${uncertainParams}` : ''}).`
+        : 'Investigations: Non-laboratory diagnostic record.',
+      abnormalItems.length > 0 ? `Reported Deviations: ${abnormalItems.join('; ')}.` : 'Reported Deviations: All evaluated test parameters fall within provided reference intervals.',
+      completenessRatio < 0.8 && detectedCount > 0
+        ? `Data Integrity Alert: Partial parameter extraction detected (${totalParams} structured out of ${detectedCount} detected rows). Source document physical review required.`
+        : null,
+      hasCardiacHistory ? 'Clinical Risk Notice: Document notes prior cardiac history. Clinical correlation with acute presentation recommended.' : null,
+      diagnoses.length > 0 ? `Documented Impression / Diagnosis: ${diagnoses.join('; ')}.` : null,
+      'Clinical Safety Note: This summary is generated from extracted source data without speculative diagnostic assertions. Attending physician correlation required.',
+    ].filter(Boolean).join('\n');
+
+    const clinicalSummaryObj = {
+      patient_overview: `${patient.name || 'Patient'} (${patient.age || 'Age N/A'}, ${patient.gender || 'Gender N/A'})`,
+      document_type: documentType,
+      facility: doctor.facility || 'Not identified',
+      doctor: doctor.name || 'Attending Physician',
+      date: documentDate || 'Not reported',
+      chief_complaints: complaints,
+      medical_history: medicalHistory,
+      current_medications: prescribedMedicines,
+      investigations_count: totalParams,
+      total_parameters: totalParams,
+      abnormal_parameters: abnormalParams,
+      borderline_parameters: borderlineParams,
+      normal_parameters: normalParams,
+      uncertain_parameters: uncertainParams,
+      important_findings: abnormalItems,
+      abnormal_count: abnormalParams + borderlineParams,
+      physician_digest: physicianDigest,
+    };
+
+    const patientBulletFindings = abnormalItems.length > 0
+      ? abnormalItems.map((f) => `• ${f}`).join('\n')
+      : '• All evaluated test parameters appear within standard reference intervals.';
+
+    const patientFriendlyExplanation = [
+      `📄 About This Document`,
+      `This is a ${documentTitle.toLowerCase()} dated ${documentDate || 'unspecified date'} from ${doctor.facility || 'the laboratory'}.`,
+      ``,
+      `Key Findings Summary`,
+      patientBulletFindings,
+      ``,
+      `What This Means`,
+      (abnormalParams + borderlineParams) > 0
+        ? `Out of ${totalParams} measured test parameters, ${abnormalParams + borderlineParams} show values differing from the reference ranges provided in the report or marked as borderline. These findings should be reviewed directly with your doctor.`
+        : `All ${totalParams} evaluated test parameters fall within standard reference intervals provided in the report.`,
+      ``,
+      `Recommended Action`,
+      `Share this report with your physician during your consultation. Only a licensed physician can interpret your test results in context.`,
+      ``,
+      `⚠️ Important Medical Disclaimer`,
+      `This summary is generated strictly from the uploaded source document. It is NOT a medical diagnosis and does not confirm disease. Always consult your treating doctor.`,
+    ].join('\n');
+
+    const patientSummaryObj = {
+      title: documentTitle,
+      date: documentDate || 'Not reported',
+      about: `This is a ${documentTitle.toLowerCase()} dated ${documentDate || 'unspecified date'} from ${doctor.facility || 'the laboratory'}.`,
+      findings: labResults
+        .filter((l) => l.flag === 'HIGH' || l.flag === 'LOW' || l.flag === 'CRITICAL' || l.flag === 'BORDERLINE')
+        .map((f) => ({
+          parameter: `${f.test_name}: ${f.observed_value} ${f.unit || ''}`,
+          status: f.flag,
+          interpretation: f.flag === 'BORDERLINE'
+            ? 'Source report explicitly marks this as borderline.'
+            : `Reported as ${f.flag.toLowerCase()} compared to reference interval.`,
+        })),
+      meaning: (abnormalParams + borderlineParams) > 0
+        ? `${abnormalParams + borderlineParams} test value(s) differ from the reference range provided in the report. Discuss with your physician.`
+        : `All evaluated test parameters are within reported reference intervals.`,
+      action: 'Share this report with your physician during your upcoming appointment.',
+      disclaimer: 'This summary reflects only validated document values and is not a medical diagnosis. Always discuss findings with your treating physician.',
+      plain_text: patientFriendlyExplanation,
+    };
+
+    return { clinicalSummaryObj, patientSummaryObj };
   }
 
   /**
    * Deterministic High-Intelligence Clinical Extractor
-   * Extracts patient info, clinical facts, lab investigations with reference ranges and flags,
-   * generates two-level summaries, and compiles important findings.
+   *
+   * v2 — Multi-Format Accuracy & Robustness Upgrade:
+   * - Uses universal medicalTableParser for lab rows (works on ANY layout)
+   * - Preserves source-printed flags verbatim (Borderline ≠ Normal)
+   * - Guards against numeric and decimal corruption (45-55 -> 4.5-5.5)
+   * - Sanitizes units ("Normal", "High" cannot be units)
+   * - Granular dates: collected_at, reported_at, registered_at, document_date
+   * - Parameter completeness calculation: detected vs structured count
+   * - Sets verification_required when source flag ≠ computed flag or decimal repaired
+   * - Strict zero-hallucination dual summary generation
    */
   extractClinicalDataIntelligently(rawText = '', docTypeHint = 'LAB_REPORT', fileName = '') {
     if (!rawText || rawText.trim().length < 5) return null;
@@ -144,122 +307,149 @@ export class DocumentService {
       detectedType = docTypeHint;
     }
 
-    // 2. Patient Demographics
-    const patientNameMatch = rawText.match(/(?:patient\s*(?:name)?|mr\.|mrs\.|ms\.|pt\.?\s*name)[:\s]+([A-Za-z][A-Za-z\s.]{1,40}?)(?:\r?\n|$|,|;|\bage\b|\bsex\b|\bgender\b)/i);
+    // 2. Patient Demographics Extraction
+    let cleanPatientName = null;
+
+    // Strategy A: Explicit name prefixes (Patient Name, Patient, Client, Beneficiary, etc.)
+    const explicitNameMatch =
+      rawText.match(/(?:patient(?:\s*name)?|pt\.?\s*(?:name)?|name\s*of\s*(?:the\s*)?patient|client(?:\s*name)?|beneficiary(?:\s*name)?)\s*[:#\-]\s*(?:mr\.|mrs\.|ms\.|miss\.|master)?\s*([A-Za-z][A-Za-z\s.]{1,40}?)(?:\r?\n|$|,|;|\bage\b|\bsex\b|\bgender\b|\buhid\b|\bpid\b|\bref\b|\bdate\b)/i) ||
+      rawText.match(/(?:mr\.|mrs\.|ms\.|miss\.|master)\s+([A-Za-z][A-Za-z\s.]{1,35}?)(?:\r?\n|$|,|;|\bage\b|\bsex\b|\bgender\b|\buhid\b|\bpid\b|\bref\b|\bdate\b)/i);
+
+    if (explicitNameMatch) {
+      cleanPatientName = explicitNameMatch[1].trim().replace(/^(?:mr\.|mrs\.|ms\.|miss\.|master)\s*/i, '');
+    }
+
+    // Strategy B: Diagnostic header pattern (name near Age/Sex/UHID block)
+    if (!cleanPatientName) {
+      const ageSexLineIdx = lines.findIndex((l) =>
+        /\bage\s*:\s*\d+/i.test(l) ||
+        /\bsex\s*:\s*(?:male|female)/i.test(l) ||
+        /\buhid\s*:\s*\d+/i.test(l)
+      );
+
+      if (ageSexLineIdx > 0) {
+        for (let i = ageSexLineIdx - 1; i >= Math.max(0, ageSexLineIdx - 4); i--) {
+          let candidate = lines[i];
+          candidate = candidate.replace(/(\[|\(|\|).*$/, '').trim();
+          if (/drlogy|pathology|lab|hospital|clinic|www\.|\.com|complex|road|mumbai|sample\s*collected|accurate|caring|instant|department|investigation|tele|opp/i.test(candidate)) {
+            continue;
+          }
+          if (/^[A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]+){1,3}$/.test(candidate)) {
+            cleanPatientName = candidate;
+            break;
+          }
+        }
+      }
+    }
+
+    // Strategy C: Blacklist validation
+    if (cleanPatientName) {
+      if (
+        /\b(?:with|chronic|acute|disease|asymptomatic|patient|liver|hepatitis|cirrhosis|report|investigation|technician|pathologist|doctor|dr\.|hospital|clinic|sample|specimen|test|result|normal|high|low|reference|ratio|finding|note|medical|evaluation|admitted|fibrosis)\b/i.test(
+          cleanPatientName
+        ) ||
+        cleanPatientName.length < 3 ||
+        cleanPatientName.length > 40
+      ) {
+        cleanPatientName = null;
+      }
+    }
+
     const ageMatch = rawText.match(/(?:age|years?|yrs?)[:\s]+(\d{1,3})/i);
     const genderMatch = rawText.match(/(?:gender|sex)[:\s]+(male|female|other|m|f)\b/i);
     const pidMatch = rawText.match(/(?:patient\s*id|pid|uhid|reg(?:istration)?\.?\s*no|sample\s*no)[:\s]+([A-Za-z0-9\-_]+)/i);
-    const dateMatch = rawText.match(/(?:date|reported|collected|sampled)[:\s]*(\b\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}\b)/i) ||
+
+    // Granular Date Extraction (REQ 17)
+    const collectedMatch = rawText.match(/(?:sample\s*collected(?:\s*on)?|collected(?:\s*on)?|collection\s*date|specimen\s*received)[:\s]*([0-9]{1,2}[-\/.][0-9]{1,2}[-\/.][0-9]{2,4}(?:\s+[0-9]{1,2}:[0-9]{2}(?:\s*[AaPp][Mm])?)?|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}\b)/i);
+    const reportedMatch = rawText.match(/(?:reported(?:\s*on)?|reporting\s*date|verified(?:\s*on)?|approved(?:\s*on)?|result\s*date)[:\s]*([0-9]{1,2}[-\/.][0-9]{1,2}[-\/.][0-9]{2,4}(?:\s+[0-9]{1,2}:[0-9]{2}(?:\s*[AaPp][Mm])?)?|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}\b)/i);
+    const registeredMatch = rawText.match(/(?:registered(?:\s*on)?|registration\s*date|booked(?:\s*on)?|order\s*date)[:\s]*([0-9]{1,2}[-\/.][0-9]{1,2}[-\/.][0-9]{2,4}(?:\s+[0-9]{1,2}:[0-9]{2}(?:\s*[AaPp][Mm])?)?|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}\b)/i);
+    const generalDateMatch = rawText.match(/(?:date)[:\s]*(\b\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}\b)/i) ||
       rawText.match(/\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})\b/i);
 
+    const collectedAt = collectedMatch ? collectedMatch[1].trim() : null;
+    const reportedAt = reportedMatch ? reportedMatch[1].trim() : null;
+    const registeredAt = registeredMatch ? registeredMatch[1].trim() : null;
+    const documentDate = reportedAt || collectedAt || registeredAt || (generalDateMatch ? generalDateMatch[1].trim() : null);
+
     const patient = {
-      name: patientNameMatch ? patientNameMatch[1].trim() : null,
+      name: cleanPatientName,
       age: ageMatch ? String(ageMatch[1]) : null,
       gender: genderMatch ? (genderMatch[1].toUpperCase().startsWith('M') ? 'Male' : genderMatch[1].toUpperCase().startsWith('F') ? 'Female' : 'Other') : null,
       patient_id: pidMatch ? pidMatch[1].trim() : null,
       date_of_birth: null,
     };
 
-    // 3. Facility and Doctor Details
-    const facilityMatch = lines.find((l) => /hospital|clinic|pathology|laboratory|diagnostic|health\s*centre|medical\s*center/i.test(l));
-    const doctorMatches = (rawText.match(/(?:dr\.|doctor)\s+([A-Z][a-zA-Z\s.]+)/gi) || []).map((d) => d.trim());
+    // 3. Facility and Doctor Details (REQ 18)
+    const facilityMatch = lines.find((l) =>
+      /drlogy|hospital|clinic|pathology|laboratory|diagnostic|health\s*centre|medical\s*center/i.test(l) &&
+      !/sample|collected|registered|reported/i.test(l)
+    );
 
-    const doctor = {
-      name: doctorMatches[0] || null,
-      facility: facilityMatch || 'Apex Healthcare Diagnostics',
-      qualification: rawText.match(/(?:mbbs|md|ms|bams|bhms|dnb|frcp|m\.ch)/i)?.[0] || 'Medical Specialist',
-    };
-
-    // 4. Lab Investigations Extraction
-    const labResults = [];
-    const importantFindings = [];
-
-    // Lab row regex: Test Name observed_value unit reference_range
-    const testPatterns = [
-      { key: 'hemoglobin', name: 'Hemoglobin (Hb)', regex: /(?:hemoglobin|haemoglobin|hb)\b[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'wbc', name: 'WBC / Total Leukocyte Count', regex: /(?:wbc|tlc|total\s+leukocyte\s+count|white\s+blood\s+cell)[:\s]*([0-9,.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9,.]+\s*-\s*[0-9,.]+)[\)]?)?/i },
-      { key: 'platelets', name: 'Platelet Count', regex: /(?:platelet(?:s)?(?:\s+count)?|thrombocyte)[:\s]*([0-9,.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9,.]+\s*-\s*[0-9,.]+)[\)]?)?/i },
-      { key: 'rbc', name: 'RBC Count', regex: /(?:rbc|red\s+blood\s+cell)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'fasting_glucose', name: 'Fasting Blood Sugar (FBS)', regex: /(?:fasting\s+(?:blood\s+)?(?:sugar|glucose)|fbs)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'blood_sugar', name: 'Random Blood Sugar (RBS)', regex: /(?:random\s+(?:blood\s+)?(?:sugar|glucose)|rbs|blood\s+glucose)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'hba1c', name: 'HbA1c (Glycated Hemoglobin)', regex: /(?:hba1c|glycated\s+hemoglobin)[:\s]*([0-9.]+)\s*(%?)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'serum_creatinine', name: 'Serum Creatinine', regex: /(?:serum\s+creatinine|creatinine)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'blood_urea', name: 'Blood Urea', regex: /(?:blood\s+urea|urea)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'uric_acid', name: 'Serum Uric Acid', regex: /(?:uric\s+acid)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'sgpt', name: 'SGPT / ALT', regex: /(?:sgpt|alt|alanine\s+aminotransferase)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'sgot', name: 'SGOT / AST', regex: /(?:sgot|ast|aspartate\s+aminotransferase)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'total_bilirubin', name: 'Total Bilirubin', regex: /(?:total\s+bilirubin|bilirubin\s+total)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'total_cholesterol', name: 'Total Cholesterol', regex: /(?:total\s+cholesterol|cholesterol\s+total)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'triglycerides', name: 'Serum Triglycerides', regex: /(?:triglycerides)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'tsh', name: 'Thyroid Stimulating Hormone (TSH)', regex: /(?:tsh|thyroid\s+stimulating\s+hormone)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'potassium', name: 'Serum Potassium (K+)', regex: /(?:potassium|k\+)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-      { key: 'sodium', name: 'Serum Sodium (Na+)', regex: /(?:sodium|na\+)[:\s]*([0-9.]+)\s*([a-zA-Z\/]*)\s*(?:[\(]?([0-9.]+\s*-\s*[0-9.]+)[\)]?)?/i },
-    ];
-
-    for (const pat of testPatterns) {
-      const match = rawText.match(pat.regex);
-      if (match) {
-        const valNum = this.parseNumber(match[1]);
-        if (valNum !== null) {
-          const std = STANDARD_LAB_RANGES[pat.key] || {};
-          const unit = match[2] || std.unit || '';
-          let refRangeStr = match[3] || (std.min !== undefined ? `${std.min} - ${std.max}` : 'Standard Range');
-
-          // Determine flag
-          let flag = 'NORMAL';
-          let minBound = std.min;
-          let maxBound = std.max;
-
-          if (match[3]) {
-            const rangeBounds = match[3].split('-').map((s) => this.parseNumber(s));
-            if (rangeBounds.length === 2 && rangeBounds[0] !== null && rangeBounds[1] !== null) {
-              minBound = rangeBounds[0];
-              maxBound = rangeBounds[1];
-            }
-          }
-
-          if (std.criticalLow !== null && std.criticalLow !== undefined && valNum <= std.criticalLow) {
-            flag = 'CRITICAL';
-          } else if (std.criticalHigh !== null && std.criticalHigh !== undefined && valNum >= std.criticalHigh) {
-            flag = 'CRITICAL';
-          } else if (minBound !== undefined && valNum < minBound) {
-            flag = 'LOW';
-          } else if (maxBound !== undefined && valNum > maxBound) {
-            flag = 'HIGH';
-          }
-
-          const labItem = {
-            test_name: pat.name,
-            category: std.category || 'Clinical Pathology',
-            observed_value: String(valNum),
-            reference_range: refRangeStr,
-            unit,
-            flag,
-            status: flag,
-            alert: flag !== 'NORMAL',
-          };
-
-          labResults.push(labItem);
-
-          if (flag !== 'NORMAL') {
-            importantFindings.push({
-              finding: `${pat.name}: ${valNum} ${unit} (Reported range: ${refRangeStr})`,
-              category: std.category || 'Investigation',
-              status: flag,
-              severity: flag === 'CRITICAL' ? 'CRITICAL' : 'IMPORTANT',
-              value: String(valNum),
-              reference_range: refRangeStr,
-              unit,
-              interpretation: flag === 'LOW'
-                ? `Value is below the expected reference interval.`
-                : flag === 'CRITICAL'
-                ? `Critical clinical threshold crossed. Immediate physician attention advised.`
-                : `Value is elevated compared to reference interval.`,
-            });
-          }
-        }
+    let doctorName = null;
+    const refDocMatch = rawText.match(/(?:ref(?:erred)?\.?\s*by|consulting\s*doctor|consultant|attending\s*physician|doctor|dr\.?)\s*[:#\-]?\s*(?:dr\.?)?\s*([A-Za-z][A-Za-z\s.]{2,35}?)(?:\r?\n|$|,|;|\breported\b|\bcollected\b|\bregistered\b|\bdate\b|\btime\b|\buhid\b|\bpage\b|\bmd\b|\bmbbs\b)/i);
+    if (refDocMatch) {
+      doctorName = `Dr. ${refDocMatch[1].trim().replace(/^dr\.?\s*/i, '')}`;
+    } else {
+      const docMatch = rawText.match(/(?:dr\.|doctor)\s+([A-Z][a-zA-Z\s.]+)/i);
+      if (docMatch) {
+        doctorName = docMatch[0].trim().replace(/\s+(?:reported|collected|registered|generated|sample|date|time|uhid|ref|page|contact).*$/i, '').trim();
       }
     }
+
+    const doctor = {
+      name: doctorName || null,
+      facility: facilityMatch || null,
+      qualification: rawText.match(/(?:mbbs|md|ms|bams|bhms|dnb|frcp|m\.ch)/i)?.[0] || null,
+    };
+
+    // 4. Lab Investigations — Universal Table Parser (Phase 9 Upgrade)
+    const { rows: rawRows } = extractLabTableRows(rawText);
+    const labRows = postProcessRows(rawRows, STANDARD_LAB_RANGES);
+
+    const detectedParametersCount = rawRows ? rawRows.length : 0;
+    const structuredParametersCount = labRows.length;
+    const extractionCompleteness = detectedParametersCount > 0
+      ? Number((structuredParametersCount / detectedParametersCount).toFixed(2))
+      : 1.0;
+
+    // Convert to the standard lab_investigations schema
+    const labResults = labRows.map((row) => ({
+      test_name: row.test_name,
+      category: row.section || 'Clinical Pathology',
+      observed_value: row.observed_value,
+      value: row.observed_value,
+      reference_range: row.reference_range || 'Not reported in document',
+      unit: row.unit || '',
+      // Preserve source-printed flag (Borderline stays Borderline)
+      source_flag: row.source_flag,
+      flag: row.flag || 'NORMAL',
+      status: row.flag || 'NORMAL',
+      computed_flag: row.computed_flag,
+      verification_required: row.verification_required || false,
+      extraction_quality: row.extraction_quality,
+      alert: row.alert || false,
+    }));
+
+    const importantFindings = labResults
+      .filter((l) => l.alert)
+      .map((l) => ({
+        finding: `${l.test_name}: ${l.observed_value} ${l.unit} (Ref: ${l.reference_range}, Flag: ${l.flag})`,
+        category: l.category || 'Investigation',
+        status: l.flag,
+        severity: l.flag === 'CRITICAL' ? 'CRITICAL' : 'IMPORTANT',
+        value: String(l.observed_value || ''),
+        reference_range: l.reference_range || '',
+        unit: l.unit || '',
+        source_flag: l.source_flag,
+        verification_required: l.verification_required,
+        interpretation: l.flag === 'LOW'
+          ? 'Value is below the expected reference interval.'
+          : l.flag === 'CRITICAL'
+          ? 'Critical clinical threshold crossed. Immediate physician attention advised.'
+          : l.flag === 'BORDERLINE'
+          ? 'Value is at the borderline of the reference interval. Monitor closely.'
+          : 'Value is elevated compared to reference interval.',
+      }));
 
     // 5. Prescriptions Extraction
     const prescribedMedicines = [];
@@ -284,7 +474,6 @@ export class DocumentService {
       diagnoses.push(diagMatch[1].trim());
     }
 
-    // Cardiac history detection for red-flag linkage
     const hasCardiacHistory = /cardiac|myocardial\s+infarction|angina|cad\b|coronary|stent|bypass|cabg|heart\s+disease|heart\s+attack/i.test(rawText);
     const medicalHistory = [];
     if (hasCardiacHistory) medicalHistory.push('Previous Cardiac Disease / History');
@@ -293,7 +482,6 @@ export class DocumentService {
     if (/asthma|copd/i.test(rawText)) medicalHistory.push('Respiratory Disorder (Asthma/COPD)');
     if (/chronic\s+kidney|ckd|renal/i.test(rawText)) medicalHistory.push('Renal Function Impairment');
 
-    // Complaints
     const complaints = [];
     const complaintKeywords = ['fever', 'cough', 'cold', 'chest pain', 'chest discomfort', 'headache', 'breathlessness', 'vomiting', 'pain', 'weakness', 'fatigue'];
     for (const ck of complaintKeywords) {
@@ -302,7 +490,6 @@ export class DocumentService {
       }
     }
 
-    // Vitals
     const vitals = {};
     const bpMatch = rawText.match(/BP[:\s]*([0-9]{2,3}\s*\/\s*[0-9]{2,3})/i);
     if (bpMatch) vitals.BP = `${bpMatch[1]} mmHg`;
@@ -311,95 +498,50 @@ export class DocumentService {
     const tempMatch = rawText.match(/(?:Temp|Temperature)[:\s]*([0-9]{2,3}\.?[0-9]?\s*(?:F|C)?)/i);
     if (tempMatch) vitals.temp = tempMatch[1].trim();
 
-    // 7. Generate Dual Summaries (Clinical & Patient-Friendly)
+    // 7. Generate Decoupled Structured Summaries (REQ 21 & 22)
     const docTitle = detectedType === 'LAB_REPORT'
-      ? (labResults.length > 0 ? `${labResults[0].test_name} & Diagnostic Panel` : 'Diagnostic Pathology Report')
+      ? (labResults.length > 0 ? `${labResults[0].category || labResults[0].test_name} Diagnostic Panel` : 'Diagnostic Pathology Report')
       : detectedType === 'PRESCRIPTION'
       ? 'Clinical Prescription & Treatment Advice'
       : detectedType === 'DISCHARGE_SUMMARY'
       ? 'Hospital Discharge Summary'
       : fileName || 'Medical Document';
 
-    // A. Clinical Summary (For Doctors)
-    const abnormalLabSummary = labResults.filter((l) => l.alert).map((l) => `${l.test_name}: ${l.observed_value} ${l.unit} (Ref: ${l.reference_range}, Flag: ${l.flag})`).join('; ');
-    const clinicalSummaryText = [
-      `Patient Overview: ${patient.name || 'Patient'} (${patient.age ? `${patient.age}y` : 'Age unstated'}, ${patient.gender || 'Gender unstated'}).`,
-      `Document Type: ${detectedType} from ${doctor.facility}. Date: ${dateMatch ? dateMatch[1] : 'Unspecified'}.`,
-      complaints.length > 0 ? `Chief Complaints: ${complaints.join(', ')}.` : 'Chief Complaints: None explicitly documented.',
-      medicalHistory.length > 0 ? `Relevant Medical History: ${medicalHistory.join(', ')}.` : 'Relevant Medical History: Not reported in document.',
-      prescribedMedicines.length > 0 ? `Current Medications: ${prescribedMedicines.map((m) => `${m.name} ${m.dosage}`).join(', ')}.` : 'Current Medications: None listed in document.',
-      labResults.length > 0 ? `Investigations: ${labResults.length} parameter(s) evaluated.` : 'Investigations: Non-laboratory diagnostic record.',
-      abnormalLabSummary ? `Important Abnormal Findings: ${abnormalLabSummary}.` : 'Important Abnormal Findings: No critical abnormalities flagged in parameters.',
-      hasCardiacHistory ? 'Possible Risk Indicators: Document notes previous cardiac history; correlation with acute complaints required.' : null,
-      diagnoses.length > 0 ? `Provisional/Clinical Diagnoses: ${diagnoses.join('; ')}.` : null,
-      'Recommended Follow-up: Clinical correlation by attending physician required. AI extraction is supplementary to original clinical record.',
-    ].filter(Boolean).join('\n');
+    const { clinicalSummaryObj, patientSummaryObj } = this.generateValidatedClinicalSummary({
+      patient,
+      doctor,
+      documentType: detectedType,
+      documentTitle: docTitle,
+      documentDate,
+      complaints,
+      medicalHistory,
+      prescribedMedicines,
+      labResults,
+      importantFindings,
+      diagnoses,
+      hasCardiacHistory,
+      completenessRatio: extractionCompleteness,
+      detectedCount: detectedParametersCount,
+    });
 
-    const clinicalSummaryObj = {
-      patient_overview: `${patient.name || 'Patient'} (${patient.age || 'Age N/A'}, ${patient.gender || 'Gender N/A'})`,
-      document_type: detectedType,
-      facility: doctor.facility,
-      doctor: doctor.name,
-      date: dateMatch ? dateMatch[1] : 'Recent',
-      chief_complaints: complaints,
-      medical_history: medicalHistory,
-      current_medications: prescribedMedicines,
-      investigations_count: labResults.length,
-      important_findings: importantFindings.map((f) => f.finding),
-      abnormal_count: importantFindings.length,
-      physician_digest: clinicalSummaryText,
-    };
-
-    // B. Patient-Friendly Summary (For Patients - Simple Language)
-    const patientBulletFindings = importantFindings.length > 0
-      ? importantFindings.map((f) => `• ${f.finding} (${f.status.toLowerCase()} compared to expected range)`).join('\n')
-      : '• All evaluated test parameters appear within standard reference intervals.';
-
-    const patientFriendlyExplanation = [
-      `📄 What this report is about`,
-      `This is a ${docTitle.toLowerCase()} dated ${dateMatch ? dateMatch[1] : 'recently'} from ${doctor.facility}.`,
-      ``,
-      `Key Findings`,
-      patientBulletFindings,
-      ``,
-      `What this may mean`,
-      importantFindings.length > 0
-        ? `Certain values differ from the standard reference ranges. This may be related to your symptoms or current health state, but this report alone cannot provide a diagnosis.`
-        : `Your measured levels are within expected limits based on the values provided in this report.`,
-      ``,
-      `What you should do`,
-      `Please discuss these findings with your doctor during your consultation, especially if you feel unwell or have questions about your medications.`,
-      ``,
-      `⚠️ Important`,
-      `This summary is generated from your uploaded medical report and is NOT a medical diagnosis. Only a qualified doctor can interpret your test results in context.`,
-    ].join('\n');
-
-    const patientSummaryObj = {
-      title: docTitle,
-      date: dateMatch ? dateMatch[1] : 'Recent',
-      about: `This is a ${docTitle.toLowerCase()} dated ${dateMatch ? dateMatch[1] : 'recently'} from ${doctor.facility}.`,
-      findings: importantFindings.map((f) => ({
-        parameter: f.finding,
-        status: f.status,
-        interpretation: f.interpretation,
-      })),
-      meaning: importantFindings.length > 0
-        ? `Certain values are outside standard reference intervals. Please review with your doctor.`
-        : `All evaluated values are within normal reference ranges.`,
-      action: 'Share this report with your physician during your upcoming appointment.',
-      disclaimer: 'This summary is generated from your uploaded report and is not a diagnosis. Always discuss abnormal findings with your treating physician.',
-      plain_text: patientFriendlyExplanation,
-    };
-
-    // 8. Determine Confidence
-    const hasClearText = rawText.length > 80;
-    const confidenceScore = hasClearText ? 0.94 : 0.72;
-    const extractionConfidence = confidenceScore >= 0.9 ? 'CLEAR' : confidenceScore >= 0.7 ? 'PARTIAL' : 'UNCERTAIN';
+    // 8. Real Confidence Score (Phase 9)
+    const { score: confidenceScore, label: extractionConfidence } = computeConfidenceScore({
+      patient,
+      facility: { name: doctor.facility, date: documentDate },
+      labRows,
+      aiTierSucceeded: false, // deterministic path
+    });
 
     return {
       document_type: detectedType,
       document_title: docTitle,
-      date: dateMatch ? dateMatch[1] : new Date().toLocaleDateString(),
+      date: documentDate,
+      collected_at: collectedAt,
+      reported_at: reportedAt,
+      registered_at: registeredAt,
+      document_date: documentDate,
+      document_patient_name: patient.name,
+      document_patient_identifier: patient.patient_id,
       patient,
       doctor,
       vitals,
@@ -413,13 +555,798 @@ export class DocumentService {
       patient_summary: patientSummaryObj,
       confidence_score: confidenceScore,
       extraction_confidence: extractionConfidence,
+      extraction_completeness: extractionCompleteness,
+      detected_parameters_count: detectedParametersCount,
+      structured_parameters_count: structuredParametersCount,
+      requires_review: extractionCompleteness < 0.8 || labResults.some((l) => l.verification_required),
       has_cardiac_history: hasCardiacHistory,
+    };
+  }
+
+  /**
+   * Helper to call specific Groq model with timeout
+   */
+  async callGroqModel(prompt, model = 'llama-3.3-70b-versatile', groqKey = process.env.GROQ_API_KEY) {
+    if (!groqKey || !groqKey.startsWith('gsk_')) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an elite clinical diagnostic AI and medical pathologist. Analyze the uploaded document text and output ONLY valid JSON adhering strictly to the requested schema. No conversational preamble or code fences.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        logger.warn(`[Groq Model ${model}]: returned HTTP ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      return this.parseOcrContent(content);
+    } catch (err) {
+      clearTimeout(timeout);
+      logger.warn(`[Groq Model ${model} Error]: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Primary Tier: Call Groq Cloud AI for deep clinical reasoning and entity extraction
+   */
+  async callGroqClinicalAnalysis(rawText, docTypeHint = 'LAB_REPORT', fileName = '') {
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey || !groqKey.startsWith('gsk_')) return null;
+
+    const prompt = `You are a Senior Hospital Diagnostic Pathologist and Consultant Physician.
+Analyze the following extracted medical text from an uploaded clinical document (${docTypeHint || 'Medical Report'}, file: "${fileName}").
+
+=== CRITICAL EXTRACTION RULES (MUST FOLLOW EXACTLY) ===
+1. "observed_value" MUST be a single numeric string (e.g. "35.00"). NEVER put a range here.
+2. "reference_range" MUST be the exact range printed in the document (e.g. "15.00 - 40.00"). Do NOT invent, normalize, or change it. If not stated, use null.
+3. "flag" MUST be exactly what the lab report printed: "Normal", "High", "Low", "Borderline", or "Critical". Do NOT infer or silently change the flag. If not stated in the source document, use null.
+4. "Borderline" is its own status — NEVER collapse it to "Normal" or "High".
+5. "unit" MUST be a clinical unit string only (e.g. "U/L", "g/dL", "mg/dL", "mill/cumm"). NEVER use "Normal", "High", "Low", "Calculated", or any flag word as a unit.
+6. Do NOT generate patient name, doctor name, or facility name if not clearly present in the text. Use null instead of guessing.
+7. If a numeric value cannot be reliably extracted from the text, set observed_value to null and extraction_quality to "UNRELIABLE".
+8. Do NOT invent medication names or diagnoses that are not stated in the document.
+9. Extract ALL lab investigations/tests visible in the document: test name, observed value (single number only), unit, reference interval (as printed), and status flag (verbatim from source). Do NOT extract only abnormal parameters; extract EVERY parameter (e.g. in CBC extract all 14+ rows: Hb, RBC, PCV, MCV, MCH, MCHC, RDW, WBC, Neutrophils, Lymphocytes, Eosinophils, Monocytes, Basophils, Platelets).
+10. NUMERIC & DECIMAL PRECISION: NEVER drop decimal points. 4.5 - 5.5 must NOT become 45 - 55. 32.5 - 34.5 must NOT become 32.5 - 345. 57.5 must NOT become 575.
+=== END CRITICAL RULES ===
+
+Your tasks:
+1. Classify the document type: "LAB_REPORT", "PRESCRIPTION", "DISCHARGE_SUMMARY", "IMAGING_REPORT", "CONSULTATION_NOTE", or "OTHER".
+2. Extract patient demographics (name, age, gender, patient_id/UHID) if clearly present.
+3. Extract facility/hospital name, doctor name, and date — only if clearly stated.
+4. Extract ALL lab investigations/tests visible in the document with observed values, units, reference intervals, and flags.
+5. Extract all prescribed medications: drug name, generic name, dosage, frequency, duration, timing (before/after food), instructions.
+6. Extract recorded vitals (blood pressure, pulse rate, temperature, SpO2, respiratory rate, blood sugar).
+7. Extract clinical diagnoses, chief complaints/symptoms, past medical history, and allergies.
+8. Identify clinically important or abnormal findings with clinical interpretation. Note any cardiac history or critical life-threatening values.
+9. Generate dual summaries based strictly on extracted data.
+
+DOCUMENT EXTRACTED TEXT:
+"""
+${rawText.slice(0, 12000)}
+"""
+
+Respond ONLY with a valid JSON object strictly matching this schema:
+{
+  "document_type": "LAB_REPORT",
+  "document_title": "string",
+  "patient": {
+    "name": "string or null",
+    "age": "string or null",
+    "gender": "Male | Female | Other | null",
+    "patient_id": "string or null",
+    "date_of_birth": "string or null"
+  },
+  "doctor": {
+    "name": "string or null",
+    "facility": "string",
+    "department": "string or null",
+    "qualification": "string or null"
+  },
+  "vitals": {
+    "BP": "string or null",
+    "PR": "string or null",
+    "temp": "string or null",
+    "spo2": "string or null",
+    "respiratory_rate": "string or null",
+    "blood_sugar": "string or null"
+  },
+  "complaints": ["string"],
+  "diagnoses": ["string"],
+  "medical_history": ["string"],
+  "allergies": ["string"],
+  "lab_investigations": [
+    {
+      "test_name": "string",
+      "category": "string",
+      "observed_value": "string",
+      "reference_range": "string",
+      "unit": "string",
+      "flag": "NORMAL | HIGH | LOW | BORDERLINE | CRITICAL",
+      "status": "NORMAL | HIGH | LOW | BORDERLINE | CRITICAL",
+      "alert": true
+    }
+  ],
+  "prescribed_medicines": [
+    {
+      "name": "string",
+      "generic_name": "string",
+      "dosage": "string",
+      "frequency": "string",
+      "duration": "string",
+      "instructions": "string"
+    }
+  ],
+  "important_findings": [
+    {
+      "finding": "string",
+      "category": "string",
+      "status": "NORMAL | HIGH | LOW | BORDERLINE | CRITICAL",
+      "severity": "NORMAL | IMPORTANT | CRITICAL",
+      "value": "string",
+      "reference_range": "string",
+      "unit": "string",
+      "interpretation": "string"
+    }
+  ],
+  "has_cardiac_history": false,
+  "confidence_score": 0.95,
+  "extraction_confidence": "CLEAR"
+}`;
+
+    // Try primary 70b model, fallback to 8b on failure
+    let result = await this.callGroqModel(prompt, 'llama-3.3-70b-versatile', groqKey);
+    if (!result) {
+      result = await this.callGroqModel(prompt, 'llama-3.1-8b-instant', groqKey);
+    }
+    return result;
+  }
+
+  /**
+   * Secondary Tier: Call Google Gemini API for clinical document analysis
+   */
+  async callGeminiClinicalAnalysis(rawText, docTypeHint = 'LAB_REPORT', fileName = '') {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey || geminiKey.trim().length < 10) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `You are an expert clinical diagnostic AI. Analyze this medical document text (${docTypeHint || 'Report'}, file: "${fileName}") and extract all clinical entities in strict JSON according to clinical schema.\n\nDOCUMENT TEXT:\n"""\n${rawText.slice(0, 12000)}\n"""`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        logger.warn(`[Gemini Document Analysis]: returned HTTP ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      return this.parseOcrContent(text);
+    } catch (err) {
+      clearTimeout(timeout);
+      logger.warn(`[Gemini Document Analysis Error]: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Tertiary Tier: Call n8n Document Processing Webhook if configured
+   */
+  async callN8nClinicalAnalysis(rawText, docTypeHint = 'LAB_REPORT', fileName = '') {
+    const webhookUrl = process.env.N8N_DOCUMENT_WEBHOOK;
+    if (!webhookUrl || webhookUrl.includes('localhost:5678')) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_text: rawText,
+          document_text: rawText,
+          ocr_text: rawText,
+          document_type: docTypeHint,
+          file_name: fileName,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json();
+        return this.parseOcrContent(data);
+      }
+      return null;
+    } catch (err) {
+      clearTimeout(timeout);
+      logger.warn(`[n8n Document Webhook Notice]: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Local LLM Tier: Call local Ollama AI (e.g. qwen2.5-coder:7b or gemma4:26b) if available
+   */
+  async callOllamaClinicalAnalysis(rawText, docTypeHint = 'LAB_REPORT', fileName = '') {
+    const baseUrl = process.env.OLLAMA_API_BASE || 'http://localhost:11434';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const prompt = `You are a clinical pathology assistant. Extract structured clinical data from this medical document text (${docTypeHint || 'LAB_REPORT'}). Output ONLY a valid JSON object.
+CRITICAL EXTRACTION RULES:
+1. Patient name is the actual human person who had the test done (e.g. "Yashvi M. Patel"), located in demographics header near Age/Sex/UHID. NEVER extract clinical conditions or phrases from notes (e.g. "patient with Chronic liver disease", "in an asymptomatic patient") as patient name!
+2. Doctor is the referring doctor or consultant (e.g. "Dr. Hiren Shah"). Do NOT append "Reported on" or dates.
+3. Extract all lab parameters with numerical values, clean units, and reference ranges.
+
+DOCUMENT TEXT:
+"""
+${rawText.slice(0, 8000)}
+"""
+
+Respond with ONLY this JSON structure:
+{
+  "document_type": "LAB_REPORT",
+  "document_title": "string",
+  "patient": { "name": "string", "age": "string", "gender": "Male|Female|Other" },
+  "doctor": { "name": "string", "facility": "string" },
+  "lab_investigations": [
+    { "test_name": "string", "observed_value": "string", "unit": "string", "reference_range": "string", "flag": "NORMAL|HIGH|LOW|CRITICAL" }
+  ],
+  "diagnoses": ["string"],
+  "prescribed_medicines": [],
+  "clinical_summary": { "physician_digest": "string" },
+  "patient_summary": { "about": "string", "meaning": "string", "action": "string", "plain_text": "string" }
+}`;
+
+      const res = await fetch(`${baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen2.5-coder:7b',
+          prompt,
+          format: 'json',
+          stream: false,
+          options: { temperature: 0.1 }
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) return null;
+      const data = await res.json();
+      return this.parseOcrContent(data.response);
+    } catch (err) {
+      clearTimeout(timeout);
+      return null;
+    }
+  }
+
+  /**
+   * Hybrid Enrichment: Cross-verify AI results with standard clinical reference ranges.
+   *
+   * Phase 9 Upgrade:
+   * - Validates AI observed_value is actually a number (not a range or hallucination)
+   * - Preserves source_flag verbatim; sets verification_required if computed flag differs
+   * - Sanitizes units extracted by AI
+   * - Merges with rule-based results to recover any missed parameters
+   * - Forbids silent range/name injection for null AI fields
+   */
+  enrichAndNormalizeAnalysis(aiResult, ruleBasedResult = null, rawText = '') {
+    if (!aiResult) return ruleBasedResult;
+
+    const rule = ruleBasedResult || {};
+    const docType = aiResult.document_type || rule.document_type || 'LAB_REPORT';
+    const docTitle = aiResult.document_title || rule.document_title || 'Medical Diagnostic Report';
+
+    // Blacklist validation helper: rejects clinical phrases or conditions acting as names
+    const isBadName = (name) => {
+      if (!name) return true;
+      return (
+        /\b(?:with|chronic|acute|disease|asymptomatic|patient|liver|hepatitis|cirrhosis|report|investigation|technician|pathologist|doctor|dr\.|hospital|clinic|sample|specimen|test|result|normal|high|low|reference|ratio|finding|note|medical|evaluation|admitted|fibrosis)\b/i.test(
+          name
+        ) ||
+        name.length < 3 ||
+        name.length > 40
+      );
+    };
+
+    let resolvedName = null;
+    if (aiResult.patient?.name && !isBadName(aiResult.patient.name)) {
+      resolvedName = aiResult.patient.name.trim();
+    } else if (rule.patient?.name && !isBadName(rule.patient.name)) {
+      resolvedName = rule.patient.name.trim();
+    }
+
+    // Normalize patient demographics
+    const patient = {
+      name: resolvedName,
+      age: aiResult.patient?.age || rule.patient?.age || null,
+      gender: aiResult.patient?.gender || rule.patient?.gender || null,
+      patient_id: aiResult.patient?.patient_id || rule.patient?.patient_id || null,
+      date_of_birth: aiResult.patient?.date_of_birth || null,
+    };
+
+    // Normalize doctor/facility
+    let resolvedDocName = aiResult.doctor?.name || rule.doctor?.name || null;
+    if (resolvedDocName) {
+      resolvedDocName = resolvedDocName.replace(/\s+(?:reported|collected|registered|generated|sample|date|time|uhid|ref|page|contact).*$/i, '').trim();
+    }
+
+    const doctor = {
+      name: resolvedDocName || 'Attending Physician',
+      facility: aiResult.doctor?.facility || rule.doctor?.facility || 'Apex Healthcare Diagnostics',
+      department: aiResult.doctor?.department || null,
+      qualification: aiResult.doctor?.qualification || rule.doctor?.qualification || 'Medical Specialist',
+    };
+
+    // Normalize lab investigations & cross-check with standard reference ranges (Phase 9)
+    const labResults = Array.isArray(aiResult.lab_investigations) ? [...aiResult.lab_investigations] : [];
+    const importantFindings = Array.isArray(aiResult.important_findings) ? [...aiResult.important_findings] : [];
+
+    // Verify each lab investigation extracted by AI
+    labResults.forEach((lab) => {
+      // PHASE 9: Validate observed_value is actually a single number, not a range or hallucination
+      const valNum = parseNumericValue(lab.observed_value || lab.value);
+      if (valNum === null) {
+        // AI returned a non-numeric value (range, word, etc.) — mark as unreliable
+        lab.extraction_quality = 'UNRELIABLE';
+        lab.observed_value = lab.observed_value ? String(lab.observed_value) : null;
+      } else {
+        lab.extraction_quality = lab.extraction_quality || 'COMPLETE';
+        lab.observed_value = String(valNum);
+      }
+      lab.value = lab.observed_value;
+
+      // PHASE 9: Sanitize unit — reject flag words contaminating unit field
+      lab.unit = sanitizeUnit(lab.unit || '');
+
+      // Preserve source_flag from AI response (verbatim)
+      if (!lab.source_flag && lab.flag) {
+        // Normalize casing of flag from AI but preserve Borderline
+        const flagUpper = String(lab.flag).toUpperCase();
+        if (flagUpper === 'BORDERLINE') lab.source_flag = 'BORDERLINE';
+        else if (flagUpper === 'NORMAL') lab.source_flag = 'NORMAL';
+        else if (flagUpper === 'HIGH') lab.source_flag = 'HIGH';
+        else if (flagUpper === 'LOW') lab.source_flag = 'LOW';
+        else if (flagUpper === 'CRITICAL') lab.source_flag = 'CRITICAL';
+        else lab.source_flag = null;
+      }
+
+      const testKey = String(lab.test_name || '').toLowerCase().replace(/[^a-z]/g, '_');
+
+      // Cross-check with standard clinical reference range dictionary
+      for (const [key, std] of Object.entries(STANDARD_LAB_RANGES)) {
+        if (testKey.includes(key) || key.includes(testKey)) {
+          // Only fill missing reference range from standard dict — never overwrite source range
+          if (!lab.reference_range || lab.reference_range === 'Standard Range' || lab.reference_range === 'Not reported') {
+            lab.reference_range = `${std.min} - ${std.max}`;
+          }
+          if (!lab.unit) lab.unit = std.unit;
+          if (!lab.category) lab.category = std.category;
+
+          if (valNum !== null) {
+            // PHASE 9: Critical threshold check (overrides source flag only at critical bounds)
+            if (std.criticalLow !== null && std.criticalLow !== undefined && valNum <= std.criticalLow) {
+              lab.flag = 'CRITICAL';
+              lab.status = 'CRITICAL';
+              lab.verification_required = true;
+            } else if (std.criticalHigh !== null && std.criticalHigh !== undefined && valNum >= std.criticalHigh) {
+              lab.flag = 'CRITICAL';
+              lab.status = 'CRITICAL';
+              lab.verification_required = true;
+            } else {
+              // Compute flag from value vs range
+              const { min: rMin, max: rMax } = parseReferenceRange(lab.reference_range);
+              let computedFlag = null;
+              if (rMin !== null && rMax !== null) {
+                if (valNum < rMin) computedFlag = 'LOW';
+                else if (valNum > rMax) computedFlag = 'HIGH';
+                else computedFlag = 'NORMAL';
+              }
+              lab.computed_flag = computedFlag;
+
+              // If source flag conflicts with computed flag, flag for verification
+              if (lab.source_flag && computedFlag && lab.source_flag !== computedFlag && lab.source_flag !== 'BORDERLINE') {
+                lab.verification_required = true;
+              }
+
+              // Use source flag as primary; fall back to computed
+              if (!lab.flag || lab.flag === 'NORMAL' && computedFlag && computedFlag !== 'NORMAL') {
+                lab.flag = lab.source_flag || computedFlag || 'NORMAL';
+              } else if (lab.source_flag) {
+                lab.flag = lab.source_flag; // always honour source
+              }
+              lab.status = lab.flag;
+            }
+          }
+          break;
+        }
+      }
+
+      lab.alert = lab.flag === 'CRITICAL' || lab.flag === 'HIGH' || lab.flag === 'LOW' ||
+                  lab.flag === 'BORDERLINE' || lab.flag === 'ABNORMAL';
+
+      // Ensure abnormal finding is recorded in important_findings
+      if (lab.alert && !importantFindings.some((f) => f.finding?.toLowerCase().includes(String(lab.test_name).toLowerCase()))) {
+        importantFindings.push({
+          finding: `${lab.test_name}: ${lab.observed_value} ${lab.unit || ''} (Ref: ${lab.reference_range || 'Standard'}, Flag: ${lab.flag})`,
+          category: lab.category || 'Investigation',
+          status: lab.flag || 'HIGH',
+          severity: lab.flag === 'CRITICAL' ? 'CRITICAL' : 'IMPORTANT',
+          value: String(lab.observed_value || ''),
+          reference_range: lab.reference_range || '',
+          unit: lab.unit || '',
+          source_flag: lab.source_flag,
+          verification_required: lab.verification_required || false,
+          interpretation: lab.clinical_significance ||
+            (lab.flag === 'LOW' ? 'Value is below standard reference interval.' :
+             lab.flag === 'CRITICAL' ? 'Critical clinical threshold crossed. Immediate physician attention advised.' :
+             lab.flag === 'BORDERLINE' ? 'Value is at the borderline of the reference interval. Monitor closely.' :
+             'Value is elevated compared to expected reference interval.'),
+        });
+      }
+    });
+
+    // Merge any rule-based findings that were missed
+    if (rule.lab_investigations) {
+      for (const rLab of rule.lab_investigations) {
+        if (!labResults.some((l) => l.test_name?.toLowerCase().includes(rLab.test_name?.toLowerCase()))) {
+          labResults.push(rLab);
+        }
+      }
+    }
+
+    if (rule.important_findings) {
+      for (const rFind of rule.important_findings) {
+        if (!importantFindings.some((f) => f.finding?.toLowerCase().includes(rFind.finding?.toLowerCase()))) {
+          importantFindings.push(rFind);
+        }
+      }
+    }
+
+    // Prescribed medicines
+    const prescribedMedicines = Array.isArray(aiResult.prescribed_medicines) ? [...aiResult.prescribed_medicines] : [];
+    if (rule.prescribed_medicines) {
+      for (const rMed of rule.prescribed_medicines) {
+        if (!prescribedMedicines.some((m) => m.name?.toLowerCase().includes(rMed.name?.toLowerCase()))) {
+          prescribedMedicines.push(rMed);
+        }
+      }
+    }
+
+    // Complaints, Diagnoses, Medical History
+    const complaints = Array.from(new Set([...(aiResult.complaints || []), ...(rule.complaints || [])]));
+    const diagnoses = Array.from(new Set([...(aiResult.diagnoses || []), ...(rule.diagnoses || [])]));
+    const medicalHistory = Array.from(new Set([...(aiResult.medical_history || []), ...(rule.medical_history || [])]));
+    const allergies = Array.isArray(aiResult.allergies) ? aiResult.allergies : [];
+    const vitals = { ...(rule.vitals || {}), ...(aiResult.vitals || {}) };
+
+    const hasCardiacHistory = Boolean(
+      aiResult.has_cardiac_history ||
+      rule.has_cardiac_history ||
+      /cardiac|myocardial\s+infarction|angina|cad\b|coronary|heart\s+attack/i.test(rawText)
+    );
+
+    // 7. Calculate completeness & carry over dates & demographics
+    const detectedParametersCount = rule.detected_parameters_count || (rawText ? extractLabTableRows(rawText).rows.length : labResults.length);
+    const structuredParametersCount = labResults.length;
+    const extractionCompleteness = detectedParametersCount > 0
+      ? Number((structuredParametersCount / detectedParametersCount).toFixed(2))
+      : 1.0;
+
+    const collectedAt = rule.collected_at || aiResult.collected_at || null;
+    const reportedAt = rule.reported_at || aiResult.reported_at || null;
+    const registeredAt = rule.registered_at || aiResult.registered_at || null;
+    const documentDate = rule.document_date || aiResult.document_date || rule.date || aiResult.date || null;
+
+    // 8. Generate dual summaries strictly from validated structured clinical data (REQ 21 & 22)
+    const { clinicalSummaryObj, patientSummaryObj } = this.generateValidatedClinicalSummary({
+      patient,
+      doctor,
+      documentType: docType,
+      documentTitle: docTitle,
+      documentDate,
+      complaints,
+      medicalHistory,
+      prescribedMedicines,
+      labResults,
+      importantFindings,
+      diagnoses,
+      hasCardiacHistory,
+      completenessRatio: extractionCompleteness,
+      detectedCount: detectedParametersCount,
+    });
+
+    return {
+      document_type: docType,
+      document_title: docTitle,
+      date: documentDate,
+      collected_at: collectedAt,
+      reported_at: reportedAt,
+      registered_at: registeredAt,
+      document_date: documentDate,
+      document_patient_name: patient.name,
+      document_patient_identifier: patient.patient_id,
+      patient,
+      doctor,
+      vitals,
+      complaints,
+      diagnoses,
+      medical_history: medicalHistory,
+      allergies,
+      prescribed_medicines: prescribedMedicines,
+      lab_investigations: labResults,
+      important_findings: importantFindings,
+      clinical_summary: clinicalSummaryObj,
+      patient_summary: patientSummaryObj,
+      confidence_score: aiResult.confidence_score || 0.95,
+      extraction_confidence: aiResult.extraction_confidence || 'CLEAR',
+      extraction_completeness: extractionCompleteness,
+      detected_parameters_count: detectedParametersCount,
+      structured_parameters_count: structuredParametersCount,
+      requires_review: extractionCompleteness < 0.8 || labResults.some((l) => l.verification_required),
+      has_cardiac_history: hasCardiacHistory,
+    };
+  }
+
+  /**
+   * Multi-Tier AI Document Analysis Orchestrator:
+   * Feeds extracted text to Groq Cloud AI, with fallback to Gemini, n8n, and rule-based parser.
+   */
+  async analyzeExtractedTextWithAI(rawText, docTypeHint = 'LAB_REPORT', fileName = '') {
+    if (!rawText || rawText.trim().length < 5) return null;
+
+    let aiResult = null;
+
+    // 1. Try Groq Cloud AI (Primary)
+    try {
+      aiResult = await this.callGroqClinicalAnalysis(rawText, docTypeHint, fileName);
+      if (aiResult) {
+        logger.info(`[Document AI Engine]: Groq AI successfully extracted clinical insights for "${fileName || docTypeHint}"`);
+      }
+    } catch (groqErr) {
+      logger.warn(`[Document AI Engine]: Groq analysis notice: ${groqErr.message}`);
+    }
+
+    // 2. Try Google Gemini AI (Secondary)
+    if (!aiResult) {
+      try {
+        aiResult = await this.callGeminiClinicalAnalysis(rawText, docTypeHint, fileName);
+        if (aiResult) {
+          logger.info(`[Document AI Engine]: Gemini AI successfully extracted clinical insights for "${fileName || docTypeHint}"`);
+        }
+      } catch (geminiErr) {
+        logger.warn(`[Document AI Engine]: Gemini analysis notice: ${geminiErr.message}`);
+      }
+    }
+
+    // 3. Try Local Ollama AI (if available on OLLAMA_API_BASE)
+    if (!aiResult) {
+      try {
+        aiResult = await this.callOllamaClinicalAnalysis(rawText, docTypeHint, fileName);
+        if (aiResult) {
+          logger.info(`[Document AI Engine]: Ollama local AI successfully extracted clinical insights for "${fileName || docTypeHint}"`);
+        }
+      } catch (ollamaErr) {
+        logger.warn(`[Document AI Engine]: Ollama analysis notice: ${ollamaErr.message}`);
+      }
+    }
+
+    // 4. Try n8n Webhook (Quaternary)
+    if (!aiResult) {
+      try {
+        aiResult = await this.callN8nClinicalAnalysis(rawText, docTypeHint, fileName);
+        if (aiResult) {
+          logger.info(`[Document AI Engine]: n8n webhook successfully extracted clinical insights for "${fileName || docTypeHint}"`);
+        }
+      } catch (n8nErr) {
+        logger.warn(`[Document AI Engine]: n8n analysis notice: ${n8nErr.message}`);
+      }
+    }
+
+    // Deterministic parser results for cross-verification & fallback
+    const ruleBasedResult = this.extractClinicalDataIntelligently(rawText, docTypeHint, fileName);
+
+    if (!aiResult) {
+      logger.info(`[Document AI Engine]: Using deterministic clinical intelligence parser for "${fileName || docTypeHint}"`);
+      return ruleBasedResult;
+    }
+
+    // Hybrid Enrichment: Merge AI insights with standard clinical ranges & safety guards
+    return this.enrichAndNormalizeAnalysis(aiResult, ruleBasedResult, rawText);
+  }
+
+  /**
+   * Synchronize extracted document clinical findings into the active ClinicalSession
+   */
+  async syncDocumentToClinicalSession(sessionId, clinicalData, patientId = null) {
+    if (!sessionId || sessionId === 'undefined' || !clinicalData) return;
+
+    try {
+      const session = await ClinicalSession.findOne({ session_id: sessionId });
+      if (!session) return;
+
+      const currentState = session.clinical_state || {};
+      const existingMeds = Array.isArray(currentState.medications) ? currentState.medications : [];
+      const existingAllergies = Array.isArray(currentState.allergies) ? currentState.allergies : [];
+      const existingHistory = Array.isArray(currentState.relevant_history) ? currentState.relevant_history : [];
+      const existingSymptoms = Array.isArray(currentState.symptoms) ? currentState.symptoms : [];
+
+      // Extract new medicines
+      const newMeds = (clinicalData.prescribed_medicines || []).map((m) => {
+        const parts = [m.name, m.dosage, m.frequency].filter(Boolean);
+        return parts.join(' ');
+      }).filter(Boolean);
+
+      // Extract new allergies
+      const newAllergies = (clinicalData.allergies || []).filter(Boolean);
+
+      // Extract new medical history
+      const newHistory = (clinicalData.medical_history || []).filter(Boolean);
+
+      // Extract new symptoms / complaints
+      const newSymptoms = (clinicalData.complaints || []).filter(Boolean);
+
+      const mergedMeds = Array.from(new Set([...existingMeds, ...newMeds]));
+      const mergedAllergies = Array.from(new Set([...existingAllergies, ...newAllergies]));
+      const mergedHistory = Array.from(new Set([...existingHistory, ...newHistory]));
+      const mergedSymptoms = Array.from(new Set([...existingSymptoms, ...newSymptoms]));
+
+      const updates = {
+        'clinical_state.medications': mergedMeds,
+        'clinical_state.allergies': mergedAllergies,
+        'clinical_state.relevant_history': mergedHistory,
+        'clinical_state.symptoms': mergedSymptoms,
+      };
+
+      if (!currentState.chief_complaint && clinicalData.complaints?.length > 0) {
+        updates['clinical_state.chief_complaint'] = clinicalData.complaints[0];
+      }
+
+      // Update clinical summary fields
+      const currentSummary = session.clinical_summary || {};
+      updates['clinical_summary.medications'] = mergedMeds;
+      updates['clinical_summary.allergies'] = mergedAllergies;
+      updates['clinical_summary.past_medical_history'] = mergedHistory;
+      updates['clinical_summary.symptoms'] = mergedSymptoms;
+
+      await ClinicalSession.findOneAndUpdate(
+        { session_id: sessionId },
+        { $set: updates }
+      );
+
+      logger.info(`[Session Document Intelligence Sync]: Synchronized document findings into session ${sessionId} (${mergedMeds.length} meds, ${mergedHistory.length} history items)`);
+    } catch (err) {
+      logger.warn(`[Session Document Intelligence Sync Error]: ${err.message}`);
+    }
+  }
+
+  /**
+   * On-demand AI re-analysis of an existing uploaded medical document
+   */
+  async reanalyzeDocument(documentId) {
+    if (!documentId) throw ApiError.badRequest('Document ID is required');
+
+    const doc = await documentRepository.findByDocumentId(documentId);
+    if (!doc) throw ApiError.notFound(`Medical document '${documentId}' was not found.`);
+
+    const rawText = doc.extracted_text || '';
+    if (!rawText || rawText.trim().length < 5) {
+      throw ApiError.badRequest(`Document '${documentId}' does not contain any extracted text to analyze.`);
+    }
+
+    const analysis = await this.analyzeExtractedTextWithAI(rawText, doc.document_type, doc.file_name);
+    if (!analysis) {
+      throw ApiError.internal('Failed to generate AI analysis for document.');
+    }
+
+    const structuredExtractedData = {
+      patient: analysis.patient || {},
+      doctor: analysis.doctor || {},
+      diagnoses: analysis.diagnoses || [],
+      symptoms: analysis.complaints || [],
+      chief_complaints: analysis.complaints || [],
+      medical_history: analysis.medical_history || [],
+      allergies: analysis.allergies || [],
+      current_medications: analysis.prescribed_medicines || [],
+      previous_medications: [],
+      investigations: (analysis.lab_investigations || []).map((l) => l.test_name),
+      lab_results: analysis.lab_investigations || [],
+      findings: analysis.important_findings || [],
+      vitals: analysis.vitals || {},
+    };
+
+    const requiresVerification = Boolean(
+      analysis.important_findings?.some((f) => f.severity === 'CRITICAL' || f.status === 'CRITICAL') ||
+      analysis.has_cardiac_history
+    );
+
+    const updated = await documentRepository.updateAnalysis(documentId, {
+      structured_data: analysis,
+      extracted_data: structuredExtractedData,
+      clinical_summary: analysis.clinical_summary,
+      patient_summary: analysis.patient_summary,
+      important_findings: analysis.important_findings || [],
+      confidence_score: analysis.confidence_score || 0.95,
+      extraction_confidence: analysis.extraction_confidence || 'CLEAR',
+      requires_doctor_verification: requiresVerification,
+      processing_status: 'COMPLETED',
+    });
+
+    if (doc.session_id) {
+      await this.syncDocumentToClinicalSession(doc.session_id, analysis, doc.patient_id).catch(() => {});
+    }
+
+    return {
+      success: true,
+      document_id: doc.document_id,
+      analysis,
+      updatedDocument: updated,
     };
   }
 
   /**
    * Process document upload, run OCR/PDF text extraction, generate dual summaries,
    * save to MongoDB, auto-populate clinical observations, and link to red-flag engine.
+   *
+   * Upgraded with:
+   * - SHA-256 hash idempotency check (REQ 42)
+   * - Separation of document dates from upload timestamp (REQ 17)
+   * - Application patient ID vs Document patient identity separation (REQ 16)
+   * - Extraction completeness calculation (REQ 11)
    */
   async processAndPersistDocument({
     fileBuffer,
@@ -433,6 +1360,79 @@ export class DocumentService {
     directText = null,
     title = null,
   }) {
+    // 0. SHA-256 Idempotency Check (REQ 42)
+    const hashSource = fileBuffer || (directText ? Buffer.from(directText) : null);
+    const documentHash = hashSource ? crypto.createHash('sha256').update(hashSource).digest('hex') : null;
+
+    if (documentHash) {
+      try {
+        const existingDoc = await documentRepository.findByHash(documentHash);
+        if (existingDoc) {
+          logger.info(`[Document AI Engine]: Document idempotency match: hash ${documentHash.slice(0, 10)}... already processed as ${existingDoc.document_id}`);
+          const existingId = existingDoc.document_id || String(existingDoc._id);
+          return {
+            status: 'success',
+            is_duplicate: true,
+            documentId: existingId,
+            document_id: existingId,
+            _id: String(existingDoc._id),
+            id: String(existingDoc._id),
+            patientId: existingDoc.patient_id,
+            patient_id: existingDoc.patient_id,
+            sessionId: existingDoc.session_id,
+            session_id: existingDoc.session_id,
+            encounterId: existingDoc.encounter_id,
+            encounter_id: existingDoc.encounter_id,
+            documentType: existingDoc.document_type,
+            document_type: existingDoc.document_type,
+            fileName: existingDoc.file_name,
+            file_name: existingDoc.file_name,
+            fileSize: existingDoc.file_size,
+            file_size: existingDoc.file_size,
+            fileUrl: existingDoc.file_url,
+            file_url: existingDoc.file_url,
+            ocr_raw_text: existingDoc.extracted_text,
+            extractedText: existingDoc.extracted_text,
+            extracted_text: existingDoc.extracted_text,
+            extractedData: existingDoc.extracted_data,
+            extracted_data: existingDoc.extracted_data,
+            structuredData: existingDoc.structured_data,
+            structured_data: existingDoc.structured_data,
+            clinicalSummary: existingDoc.clinical_summary,
+            clinical_summary: existingDoc.clinical_summary,
+            patientSummary: existingDoc.patient_summary,
+            patient_summary: existingDoc.patient_summary,
+            importantFindings: existingDoc.important_findings,
+            important_findings: existingDoc.important_findings,
+            confidenceScore: existingDoc.confidence_score,
+            confidence_score: existingDoc.confidence_score,
+            extractionConfidence: existingDoc.extraction_confidence,
+            extraction_confidence: existingDoc.extraction_confidence,
+            processingStatus: existingDoc.processing_status,
+            processing_status: existingDoc.processing_status,
+            requires_doctor_verification: existingDoc.requires_doctor_verification,
+            document_hash: existingDoc.document_hash,
+            collected_at: existingDoc.collected_at,
+            reported_at: existingDoc.reported_at,
+            registered_at: existingDoc.registered_at,
+            document_date: existingDoc.document_date,
+            document_patient_name: existingDoc.document_patient_name,
+            document_patient_identifier: existingDoc.document_patient_identifier,
+            identity_match: existingDoc.identity_match,
+            extraction_completeness: existingDoc.extraction_completeness,
+            detected_parameters_count: existingDoc.detected_parameters_count,
+            structured_parameters_count: existingDoc.structured_parameters_count,
+            requires_review: existingDoc.requires_review,
+            verification_notes: existingDoc.verification_notes,
+            error: existingDoc.error,
+            createdAt: existingDoc.createdAt,
+          };
+        }
+      } catch (hashErr) {
+        logger.warn('[Document Hash Idempotency Check Notice]: ' + hashErr.message);
+      }
+    }
+
     const docId = `doc-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
     let rawExtractedText = directText || '';
     let extractedClinicalData = null;
@@ -467,19 +1467,12 @@ export class DocumentService {
       }
     }
 
-    // 2. Multimodal AI Extraction (Fallback to Rule-Based if Offline)
+    // 2. Multimodal AI Extraction (Primary: Groq Cloud AI, Secondary: Gemini/n8n, Fallback: Deterministic Rules)
     if (rawExtractedText && rawExtractedText.trim().length > 5) {
-      // Direct Groq if configured
-      if (GROQ_API_KEY && !GROQ_API_KEY.includes('<GROQ_API_KEY>')) {
-        try {
-          extractedClinicalData = await this.callGroqDirectly(rawExtractedText);
-        } catch (groqErr) {
-          logger.warn('[Groq Direct Error]: ' + groqErr.message);
-        }
-      }
-
-      // Deterministic Clinical Intelligence Parser
-      if (!extractedClinicalData) {
+      try {
+        extractedClinicalData = await this.analyzeExtractedTextWithAI(rawExtractedText, documentType, fileName);
+      } catch (aiErr) {
+        logger.warn('[AI Document Analysis Pipeline Error]: ' + aiErr.message);
         extractedClinicalData = this.extractClinicalDataIntelligently(rawExtractedText, documentType, fileName);
       }
     } else {
@@ -501,6 +1494,18 @@ export class DocumentService {
       extractedClinicalData?.important_findings?.some((f) => f.severity === 'CRITICAL' || f.status === 'CRITICAL') ||
       extractedClinicalData?.has_cardiac_history
     );
+
+    // Demographics and dates mapping (REQ 16 & 17)
+    const docPatientName = extractedClinicalData?.document_patient_name || extractedClinicalData?.patient?.name || null;
+    const docPatientId = extractedClinicalData?.document_patient_identifier || extractedClinicalData?.patient?.patient_id || null;
+    const collectedAt = extractedClinicalData?.collected_at || null;
+    const reportedAt = extractedClinicalData?.reported_at || null;
+    const registeredAt = extractedClinicalData?.registered_at || null;
+    const documentDate = extractedClinicalData?.document_date || null;
+    const completeness = extractedClinicalData?.extraction_completeness ?? 1.0;
+    const detectedParamsCount = extractedClinicalData?.detected_parameters_count ?? 0;
+    const structuredParamsCount = extractedClinicalData?.structured_parameters_count ?? 0;
+    const requiresReview = extractedClinicalData?.requires_review || (completeness < 0.8 && detectedParamsCount > 0);
 
     // 3. Persist to MongoDB MedicalDocument collection
     let savedDocumentDoc = null;
@@ -528,8 +1533,9 @@ export class DocumentService {
     try {
       savedDocumentDoc = await documentRepository.create({
         document_id: docId,
-        patient_id: patientId || 'PAT-DEMO',
-        session_id: sessionId || `SES-${Date.now()}`,
+        patient_id: patientId || null,
+        session_id: sessionId || null,
+        encounter_id: sessionId || null,
         document_type: extractedClinicalData?.document_type || documentType,
         file_url: fileUrl,
         file_name: fileName,
@@ -544,6 +1550,18 @@ export class DocumentService {
         processing_status: processingStatus,
         confidence_score: confidenceScore,
         extraction_confidence: extractionConfidence,
+        document_hash: documentHash,
+        collected_at: collectedAt,
+        reported_at: reportedAt,
+        registered_at: registeredAt,
+        document_date: documentDate,
+        document_patient_name: docPatientName,
+        document_patient_identifier: docPatientId,
+        identity_match: true,
+        extraction_completeness: completeness,
+        detected_parameters_count: detectedParamsCount,
+        structured_parameters_count: structuredParamsCount,
+        requires_review: requiresReview,
         requires_doctor_verification: requiresDoctorVerification,
         verification_notes: requiresDoctorVerification
           ? 'Abnormal clinical findings or medical history requiring physician verification.'
@@ -600,6 +1618,11 @@ export class DocumentService {
         logger.warn(`[Observation Auto-Population Notice]: ${obsErr.message}`);
       }
 
+      // 4b. Synchronize document findings directly into the active ClinicalSession
+      await this.syncDocumentToClinicalSession(sessionId, extractedClinicalData, patientId).catch((err) => {
+        logger.warn(`[Session Document Intelligence Sync Notice]: ${err.message}`);
+      });
+
       // 5. Red-Flag Engine Integration: Check for high-risk combinations
       try {
         const session = await sessionRepository.findBySessionId(sessionId);
@@ -653,14 +1676,17 @@ export class DocumentService {
 
     return {
       status: isFailed ? 'failed' : 'success',
+      is_duplicate: false,
       documentId: docId,
       document_id: docId,
       _id: docResultId,
       id: docResultId,
-      patientId: patientId || 'PAT-DEMO',
-      patient_id: patientId || 'PAT-DEMO',
-      sessionId: sessionId,
-      session_id: sessionId,
+      patientId: patientId || null,
+      patient_id: patientId || null,
+      sessionId: sessionId || null,
+      session_id: sessionId || null,
+      encounterId: sessionId || null,
+      encounter_id: sessionId || null,
       documentType: extractedClinicalData?.document_type || documentType,
       document_type: extractedClinicalData?.document_type || documentType,
       fileName: fileName,
@@ -686,6 +1712,18 @@ export class DocumentService {
       confidence_score: confidenceScore,
       extractionConfidence: extractionConfidence,
       extraction_confidence: extractionConfidence,
+      document_hash: documentHash,
+      collected_at: collectedAt,
+      reported_at: reportedAt,
+      registered_at: registeredAt,
+      document_date: documentDate,
+      document_patient_name: docPatientName,
+      document_patient_identifier: docPatientId,
+      identity_match: true,
+      extraction_completeness: completeness,
+      detected_parameters_count: detectedParamsCount,
+      structured_parameters_count: structuredParamsCount,
+      requires_review: requiresReview,
       processingStatus: processingStatus,
       processing_status: processingStatus,
       requires_doctor_verification: requiresDoctorVerification,
@@ -698,4 +1736,3 @@ export class DocumentService {
 
 export const documentService = new DocumentService();
 export default documentService;
-

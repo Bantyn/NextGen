@@ -249,19 +249,29 @@ export const DoctorReportsView = () => {
             </div>
 
             <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
-              {selectedReport.url ? (
-                <a
-                  href={selectedReport.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-700 font-semibold"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Inspect Original Document</span>
-                </a>
-              ) : (
-                <span className="text-xs text-slate-400">Scanned PDF verified</span>
-              )}
+              {(() => {
+                const docUrl = selectedReport.url?.startsWith('http')
+                  ? selectedReport.url
+                  : selectedReport.url?.startsWith('/')
+                  ? `http://localhost:5000${selectedReport.url}`
+                  : selectedReport.documentId
+                  ? `http://localhost:5000/api/v1/documents/${selectedReport.documentId}/file`
+                  : null;
+
+                return docUrl ? (
+                  <a
+                    href={docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-700 font-semibold"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Inspect Original Document</span>
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-400">Digital clinical parameters verified</span>
+                );
+              })()}
 
               <div className="flex items-center gap-2">
                 <button

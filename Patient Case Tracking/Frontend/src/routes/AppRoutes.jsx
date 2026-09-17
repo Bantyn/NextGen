@@ -11,6 +11,7 @@ import {
   PatientSuccessView,
   PatientDashboardView,
   PatientLoginView,
+  AbhaOnboardingView,
 } from '../modules/patient';
 import {
   DoctorDashboardView,
@@ -99,6 +100,16 @@ export const AppRoutes = () => {
                   <PatientDashboardView />
                 </PageLayout>
               </ProtectedRoute>
+            }
+          />
+
+          {/* Dedicated ABHA Onboarding Page (Opened in New Tab) */}
+          <Route
+            path="/patient/abha/create"
+            element={
+              <PageLayout>
+                <AbhaOnboardingView />
+              </PageLayout>
             }
           />
 

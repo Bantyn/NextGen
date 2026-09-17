@@ -158,12 +158,13 @@ export async function saveConsultationNotes(sessionId, encounterData) {
 /**
  * 6. Save structured physician prescription
  */
-export async function savePrescription(sessionId, medicines = []) {
+export async function savePrescription(sessionId, medicines = [], patientId = null) {
   try {
-    const res = await apiClient.post(API_ENDPOINTS.DOCTOR_PRESCRIBE(sessionId), { medicines });
+    const res = await apiClient.post(API_ENDPOINTS.DOCTOR_PRESCRIBE(sessionId), { medicines, patientId });
     return res.data;
   } catch (err) {
     console.warn('[DoctorService] Save prescription failed:', err.message);
+    throw err;
   }
 }
 

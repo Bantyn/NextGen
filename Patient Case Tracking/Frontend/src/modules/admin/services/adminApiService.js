@@ -103,6 +103,11 @@ export const adminApiService = {
     const query = new URLSearchParams({ page, limit, action, search }).toString();
     return apiClient.get(`${API_ENDPOINTS.ADMIN_AUDIT_LOGS}?${query}`);
   },
+
+  // 12. Institutional Analytics
+  async getAnalytics() {
+    return apiClient.get('/api/v1/admin/analytics');
+  },
 };
 
 export default adminApiService;
