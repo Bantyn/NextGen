@@ -489,12 +489,17 @@ export const VoiceRecorder = ({
 
       if (fallbackSpeechTimerRef.current)
         clearTimeout(fallbackSpeechTimerRef.current);
+      
+      // Calculate dynamic timeout based on text length (min 20s, up to 90s)
+      // Gujarati/Hindi text can be slower to speak, so we allocate ~150ms per character
+      const dynamicTimeout = Math.min(Math.max(20000, tunedText.length * 150), 90000);
+      
       fallbackSpeechTimerRef.current = setTimeout(() => {
         if (isSpeakingTTSRef.current) {
           console.warn("TTS safety watchdog timer reached, resuming microphone");
           resumeListeningSafe();
         }
-      }, 16000);
+      }, dynamicTimeout);
 
       // Fast-path to Browser Speech if configured, key missing, or OpenRouter is rate-limited (HTTP 429)
       if (

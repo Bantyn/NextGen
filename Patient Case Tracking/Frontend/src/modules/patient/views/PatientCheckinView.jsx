@@ -160,9 +160,39 @@ export const PatientCheckinView = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentStep, formData]);
 
+  // Helper to clean and tune speech text
+  const cleanAndTuneSpeech = (raw) => {
+    if (!raw) return "";
+    let text = String(raw);
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    text = text.replace(/```[\s\S]*?```/g, "");
+    text = text.replace(/[*_#`]/g, "");
+    text = text.replace(/([.!?])\s*/g, "$1 ");
+    text = text.replace(/([,;])\s*/g, "$1 ");
+    return text.trim();
+  };
+
+  // Helper for circuit breaker
+  const isOpenRouterRateLimited = () => {
+    try {
+      const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
+      return until && Date.now() < Number(until);
+    } catch {
+      return false;
+    }
+  };
+
+  const markOpenRouterRateLimited = () => {
+    try {
+      sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 60 * 60 * 1000));
+    } catch {}
+  };
+
   // Multilingual Speech Synthesis via OpenRouter TTS
   const speakText = async (text, langCode) => {
-    if (!text) return;
+    const tunedText = cleanAndTuneSpeech(text);
+    if (!tunedText) return;
+    
     setAudioSpeechActive(true);
 
     const fallbackToBrowser = () => {
@@ -171,15 +201,55 @@ export const PatientCheckinView = () => {
         return;
       }
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = langCode || formData.preferredLanguage || 'gu-IN';
-      utterance.rate = 0.95;
+      const utterance = new SpeechSynthesisUtterance(tunedText);
+      const targetLang = langCode || formData.preferredLanguage || 'gu-IN';
+      
+      const LANGUAGE_MAP = {
+        "gu-IN": { bcp47: "gu-IN" },
+        "hi-IN": { bcp47: "hi-IN" },
+        "en-IN": { bcp47: "en-IN" },
+        "mr-IN": { bcp47: "mr-IN" },
+        "ta-IN": { bcp47: "ta-IN" },
+        "te-IN": { bcp47: "te-IN" },
+        "bn-IN": { bcp47: "bn-IN" },
+      };
+      
+      const bcp47 = LANGUAGE_MAP[targetLang]?.bcp47 || targetLang || "gu-IN";
+      utterance.lang = bcp47;
+      utterance.rate = 0.94;
+      utterance.pitch = 0.90; // Deep, mature male clinical voice pitch
+
+      const voices = window.speechSynthesis.getVoices();
+      const langPrefix = bcp47.split("-")[0].toLowerCase();
+      const langFull = bcp47.toLowerCase();
+
+      const matchingVoices = voices.filter((v) => {
+        const vLang = (v.lang || "").toLowerCase().replace("_", "-");
+        return vLang === langFull || vLang.startsWith(langPrefix);
+      });
+
+      const isExplicitMale = (v) =>
+        /male|madhur|prabhat|niranjan|mohan|rohit|ravi|david|mark|george|guy|james|richard/i.test(v.name);
+      const isNotFemale = (v) =>
+        !/female|kalpana|zira|swara|samantha|heera|kavya|shruti|veena|neerja|anjali|priya/i.test(v.name);
+
+      let chosenVoice = null;
+      if (matchingVoices.length > 0) {
+        chosenVoice = matchingVoices.find(isExplicitMale) || matchingVoices.find(isNotFemale) || matchingVoices[0];
+      }
+      if (!chosenVoice) {
+        chosenVoice = voices.find(isExplicitMale);
+      }
+      if (chosenVoice) {
+        utterance.voice = chosenVoice;
+      }
+
       utterance.onend = () => setAudioSpeechActive(false);
       utterance.onerror = () => setAudioSpeechActive(false);
       window.speechSynthesis.speak(utterance);
     };
 
-    if (PREFERRED_TTS_ENGINE !== 'openrouter' || !OPENROUTER_API_KEY) {
+    if (PREFERRED_TTS_ENGINE !== 'openrouter' || !OPENROUTER_API_KEY || isOpenRouterRateLimited()) {
       fallbackToBrowser();
       return;
     }
@@ -187,7 +257,7 @@ export const PatientCheckinView = () => {
     try {
       const payload = {
         model: FISH_AUDIO_MODEL,
-        input: text,
+        input: tunedText,
         voice: SEHAT_FISH_VOICE_ID,
         response_format: 'mp3',
       };
@@ -204,6 +274,9 @@ export const PatientCheckinView = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 429 || response.status === 402) {
+          markOpenRouterRateLimited();
+        }
         throw new Error(`OpenRouter TTS failed: ${response.status}`);
       }
 
