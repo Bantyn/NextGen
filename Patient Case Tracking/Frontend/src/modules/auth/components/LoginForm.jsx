@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Sparkles, Stethoscope, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../../core/auth/useAuth';
 import { DEMO_USERS, ROLES, ROLE_CONFIGS } from '../../../core/config/roles';
 import { Button } from '../../../components/ui/Button';
@@ -106,7 +106,15 @@ export const LoginForm = () => {
           </Link>
         </div>
 
-        {/* Submit Button — Identical to Patient Intake Action Button */}
+        {/* Inline Error — visible right above the submit button */}
+        {errorMessage && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 animate-fadeIn">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-rose-500" />
+            <span className="leading-relaxed font-medium">{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Submit Button */}
         <div className="pt-2">
           <button
             type="submit"

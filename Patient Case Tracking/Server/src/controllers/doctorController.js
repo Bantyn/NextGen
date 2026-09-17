@@ -50,8 +50,14 @@ export async function handleSavePrescription(req, res, next) {
   try {
     const { sessionId } = req.params;
     const doctorId = req.user?.doctor_id || req.user?.id || 'DOC-MED-01';
-    const { medicines } = req.body;
-    const data = await doctorPanelService.savePhysicianPrescription(sessionId, doctorId, medicines, req.user?.id);
+    const { medicines, patientId, patient_id } = req.body;
+    const data = await doctorPanelService.savePhysicianPrescription(
+      sessionId,
+      doctorId,
+      medicines,
+      req.user?.id,
+      patientId || patient_id
+    );
     return sendSuccess(res, HTTP_STATUS.OK, 'Prescription saved to clinical record', data);
   } catch (err) {
     next(err);
@@ -203,7 +209,9 @@ export async function handleGetDoctorPatients(req, res, next) {
 export async function handleGetPatientClinicalProfile(req, res, next) {
   try {
     const { patientId } = req.params;
-    const data = await doctorPanelService.getPatientClinicalProfile(patientId);
+    const doctorId = req.user?.doctor_id || req.user?.id || 'DOC-MED-01';
+    const userRole = req.user?.role || 'DOCTOR';
+    const data = await doctorPanelService.getPatientClinicalProfile(patientId, doctorId, userRole);
     return sendSuccess(res, HTTP_STATUS.OK, 'Patient clinical dossier retrieved', data);
   } catch (err) {
     next(err);

@@ -64,7 +64,11 @@ export const INITIAL_EMPTY_PATIENT = {
     totalPrescriptions: 0,
     unreadNotifications: 0,
     completedVisits: 0,
+    totalIntakes: 0,
   },
+  intakes: [],
+  intakeHistory: [],
+  activeSession: null,
   historyOfPresentIllness: null,
   doctorNotes: null,
 };

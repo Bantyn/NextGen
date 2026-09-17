@@ -8,6 +8,16 @@ export class UserRepository {
     return User.findOne({ email: email.toLowerCase().trim() });
   }
 
+  async findByPhone(phone) {
+    if (!phone) return null;
+    const cleanDigits = String(phone).replace(/[^0-9]/g, '');
+    const last10 = cleanDigits.slice(-10);
+    if (!last10) return null;
+    return User.findOne({
+      phone: { $regex: `${last10}$`, $options: 'i' },
+    });
+  }
+
   async findById(id) {
     return User.findById(id);
   }

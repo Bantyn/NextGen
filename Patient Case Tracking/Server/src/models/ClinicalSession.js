@@ -141,6 +141,14 @@ const ClinicalSessionSchema = new mongoose.Schema(
       allergies: [String],
       requires_doctor_review: { type: Boolean, default: true },
     },
+    doctor_notes: {
+      type: String,
+      default: null,
+    },
+    prescriptions: {
+      type: mongoose.Schema.Types.Mixed,
+      default: [],
+    },
     started_at: {
       type: Date,
       default: Date.now,

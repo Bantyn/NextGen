@@ -35,20 +35,55 @@ export class OpenFDAService {
     }
 
     try {
-      // 2. Multi-tier search strategy:
-      // Strategy A: Targeted field query
-      let result = await this.fetchFromOpenFDA(
-        `openfda.generic_name:"${encodeURIComponent(queryClean)}",openfda.brand_name:"${encodeURIComponent(queryClean)}",openfda.substance_name:"${encodeURIComponent(queryClean)}"`
+      let result = null;
+
+      // Strategy A: Exact field match on generic name (most accurate for generics like "amoxicillin")
+      result = await this.fetchFromOpenFDA(
+        `openfda.generic_name:"${encodeURIComponent(queryClean)}"`,
+        'label'
       );
 
-      // Strategy B: Full-text drug label search if targeted query returned no results
+      // Strategy B: Exact field match on brand name (for brand names like "Augmentin")
       if (!result) {
-        result = await this.fetchFromOpenFDA(`"${encodeURIComponent(queryClean)}"`);
+        result = await this.fetchFromOpenFDA(
+          `openfda.brand_name:"${encodeURIComponent(queryClean)}"`,
+          'label'
+        );
       }
 
-      // Strategy C: Unquoted keyword search if exact quote returned no results
-      if (!result && queryClean.length > 2) {
-        result = await this.fetchFromOpenFDA(encodeURIComponent(queryClean));
+      // Strategy C: Substance name match (active ingredient)
+      if (!result) {
+        result = await this.fetchFromOpenFDA(
+          `openfda.substance_name:"${encodeURIComponent(queryClean)}"`,
+          'label'
+        );
+      }
+
+      // Strategy D: Combined OR query across all name fields
+      if (!result) {
+        const encoded = encodeURIComponent(queryClean);
+        result = await this.fetchFromOpenFDA(
+          `openfda.generic_name:${encoded}+openfda.brand_name:${encoded}+openfda.substance_name:${encoded}`,
+          'label'
+        );
+      }
+
+      // Strategy E: Full-text search in drug label (broader, less precise)
+      if (!result) {
+        result = await this.fetchFromOpenFDA(`"${encodeURIComponent(queryClean)}"`, 'label');
+      }
+
+      // Strategy F: Fallback to drugsfda endpoint (FDA-approved drug applications)
+      if (!result) {
+        result = await this.fetchFromOpenFDA(
+          `openfda.generic_name:"${encodeURIComponent(queryClean)}"`,
+          'drugsfda'
+        );
+      }
+
+      // Strategy G: Unquoted keyword last resort
+      if (!result && queryClean.length > 3) {
+        result = await this.fetchFromOpenFDA(encodeURIComponent(queryClean), 'label');
       }
 
       if (!result) {
@@ -73,12 +108,13 @@ export class OpenFDAService {
   /**
    * Internal helper to execute HTTP request with timeout to openFDA
    */
-  async fetchFromOpenFDA(searchParam) {
+  async fetchFromOpenFDA(searchParam, endpoint = 'label') {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const url = `${OPENFDA_BASE_URL}/drug/label.json?search=${searchParam}&limit=1`;
+      const path = endpoint === 'drugsfda' ? 'drug/drugsfda.json' : 'drug/label.json';
+      const url = `${OPENFDA_BASE_URL}/${path}?search=${searchParam}&limit=1`;
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
 

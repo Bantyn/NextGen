@@ -16,7 +16,14 @@ const MedicalDocumentSchema = new mongoose.Schema(
     },
     session_id: {
       type: String,
-      required: [true, 'Session ID is required'],
+      required: false,
+      default: null,
+      index: true,
+    },
+    encounter_id: {
+      type: String,
+      required: false,
+      default: null,
       index: true,
     },
     document_type: {
@@ -93,6 +100,60 @@ const MedicalDocumentSchema = new mongoose.Schema(
       enum: ['CLEAR', 'PARTIAL', 'UNCERTAIN'],
       default: 'CLEAR',
     },
+    document_hash: {
+      type: String,
+      index: true,
+      sparse: true,
+      default: null,
+    },
+    collected_at: {
+      type: String,
+      default: null,
+    },
+    reported_at: {
+      type: String,
+      default: null,
+    },
+    registered_at: {
+      type: String,
+      default: null,
+    },
+    document_date: {
+      type: String,
+      default: null,
+    },
+    document_patient_name: {
+      type: String,
+      default: null,
+    },
+    document_patient_identifier: {
+      type: String,
+      default: null,
+    },
+    identity_match: {
+      type: Boolean,
+      default: true,
+    },
+    extraction_completeness: {
+      type: Number,
+      default: 1.0,
+    },
+    detected_parameters_count: {
+      type: Number,
+      default: 0,
+    },
+    structured_parameters_count: {
+      type: Number,
+      default: 0,
+    },
+    validation_errors: {
+      type: [String],
+      default: [],
+    },
+    requires_review: {
+      type: Boolean,
+      default: false,
+    },
     requires_doctor_verification: {
       type: Boolean,
       default: false,
@@ -123,7 +184,11 @@ MedicalDocumentSchema.virtual('patientId').get(function () {
 });
 
 MedicalDocumentSchema.virtual('sessionId').get(function () {
-  return this.session_id;
+  return this.session_id || this.encounter_id;
+});
+
+MedicalDocumentSchema.virtual('encounterId').get(function () {
+  return this.encounter_id || this.session_id;
 });
 
 MedicalDocumentSchema.virtual('fileName').get(function () {

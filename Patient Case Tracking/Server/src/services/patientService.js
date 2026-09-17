@@ -26,6 +26,18 @@ export class PatientService {
       throw ApiError.conflict(`Patient with ID '${patient_id}' already exists.`, 'PATIENT_ID_EXISTS');
     }
 
+    // Strict validation: Only one patient can be registered per mobile number
+    if (payload.phone) {
+      const cleanPhone = String(payload.phone).replace(/[^0-9]/g, '').slice(-10);
+      const existingByPhone = await patientRepository.findByPhone(cleanPhone);
+      if (existingByPhone) {
+        throw ApiError.conflict(
+          `A patient is already registered with mobile number '${payload.phone}' (Patient ID: ${existingByPhone.patient_id}). Only one registration is allowed per phone number.`,
+          'PATIENT_PHONE_EXISTS'
+        );
+      }
+    }
+
     const patient = await patientRepository.create({
       ...payload,
       patient_id,
@@ -43,6 +55,22 @@ export class PatientService {
       token_number,
       status_url: successUrl,
     };
+  }
+
+  async checkPhoneAvailable(phone) {
+    if (!phone) return { available: true };
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length < 10) return { available: true };
+    const existing = await patientRepository.findByPhone(cleanPhone);
+    if (existing) {
+      return {
+        available: false,
+        patient_id: existing.patient_id,
+        name: `${existing.first_name} ${existing.last_name}`.trim(),
+        message: `A patient is already registered with mobile number '${phone}' (Patient ID: ${existing.patient_id}). Only one patient can register with this number.`,
+      };
+    }
+    return { available: true };
   }
 
   async searchPatients({ search, page = 1, limit = 20 } = {}) {
