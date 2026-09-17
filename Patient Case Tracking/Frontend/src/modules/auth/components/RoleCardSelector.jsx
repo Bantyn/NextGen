@@ -9,7 +9,7 @@ const ROLE_ICONS = {
 
 const ALLOWED_REGISTRATION_ROLES = [
   ROLES.DOCTOR
-  ,ROLES.ADMIN
+  // ,ROLES.ADMIN
 
 ];
 

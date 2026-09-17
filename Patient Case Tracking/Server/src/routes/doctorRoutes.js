@@ -43,6 +43,8 @@ const saveNotesSchema = z.object({
 });
 
 const savePrescriptionSchema = z.object({
+  patientId: z.string().optional(),
+  patient_id: z.string().optional(),
   medicines: z.array(
     z.object({
       medicine_name: z.string().min(1, 'Medicine name is required'),

@@ -6,7 +6,10 @@ import { infermedicaService } from './infermedicaService.js';
 import { caseMessageRepository } from '../repositories/caseMessageRepository.js';
 import { observationRepository } from '../repositories/observationRepository.js';
 import { sessionRepository } from '../repositories/sessionRepository.js';
+import { documentRepository } from '../repositories/documentRepository.js';
 import { redFlagCaseService } from './redFlagCaseService.js';
+import clinicalIntelligenceService from './clinicalIntelligenceService.js';
+import { doctorService } from './doctorService.js';
 
 dotenv.config();
 
@@ -1517,7 +1520,31 @@ export class IntakeService {
     language = 'English',
     conversationHistory = [],
     opdMode = 'GENERAL',
+    sessionId = null,
   }) {
+    // Retrieve any uploaded medical documents associated with this session to enrich AI reasoning
+    let documentContext = '';
+    if (sessionId) {
+      try {
+        const sessionDocs = await documentRepository.findBySessionId(sessionId);
+        if (sessionDocs && sessionDocs.length > 0) {
+          const docItems = sessionDocs.map((d) => {
+            const findings = (d.important_findings || [])
+              .map((f) => (typeof f === 'string' ? f : f.finding))
+              .filter(Boolean)
+              .join('; ');
+            const summary = typeof d.clinical_summary === 'string'
+              ? d.clinical_summary
+              : d.clinical_summary?.physician_digest || '';
+            return `[${d.document_type || 'DOCUMENT'}: ${d.file_name}] Findings: ${findings || 'Evaluated'}. Summary: ${summary.slice(0, 200)}`;
+          });
+          documentContext = docItems.join('\n');
+        }
+      } catch (docErr) {
+        logger.warn(`[Intake Document Context Warning]: ${docErr.message}`);
+      }
+    }
+
     // 1. Try n8n Intake Webhook (Active Workflow Orchestration)
     const n8nWebhook = process.env.N8N_INTAKE_WEBHOOK || process.env.N8N_WORKFLOW_URL;
     if (n8nWebhook && !n8nWebhook.includes('localhost:5678')) {
@@ -1534,6 +1561,7 @@ export class IntakeService {
             language,
             opd_mode: opdMode,
             clinical_state: state,
+            uploaded_documents: documentContext || undefined,
             conversation_history: (conversationHistory || []).slice(-5),
           }),
           signal: controller.signal,
@@ -1570,6 +1598,7 @@ export class IntakeService {
 Patient input (${language}): "${patientText}"
 Current symptoms: ${JSON.stringify(state.symptoms || [])}
 Chief complaint: "${state.chief_complaint || 'None'}"
+${documentContext ? `Uploaded Medical Document Intelligence:\n${documentContext}\n` : ''}
 
 Extract clinical entities in JSON:
 {
@@ -1675,6 +1704,7 @@ Extract clinical entities in JSON:
         language,
         conversationHistory: conversation_history,
         opdMode: opd_mode,
+        sessionId: session_id,
       });
 
       if (liveAiResult) {
@@ -1853,14 +1883,52 @@ Extract clinical entities in JSON:
           });
         }
 
+        let assignedDoctorId = undefined;
+
+        // Feature: Auto-assign doctor on Intake Completion
+        if (nextQuestionResult.is_complete) {
+          try {
+            const symptomsText = state.symptoms?.join(', ') || state.chief_complaint || '';
+            if (symptomsText) {
+              const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptomsText, '');
+              const targetSpecialty = specialtyMatch?.primary || 'General Medicine';
+              
+              const availableDocs = await doctorService.getAvailableDoctors({ opd_type: opd_mode || 'GENERAL' });
+              
+              let bestMatch = availableDocs.find(
+                doc => 
+                  (doc.specialization && doc.specialization.toLowerCase().includes(targetSpecialty.toLowerCase())) ||
+                  (doc.department && doc.department.toLowerCase().includes(targetSpecialty.toLowerCase()))
+              );
+              
+              if (!bestMatch && availableDocs.length > 0) {
+                bestMatch = availableDocs[0];
+              }
+              
+              if (bestMatch) {
+                assignedDoctorId = bestMatch.doctor_id;
+                logger.info(`[IntakeService] Auto-assigned Doctor ${assignedDoctorId} for Specialty ${targetSpecialty}`);
+              }
+            }
+          } catch (assignErr) {
+            logger.warn(`[IntakeService] Auto-assignment failed: ${assignErr.message}`);
+          }
+        }
+
+        const extraFields = {
+          clinical_state: state,
+          triage_level: triageResult.triage_level,
+          triage_reason: triageResult.reason,
+        };
+
+        if (assignedDoctorId) {
+          extraFields.assigned_doctor_id = assignedDoctorId;
+        }
+
         await sessionRepository.updateStatus(
           session_id,
           nextQuestionResult.is_complete ? 'READY_FOR_DOCTOR' : sessionStatus,
-          {
-            clinical_state: state,
-            triage_level: triageResult.triage_level,
-            triage_reason: triageResult.reason,
-          }
+          extraFields
         );
       } catch (dbErr) {
         logger.warn(`[Intake DB Persistence Notice]: ${dbErr.message}`);

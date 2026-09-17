@@ -66,22 +66,7 @@ export const DoctorCaseDetailView = () => {
           setPatient(found);
           setNextPatient(next && next.sessionId !== sessionId ? next : null);
           setDoctorRxNotes(found?.doctorRxNotes || '');
-          setPrescriptions(
-            found?.prescriptions && found.prescriptions.length > 0
-              ? found.prescriptions
-              : [
-                  {
-                    medicine_name: 'Paracetamol 650mg',
-                    generic_name: 'Acetaminophen',
-                    dosage: '650 mg',
-                    frequency: 'Three times daily (TDS)',
-                    route: 'Oral',
-                    duration: '5 days',
-                    before_after_food: 'AFTER_FOOD',
-                    instructions: 'Take after meals for fever/pain',
-                  },
-                ]
-          );
+          setPrescriptions(Array.isArray(found?.prescriptions) ? found.prescriptions : []);
           setIsVerified(found?.status === 'APPROVED' || found?.status === 'COMPLETED');
         }
       } catch (err) {

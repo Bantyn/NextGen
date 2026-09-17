@@ -11,6 +11,18 @@ export const ClinicalSummary = ({
   onNotesChange,
   isEditing = false,
 }) => {
+  const safeText = (val, fallback = 'None reported.') => {
+    if (val == null || val === '') return fallback;
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) return val.map((v) => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ');
+    if (typeof val === 'object') {
+      return Object.entries(val)
+        .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+        .join('; ');
+    }
+    return String(val);
+  };
+
   return (
     <div className="space-y-5">
       {/* 1. AI Summary Card */}
@@ -36,7 +48,7 @@ export const ClinicalSummary = ({
               Chief Complaint & HPI:
             </strong>
             <p className="text-slate-800 leading-relaxed">
-              {summary.historyOfPresentIllness || summary.chiefComplaint || 'N/A'}
+              {safeText(summary.historyOfPresentIllness || summary.chiefComplaint, 'No chief complaint recorded.')}
             </p>
           </div>
 
@@ -46,7 +58,7 @@ export const ClinicalSummary = ({
                 Relevant Medical History:
               </strong>
               <p className="text-slate-800">
-                {summary.relevantMedicalHistory || 'None reported.'}
+                {safeText(summary.relevantMedicalHistory, 'None reported.')}
               </p>
             </div>
 
@@ -55,7 +67,7 @@ export const ClinicalSummary = ({
                 Current Medications & Allergies:
               </strong>
               <p className="text-slate-800">
-                Meds: {summary.currentMedications || 'None'} • Allergies: {summary.allergies || 'NKDA'}
+                Meds: {safeText(summary.currentMedications, 'None')} • Allergies: {safeText(summary.allergies, 'NKDA')}
               </p>
             </div>
           </div>
@@ -65,7 +77,7 @@ export const ClinicalSummary = ({
               Prior Investigations / Lab Findings:
             </strong>
             <p className="text-slate-800 leading-relaxed">
-              {summary.investigations || 'No prior labs recorded.'}
+              {safeText(summary.investigations, 'No prior labs recorded.')}
             </p>
           </div>
 
@@ -76,7 +88,7 @@ export const ClinicalSummary = ({
                 Red-Flag Clinical Findings:
               </strong>
               <p className="text-rose-800 leading-relaxed font-medium">
-                {summary.redFlags}
+                {safeText(summary.redFlags)}
               </p>
             </div>
           )}
@@ -88,7 +100,7 @@ export const ClinicalSummary = ({
                 AI Clinical Synthesizer Notes:
               </strong>
               <p className="text-sky-900 leading-relaxed text-[11px]">
-                {summary.aiNotes}
+                {safeText(summary.aiNotes)}
               </p>
             </div>
           )}

@@ -299,7 +299,12 @@ export const MedicalDocuments = ({ documents = [] }) => {
             </div>
 
             <div className="p-4 flex-1 overflow-y-auto bg-slate-100 flex items-center justify-center min-h-[450px]">
-              {inspectingDoc.fileUrl.toLowerCase().endsWith('.pdf') ? (
+              {!inspectingDoc?.fileUrl ? (
+                <div className="p-8 text-center text-slate-500 text-xs space-y-1">
+                  <p className="font-semibold text-slate-800">Document file not found or unavailable.</p>
+                  <p className="text-slate-400">The physical medical file could not be located on the server.</p>
+                </div>
+              ) : (inspectingDoc.type?.includes('pdf') || String(inspectingDoc.fileUrl).toLowerCase().includes('.pdf')) ? (
                 <iframe
                   src={inspectingDoc.fileUrl}
                   className="w-full h-[600px] rounded-2xl border border-slate-200 bg-white"

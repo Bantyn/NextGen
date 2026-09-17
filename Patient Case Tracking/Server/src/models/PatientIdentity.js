@@ -19,10 +19,29 @@ const PatientIdentitySchema = new mongoose.Schema(
       required: [true, 'Identity reference is required'],
       trim: true,
     },
+    abha_number: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    abha_address: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     verification_status: {
       type: String,
       enum: ['VERIFIED', 'PENDING', 'REJECTED'],
       default: 'VERIFIED',
+    },
+    verification_method: {
+      type: String,
+      enum: ['AADHAAR_OTP', 'MOBILE_OTP', 'DEMOGRAPHIC', 'DIRECT_LINK', 'SANDBOX_VERIFIED'],
+      default: 'SANDBOX_VERIFIED',
+    },
+    link_metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     verified_at: {
       type: Date,
@@ -30,6 +49,12 @@ const PatientIdentitySchema = new mongoose.Schema(
     },
   },
   { timestamps: true }
+);
+
+// Compound index to guarantee an ABHA or Aadhaar reference is unique per identity type across patients
+PatientIdentitySchema.index(
+  { identity_reference: 1, identity_type: 1 },
+  { unique: true, partialFilterExpression: { identity_reference: { $type: 'string' } } }
 );
 
 export const PatientIdentity = mongoose.models.PatientIdentity || mongoose.model('PatientIdentity', PatientIdentitySchema);

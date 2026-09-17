@@ -104,8 +104,9 @@ export function mapDocumentToReport(doc) {
     (doc.extracted_text ? doc.extracted_text.slice(0, 160) : '') ||
     'Uploaded medical document processed and synchronized to ABDM Health Locker.';
 
+  const backendBase = apiClient?.baseUrl ? apiClient.baseUrl.replace(/\/api\/v1\/?$/, '') : 'http://localhost:5000';
   const fileUrl = doc.file_url
-    ? (doc.file_url.startsWith('http') ? doc.file_url : `http://localhost:5000${doc.file_url}`)
+    ? (doc.file_url.startsWith('http') ? doc.file_url : `${backendBase}${doc.file_url}`)
     : null;
 
   return {
@@ -181,6 +182,9 @@ export async function fetchPatientDashboardBundle(patientId) {
         consultedDoctors: data.consultedDoctors || [],
         allergies: data.allergies || [],
         chronicConditions: data.chronicConditions || [],
+        intakes: data.intakes || data.intakeHistory || [],
+        intakeHistory: data.intakeHistory || data.intakes || [],
+        activeSession: data.activeSession || null,
         timeline: data.timeline || [],
         appointments: data.appointments || { upcoming: [], all: [] },
         notifications: data.notifications || { unreadCount: 0, items: [] },
@@ -190,6 +194,7 @@ export async function fetchPatientDashboardBundle(patientId) {
           totalPrescriptions: (data.prescriptions || []).length,
           unreadNotifications: data.notifications?.unreadCount || 0,
           completedVisits: (data.timeline || []).length,
+          totalIntakes: (data.intakes || []).length,
         },
       };
     }
@@ -305,17 +310,8 @@ export async function uploadPatientMedicalDocument(patientId, { file, docType, t
   }
   if (sessionId) formData.append('session_id', sessionId);
 
-  const response = await fetch(`http://localhost:5000/api/v1${API_ENDPOINTS.DOCUMENTS_UPLOAD}`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.message || `Upload failed with HTTP status ${response.status}`);
-  }
-
-  const result = await response.json();
+  const res = await apiClient.post(API_ENDPOINTS.DOCUMENTS_UPLOAD, formData);
+  const result = res?.data || res;
   const report = mapDocumentToReport(result);
 
   return {
@@ -345,7 +341,8 @@ export async function registerAndCheckinPatient(formData) {
       last_name: lastName,
       phone: formData.phone?.trim(),
       gender: (formData.gender || 'MALE').toUpperCase(),
-      address: 'Ahmedabad, Gujarat',
+      address: formData.address?.trim() || '',
+      blood_group: formData.bloodGroup || 'UNKNOWN',
       opd_type: opdType,
       opd_system: opdSystem,
       medical_specialization: medicalSpec,
@@ -357,6 +354,9 @@ export async function registerAndCheckinPatient(formData) {
       createdPatient = pRes?.data || null;
     } catch (createErr) {
       console.warn('[PatientService] Patient creation error:', createErr.message);
+      if (createErr.status === 409 || createErr.response?.status === 409 || createErr.code === 'PATIENT_PHONE_EXISTS') {
+        throw createErr;
+      }
     }
 
     const patientId = createdPatient?.patient_id || `PAT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
@@ -456,6 +456,152 @@ export async function fetchDocumentSummary(documentId) {
   }
 }
 
+/**
+ * 8. Start a new intake / clinical encounter for an existing patient
+ */
+export async function startNewPatientIntakeAPI(patientId, intakeData = {}) {
+  try {
+    const res = await apiClient.post('/patient/encounters', {
+      patient_id: patientId,
+      ...intakeData,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Start new encounter failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * 9. Fetch all previous intakes/encounters for a patient
+ */
+export async function fetchPatientIntakesAPI(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_ENCOUNTERS(patientId));
+    return res?.data || [];
+  } catch (err) {
+    console.warn('[PatientService] Fetch patient intakes failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * 10. Fetch a single patient encounter by session ID
+ */
+export async function fetchPatientEncounterByIdAPI(sessionId, patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_ENCOUNTER_BY_ID(sessionId, patientId));
+    return res?.data || null;
+  } catch (err) {
+    console.warn('[PatientService] Fetch encounter failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 11. Patient Login via ABHA ID or phone
+ */
+export async function patientLoginAPI(identifier, dateOfBirth = null) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.PATIENT_LOGIN, {
+      identifier,
+      date_of_birth: dateOfBirth,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Patient login failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * 12. Add self-reported medical history or allergy directly from the dashboard
+ */
+export async function addPatientMedicalHistoryAPI(patientId, data) {
+  try {
+    const res = await apiClient.post(`/patients/${patientId}/medical-history`, data);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Add medical history failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * 13. Fetch live available doctors for appointment scheduling
+ */
+export async function fetchAvailableDoctorsAPI(filters = {}) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PATIENT_DOCTORS, { params: filters });
+    return res?.data || res || [];
+  } catch (err) {
+    console.error('[PatientService] Fetch available doctors failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * 14. Recommend doctor based on symptoms using AI
+ */
+export async function recommendDoctorAPI(symptoms, opdType, patientId) {
+  try {
+    const res = await apiClient.post('/patient/recommend-doctor', {
+      symptoms,
+      opdType,
+      patient_id: patientId
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Recommend doctor failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * 15. ABHA Onboarding & Identity Linking APIs
+ */
+export async function initiateAbhaAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_INITIATE, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Initiate ABHA failed:', err.message);
+    throw err;
+  }
+}
+
+export async function verifyAbhaOtpAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_VERIFY_OTP, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Verify ABHA OTP failed:', err.message);
+    throw err;
+  }
+}
+
+export async function linkAbhaAPI(payload) {
+  try {
+    const res = await apiClient.post(API_ENDPOINTS.ABHA_LINK, payload);
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Link ABHA failed:', err.message);
+    throw err;
+  }
+}
+
+export async function getAbhaStatusAPI(patientId) {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.ABHA_STATUS, {
+      params: patientId ? { patient_id: patientId } : undefined,
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[PatientService] Get ABHA status failed:', err.message);
+    throw err;
+  }
+}
+
 export default {
   fetchRegisteredPatients,
   fetchPatientDashboardBundle,
@@ -470,4 +616,16 @@ export default {
   fetchPatientAppointmentsAPI,
   fetchPatientNotificationsAPI,
   markNotificationReadAPI,
+  startNewPatientIntakeAPI,
+  fetchPatientIntakesAPI,
+  fetchPatientEncounterByIdAPI,
+  patientLoginAPI,
+  addPatientMedicalHistoryAPI,
+  fetchAvailableDoctorsAPI,
+  recommendDoctorAPI,
+  initiateAbhaAPI,
+  verifyAbhaOtpAPI,
+  linkAbhaAPI,
+  getAbhaStatusAPI,
 };
+

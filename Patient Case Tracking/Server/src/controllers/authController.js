@@ -23,6 +23,15 @@ export const login = async (req, res, next) => {
   }
 };
 
+export const patientLogin = async (req, res, next) => {
+  try {
+    const result = await authService.patientLogin(req.body);
+    return sendSuccess(res, HTTP_STATUS.OK, 'Patient login successful', result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMe = async (req, res, next) => {
   try {
     const profile = await authService.getMe(req.user.id);
@@ -35,5 +44,6 @@ export const getMe = async (req, res, next) => {
 export default {
   register,
   login,
+  patientLogin,
   getMe,
 };

@@ -24,6 +24,38 @@ import {
   getPatientClinicalProfile,
 } from '../services/doctorDashboardService';
 
+// Safe rendering helper to prevent React object child crashes
+const renderClinicalValue = (value) => {
+  if (value === null || value === undefined) return 'Not available';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 'None recorded';
+    return (
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {value.map((item, idx) => (
+          <span key={idx} className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-medium">
+            {typeof item === 'object' ? (item.name || item.test_name || item.allergen || JSON.stringify(item)) : String(item)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (typeof value === 'object') {
+    return (
+      <div className="space-y-1 text-[11px] text-slate-600">
+        {Object.entries(value).map(([k, v]) => (
+          <div key={k} className="flex items-start gap-1">
+            <span className="font-semibold text-slate-700 capitalize">{k.replace(/_/g, ' ')}:</span>
+            <span>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return String(value);
+};
+
 export const DoctorPatientsView = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -115,8 +147,13 @@ export const DoctorPatientsView = () => {
                         {p.name ? p.name[0] : 'P'}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 leading-tight">{p.name}</h3>
-                        <span className="text-[10px] text-slate-400 font-mono">{p.abhaId || p.patientId}</span>
+                        <h3 className="text-sm font-bold text-slate-900 leading-tight">{p.name || 'Patient'}</h3>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">{p.patientId}</span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-medium ${p.abhaId ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-slate-100 text-slate-500'}`}>
+                            {p.abhaId ? `ABHA: ${p.abhaId}` : 'ABHA not linked'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -136,7 +173,9 @@ export const DoctorPatientsView = () => {
                   <div className="grid grid-cols-3 gap-2 mt-3 p-2 bg-slate-50 rounded-xl text-center text-[11px] border border-slate-100">
                     <div>
                       <span className="text-[9px] text-slate-400 uppercase block">Age / Gender</span>
-                      <strong className="text-slate-700">{p.age}y • {p.gender[0]}</strong>
+                      <strong className="text-slate-700">
+                        {p.age != null ? `${p.age}y` : 'Age not available'} • {p.gender ? (p.gender === 'MALE' ? 'Male' : p.gender === 'FEMALE' ? 'Female' : p.gender) : 'Not provided'}
+                      </strong>
                     </div>
                     <div>
                       <span className="text-[9px] text-slate-400 uppercase block">Blood Group</span>
@@ -197,7 +236,8 @@ export const DoctorPatientsView = () => {
                     </span>
                   </div>
                   <div className="text-xs text-slate-500 font-mono">
-                    ABHA: {profileData?.patient?.abhaId} • {profileData?.patient?.phone}
+                    {profileData?.patient?.abhaId ? `ABHA: ${profileData.patient.abhaId}` : 'ABHA not linked'}
+                    {profileData?.patient?.phone ? ` • ${profileData.patient.phone}` : ''}
                   </div>
                 </div>
               </div>
@@ -242,7 +282,9 @@ export const DoctorPatientsView = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100">
                     <div>
                       <span className="text-[10px] text-slate-400 uppercase block">Age / Gender</span>
-                      <strong className="text-slate-800">{profileData?.patient?.age} yrs • {profileData?.patient?.gender}</strong>
+                      <strong className="text-slate-800">
+                        {profileData?.patient?.age != null ? `${profileData.patient.age} yrs` : 'Age not available'} • {profileData?.patient?.gender ? (profileData.patient.gender === 'MALE' ? 'Male' : profileData.patient.gender === 'FEMALE' ? 'Female' : profileData.patient.gender) : 'Not provided'}
+                      </strong>
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 uppercase block">Blood Group</span>
@@ -288,18 +330,91 @@ export const DoctorPatientsView = () => {
                   {profileData?.documents?.length === 0 ? (
                     <p className="text-slate-400 py-6 text-center">No diagnostic reports uploaded yet.</p>
                   ) : (
-                    profileData?.documents?.map((d) => (
-                      <div key={d.documentId} className="p-4 bg-white border border-slate-200 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-900">{d.name}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">
-                            {d.isVerified ? 'VERIFIED' : 'PENDING'}
-                          </span>
+                    profileData?.documents?.map((d) => {
+                      const summaryObj = (typeof d.summary === 'object' && d.summary !== null) ? d.summary : (d.structuredSummary || null);
+                      const summaryText = typeof d.summary === 'string' ? d.summary : (summaryObj?.physician_digest || summaryObj?.patient_overview || null);
+
+                      return (
+                        <div key={d.documentId} className="p-4 bg-white border border-slate-200 rounded-xl space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900">{d.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">
+                              {d.isVerified ? 'VERIFIED' : 'PENDING'}
+                            </span>
+                          </div>
+
+                          {/* Primary text summary */}
+                          {summaryText && (
+                            <p className="text-slate-600 leading-relaxed text-xs">{summaryText}</p>
+                          )}
+
+                          {/* Structured clinical summary breakdown */}
+                          {summaryObj && (
+                            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2 text-xs">
+                              {summaryObj.patient_overview && (
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Patient Overview</span>
+                                  <div className="text-slate-700">{renderClinicalValue(summaryObj.patient_overview)}</div>
+                                </div>
+                              )}
+
+                              {(summaryObj.doctor || summaryObj.facility) && (
+                                <div className="flex items-center gap-4 text-[11px] text-slate-500 flex-wrap">
+                                  {summaryObj.doctor && <span><strong>Doctor:</strong> {renderClinicalValue(summaryObj.doctor)}</span>}
+                                  {summaryObj.facility && <span><strong>Facility:</strong> {renderClinicalValue(summaryObj.facility)}</span>}
+                                </div>
+                              )}
+
+                              {summaryObj.chief_complaints && (
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Chief Complaints</span>
+                                  {renderClinicalValue(summaryObj.chief_complaints)}
+                                </div>
+                              )}
+
+                              {summaryObj.current_medications && (
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Current Medications</span>
+                                  {renderClinicalValue(summaryObj.current_medications)}
+                                </div>
+                              )}
+
+                              {summaryObj.important_findings && (
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Important Findings</span>
+                                  {renderClinicalValue(summaryObj.important_findings)}
+                                </div>
+                              )}
+
+                              {(summaryObj.investigations_count != null || summaryObj.abnormal_count != null) && (
+                                <div className="flex items-center gap-3 pt-1 border-t border-slate-200/60 text-[11px] flex-wrap">
+                                  {summaryObj.investigations_count != null && (
+                                    <span className="text-slate-600">Investigations: <strong>{renderClinicalValue(summaryObj.investigations_count)}</strong></span>
+                                  )}
+                                  {summaryObj.abnormal_count != null && (
+                                    <span className="text-amber-700 font-semibold">Abnormal Parameters: {renderClinicalValue(summaryObj.abnormal_count)}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
+                            <span>Date: {d.date}</span>
+                            {d.url && (
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1"
+                              >
+                                View File ↗
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-slate-600 leading-relaxed">{d.summary}</p>
-                        <span className="text-[10px] text-slate-400">Date: {d.date}</span>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               ) : profileTab === 'consultations' ? (

@@ -204,6 +204,15 @@ export async function handleResolveRedFlag(req, res, next) {
   }
 }
 
+export async function handleGetAnalytics(req, res, next) {
+  try {
+    const data = await adminService.getAnalytics();
+    return sendSuccess(res, HTTP_STATUS.OK, 'Institutional analytics retrieved', data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   handleGetDashboardKPIs,
   handleGetLiveOperationalStatus,

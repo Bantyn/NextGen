@@ -33,7 +33,7 @@ export const PatientOverview = ({ patient }) => {
 
         <div className="flex items-center gap-4 text-xs text-slate-500 font-normal mt-1 flex-wrap">
           <span>
-            {patient.age} Years • {patient.gender}
+            {patient.age != null && patient.age !== '' ? `${patient.age} Years` : 'Not available'} • {patient.gender || 'Not provided'}
           </span>
           {patient.phone && (
             <span className="inline-flex items-center gap-1">
@@ -51,11 +51,14 @@ export const PatientOverview = ({ patient }) => {
       </div>
 
       <div className="text-left sm:text-right space-y-1">
-        {patient.abhaId && (
-          <div className="text-xs text-slate-500">
-            ABHA ID: <span className="font-mono text-slate-900 font-medium">{patient.abhaId}</span>
-          </div>
-        )}
+        <div className="text-xs text-slate-500">
+          ABHA ID:{' '}
+          {patient.abhaId ? (
+            <span className="font-mono text-slate-900 font-medium">{patient.abhaId}</span>
+          ) : (
+            <span className="text-slate-400 italic">ABHA not linked</span>
+          )}
+        </div>
         <div className="text-xs text-slate-400 font-mono">
           Session ID: {patient.sessionId || patient.id}
         </div>

@@ -46,13 +46,13 @@ export const DoctorLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [nextPatient, setNextPatient] = useState(null);
   const [stats, setStats] = useState({
-    totalOPD: 9,
-    waiting: 4,
-    inConsultation: 2,
-    emergencyTriage: 1,
-    priorityCases: 1,
-    completedToday: 1,
-    averageWaitMins: 20,
+    totalOPD: 0,
+    waiting: 0,
+    inConsultation: 0,
+    emergencyTriage: 0,
+    priorityCases: 0,
+    completedToday: 0,
+    averageWaitMins: 0,
   });
   const [profile, setProfile] = useState(null);
   const [emergencyAlerts, setEmergencyAlerts] = useState([]);
@@ -142,13 +142,15 @@ export const DoctorLayout = ({ children }) => {
       title: 'CLINICAL WORKSPACE',
       items: [
         { name: 'Dashboard', path: '/doctor', icon: LayoutDashboard },
-        { name: 'Live OPD', path: '/doctor/opd', icon: ClipboardList, badge: String(stats.waiting || 4) },
-        { name: 'Appointments', path: '/doctor/appointments', icon: Calendar, badge: '4' },
+        { name: 'Live OPD', path: '/doctor/opd', icon: ClipboardList, badge: stats.waiting > 0 ? String(stats.waiting) : null },
+        { name: 'Appointments', path: '/doctor/appointments', icon: Calendar, badge: stats.scheduledAppointments > 0 ? String(stats.scheduledAppointments) : null },
         {
           name: 'Priority Triage',
           path: '/doctor/triage',
           icon: AlertTriangle,
-          badge: String(stats.emergencyTriage || stats.priorityCases || emergencyAlerts.length || 1),
+          badge: (stats.emergencyTriage || stats.priorityCases || emergencyAlerts.length) > 0
+            ? String(stats.emergencyTriage || stats.priorityCases || emergencyAlerts.length)
+            : null,
           badgeColor: 'bg-rose-100 text-rose-700',
         },
         { name: 'Patients', path: '/doctor/patients', icon: Users },
@@ -207,10 +209,10 @@ export const DoctorLayout = ({ children }) => {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col justify-between">
+        <div className="flex-1 relative overflow-y-auto custom-scrollbar flex flex-col justify-between">
           <div>
             {/* Brand Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-4 border-b fixed bg-white top-0 border-slate-100 flex items-center justify-between">
               <Link to="/" className="flex items-center gap-2.5 select-none">
                 <img
                   src="/logo.png"
@@ -230,7 +232,7 @@ export const DoctorLayout = ({ children }) => {
             </div>
 
             {/* Navigation Sections */}
-            <div className="px-3 py-4 space-y-4">
+            <div className="px-3 pb-50 mt-15 py-5 space-y-6 overflow-y-scroll">
               {navSections.map((section) => (
                 <div key={section.title} className="space-y-0.5">
                   <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
@@ -247,7 +249,7 @@ export const DoctorLayout = ({ children }) => {
                         key={item.name}
                         to={item.path}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-normal transition ${
+                        className={`flex items-center justify-between px-3 py-3 mt-2 rounded-xl text-xs font-normal transition ${
                           isActive
                             ? 'bg-slate-950 text-white shadow-xs font-medium'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
@@ -277,7 +279,7 @@ export const DoctorLayout = ({ children }) => {
           </div>
 
           {/* Doctor Profile Footer */}
-          <div className="p-3.5 m-3 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
+          <div className="p-3.5 m-3  w-58 fixed bottom-0 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-full bg-slate-950 text-white flex items-center justify-center text-xs font-semibold shrink-0">

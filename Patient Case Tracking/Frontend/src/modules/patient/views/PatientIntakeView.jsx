@@ -15,6 +15,8 @@ import {
 import { VoiceRecorder } from '../../../components/VoiceRecorder';
 import { DocumentUploadZone } from '../components/DocumentUploadZone';
 import { AYUSH_DASHAPARIKSHA_FRAMEWORK } from '../../../constants/ayushPariksha';
+import apiClient from '../../../core/api/apiClient';
+import { API_ENDPOINTS } from '../../../core/api/apiEndpoints';
 
 /**
  * PatientIntakeView Component — Step 2 & 3: Multimodal Conversational History & Document AI
@@ -80,21 +82,33 @@ export const PatientIntakeView = () => {
       intakeTime: new Date().toLocaleTimeString(),
     };
 
+    // Update clinical session status in backend database to TRIAGE
+    if (patientData.sessionId) {
+      try {
+        const storedClinical = JSON.parse(sessionStorage.getItem('sehat_clinical_state') || sessionStorage.getItem('medikiosk_clinical_state') || '{}');
+        await apiClient.put(API_ENDPOINTS.SESSION_STATUS(patientData.sessionId), {
+          status: 'TRIAGE',
+          clinical_state: {
+            ...storedClinical,
+            ayushAssessments: patientData.opdMode === 'AYUSH' ? ayushAssessments : null,
+          },
+        });
+      } catch (sErr) {
+        console.warn('[IntakeView] Notice updating session status:', sErr.message);
+      }
+    }
+
     try {
-      await fetch('http://localhost:5000/api/v1/whatsapp/send-registration-success', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: patientData.phone,
-          patient_id: patientData.patientId || patientData.id,
-          first_name: patientData.fullName,
-          last_name: '',
-          token_number: patientData.tokenNumber || `TK-${Math.floor(Math.random() * 80 + 101)}`,
-          session_id: patientData.sessionId,
-          opd_mode: patientData.opdMode,
-          abha_id: patientData.abhaId,
-          language: patientData.preferredLanguage
-        })
+      await apiClient.post('/whatsapp/send-registration-success', {
+        phone: patientData.phone,
+        patient_id: patientData.patientId || patientData.id,
+        first_name: patientData.fullName,
+        last_name: '',
+        token_number: patientData.tokenNumber || `TK-${Math.floor(Math.random() * 80 + 101)}`,
+        session_id: patientData.sessionId,
+        opd_mode: patientData.opdMode,
+        abha_id: patientData.abhaId,
+        language: patientData.preferredLanguage,
       });
     } catch (err) {
       console.warn('Failed to dispatch whatsapp success', err);
@@ -189,7 +203,7 @@ export const PatientIntakeView = () => {
 
             <VoiceRecorder
               sessionId={patientData.sessionId}
-              patientId={patientData.phone}
+              patientId={patientData.patientId || patientData.id || patientData.phone}
               defaultLanguage={patientData.preferredLanguage}
               opdMode={patientData.opdMode}
               onClinicalStateUpdated={(state) => {
