@@ -38,9 +38,10 @@ const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
 const FISH_AUDIO_MODEL = import.meta.env.VITE_FISH_AUDIO_MODEL || "fish-audio/s2.1-pro";
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 
-// Circuit breaker helper to prevent repeated 429 network requests
+// Circuit breaker helper to prevent repeated 429 or 402 network requests
 function isOpenRouterRateLimited() {
   try {
+    if (localStorage.getItem("sehat_openrouter_disabled") === "true") return true;
     const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
     return until && Date.now() < Number(until);
   } catch {
@@ -48,9 +49,12 @@ function isOpenRouterRateLimited() {
   }
 }
 
-function markOpenRouterRateLimited() {
+function markOpenRouterRateLimited(reason = "rate_limit") {
   try {
-    sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 60 * 60 * 1000));
+    if (reason === "no_credits" || reason === "unauthorized") {
+      localStorage.setItem("sehat_openrouter_disabled", "true");
+    }
+    sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 24 * 60 * 60 * 1000));
   } catch {}
 }
 
@@ -531,13 +535,14 @@ export const VoiceRecorder = ({
         });
 
         if (!response.ok) {
-          if (response.status === 429 || response.status === 402) {
-            markOpenRouterRateLimited();
+          if (response.status === 429 || response.status === 402 || response.status === 401) {
+            markOpenRouterRateLimited(response.status === 402 ? "no_credits" : "rate_limit");
             console.warn(
-              `[TTS Circuit Breaker] OpenRouter returned HTTP ${response.status} (Rate limit exceeded). Fast-switching to Browser Web Speech API.`
+              `[TTS Circuit Breaker] OpenRouter returned HTTP ${response.status} (${response.status === 402 ? "Insufficient credits" : "Rate limit"}). Fast-switching to Browser Web Speech API.`
             );
           }
-          throw new Error(`OpenRouter TTS status ${response.status}`);
+          fallbackTTS(tunedText);
+          return;
         }
 
         setTtsSource("OpenRouter Fish Audio");

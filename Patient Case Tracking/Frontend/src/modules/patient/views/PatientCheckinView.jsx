@@ -175,6 +175,7 @@ export const PatientCheckinView = () => {
   // Helper for circuit breaker
   const isOpenRouterRateLimited = () => {
     try {
+      if (localStorage.getItem("sehat_openrouter_disabled") === "true") return true;
       const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
       return until && Date.now() < Number(until);
     } catch {
@@ -182,9 +183,12 @@ export const PatientCheckinView = () => {
     }
   };
 
-  const markOpenRouterRateLimited = () => {
+  const markOpenRouterRateLimited = (reason = "rate_limit") => {
     try {
-      sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 60 * 60 * 1000));
+      if (reason === "no_credits" || reason === "unauthorized") {
+        localStorage.setItem("sehat_openrouter_disabled", "true");
+      }
+      sessionStorage.setItem("sehat_openrouter_rate_limit_until", String(Date.now() + 24 * 60 * 60 * 1000));
     } catch {}
   };
 
@@ -274,10 +278,11 @@ export const PatientCheckinView = () => {
       });
 
       if (!response.ok) {
-        if (response.status === 429 || response.status === 402) {
-          markOpenRouterRateLimited();
+        if (response.status === 429 || response.status === 402 || response.status === 401) {
+          markOpenRouterRateLimited(response.status === 402 ? "no_credits" : "rate_limit");
         }
-        throw new Error(`OpenRouter TTS failed: ${response.status}`);
+        fallbackToBrowser();
+        return;
       }
 
       const reader = response.body.getReader();

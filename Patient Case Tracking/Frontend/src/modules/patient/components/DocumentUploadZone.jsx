@@ -203,31 +203,32 @@ export const DocumentUploadZone = ({ onFilesSelected, onOcrExtracted }) => {
    */
   const handleLoadSampleLabReport = async () => {
     const sampleText = `DRLOGY PATHOLOGY LAB
-105-108, SMART VISION COMPLEX, HEALTHCARE ROAD, MUMBAI - 689578
-Yash M. Patel Age: 21 Years Sex: Male PID: 555 Ref. By: Dr. Hiren Shah
-Reported on: 02 Dec, 202X
-Complete Blood Count (CBC)
-HEMOGLOBIN
-Hemoglobin (Hb) 12.5 Low 13.0-17.0 g/dL
-RBC COUNT
-Total RBC count 5.2 4.5-5.5 mill/cumm
-BLOOD INDICES
-Packed Cell Volume (PCV) 57.5 High 40-50 %
-Mean Corpuscular Volume (MCV) 87.75 83-101 fL
-MCH 27.2 27-32 pg
-MCHC 32.8 32.5-34.5 g/dL
-RDW 13.6 11.6-14.0 %
-WBC COUNT
-Total WBC count 9000 4000-11000 cumm
-Neutrophils 60 50 - 62 %
-Lymphocytes 31 20-40 %
-Eosinophils 1 00-06 %
-Monocytes 7 00-10 %
-Basophils 1 00-02 %
-PLATELET COUNT
-Platelet Count 150000 Borderline 150000 - 410000 cumm
-Interpretation: Further confirm for Anemia
-Pathologists: Dr. Payal Shah, Dr. Vimal Shah`;
+    105-108, SMART VISION COMPLEX, HEALTHCARE ROAD, MUMBAI - 689578
+    Yash M. Patel Age: 21 Years Sex: Male PID: 555 Ref. By: Dr. Hiren Shah
+    Reported on: 02 Dec, 202X
+    Complete Blood Count (CBC)
+    HEMOGLOBIN
+    Hemoglobin (Hb) 12.5 Low 13.0-17.0 g/dL
+    RBC COUNT
+    Total RBC count 5.2 4.5-5.5 mill/cumm
+    BLOOD INDICES
+    Packed Cell Volume (PCV) 57.5 High 40-50 %
+    Mean Corpuscular Volume (MCV) 87.75 83-101 fL
+    MCH 27.2 27-32 pg
+    MCHC 32.8 32.5-34.5 g/dL
+    RDW 13.6 11.6-14.0 %
+    WBC COUNT
+    Total WBC count 9000 4000-11000 cumm
+    Neutrophils 60 50 - 62 %
+    Lymphocytes 31 20-40 %
+    Eosinophils 1 00-06 %
+    Monocytes 7 00-10 %
+    Basophils 1 00-02 %
+    PLATELET COUNT
+    Platelet Count 150000 Borderline 150000 - 410000 cumm
+    Interpretation: Further confirm for Anemia
+    Pathologists: Dr. Payal Shah, Dr. Vimal Shah
+`;
 
     const sampleFile = {
       name: 'DRLOGY_CBC_Pathology_Report.pdf',

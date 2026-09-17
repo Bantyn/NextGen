@@ -12,7 +12,7 @@ import {
   Sparkles,
   HeartPulse,
 } from 'lucide-react';
-import { VoiceRecorder } from '../../../components/VoiceRecorder';
+import { VoiceRecorder } from '../../../components/ui/VoiceRecorder';
 import { DocumentUploadZone } from '../components/DocumentUploadZone';
 import { AYUSH_DASHAPARIKSHA_FRAMEWORK } from '../../../constants/ayushPariksha';
 import apiClient from '../../../core/api/apiClient';
@@ -74,29 +74,40 @@ export const PatientIntakeView = () => {
   };
 
   const handleFinishIntake = async () => {
-    const structuredSummary = {
-      ...patientData,
-      uploadedCount: uploadedFiles.length,
-      ocrData: ocrData,
-      ayushAssessments: patientData.opdMode === 'AYUSH' ? ayushAssessments : null,
-      intakeTime: new Date().toLocaleTimeString(),
-    };
-
-    // Update clinical session status in backend database to TRIAGE
+    // Update clinical session status in backend database to TRIAGE and auto-allot doctor based on symptoms
+    let allottedInfo = {};
     if (patientData.sessionId) {
       try {
         const storedClinical = JSON.parse(sessionStorage.getItem('sehat_clinical_state') || sessionStorage.getItem('medikiosk_clinical_state') || '{}');
-        await apiClient.put(API_ENDPOINTS.SESSION_STATUS(patientData.sessionId), {
+        const res = await apiClient.put(API_ENDPOINTS.SESSION_STATUS(patientData.sessionId), {
           status: 'TRIAGE',
           clinical_state: {
             ...storedClinical,
             ayushAssessments: patientData.opdMode === 'AYUSH' ? ayushAssessments : null,
           },
         });
+        const updatedSession = res?.data?.data || res?.data || {};
+        if (updatedSession.assigned_doctor_name || updatedSession.assigned_doctor_id) {
+          allottedInfo = {
+            assignedDoctorId: updatedSession.assigned_doctor_id,
+            assignedDoctorName: updatedSession.assigned_doctor_name,
+            assignedDoctorSpecialty: updatedSession.assigned_doctor_specialty,
+            assignedDoctorRoom: updatedSession.assigned_doctor_room,
+          };
+        }
       } catch (sErr) {
         console.warn('[IntakeView] Notice updating session status:', sErr.message);
       }
     }
+
+    const structuredSummary = {
+      ...patientData,
+      uploadedCount: uploadedFiles.length,
+      ocrData: ocrData,
+      ayushAssessments: patientData.opdMode === 'AYUSH' ? ayushAssessments : null,
+      intakeTime: new Date().toLocaleTimeString(),
+      ...allottedInfo,
+    };
 
     try {
       await apiClient.post('/whatsapp/send-registration-success', {
