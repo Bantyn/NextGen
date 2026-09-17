@@ -18,6 +18,8 @@ import {
   Check,
   X,
   QrCode,
+  ChevronDown,
+  Stethoscope,
 } from 'lucide-react';
 import { registerAndCheckinPatient } from '../services/patientDashboardService';
 import { VirusBackground3D } from '../../../components/3d/VirusBackground3D';
@@ -124,8 +126,20 @@ export const PatientCheckinView = () => {
   const [audioSpeechActive, setAudioSpeechActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [showEditSelector, setShowEditSelector] = useState(false);
+  const [isSpecDropdownOpen, setIsSpecDropdownOpen] = useState(false);
 
   const speechRecognitionRef = useRef(null);
+  const specDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (specDropdownRef.current && !specDropdownRef.current.contains(event.target)) {
+        setIsSpecDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1123,16 +1137,63 @@ export const PatientCheckinView = () => {
                     <label className="block text-xs font-medium text-slate-700">
                       Select Medical Specialization:
                     </label>
-                    <select
-                      onChange={(e) => updateField('medicalSpecialization', e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-slate-400"
-                    >
-                      {GENERAL_SPECS.map((spec) => (
-                        <option key={spec} value={spec}>
-                          {spec}
-                        </option>
-                      ))}
-                    </select>
+
+                    {/* Custom Styled Dropdown Container */}
+                    <div className="relative" ref={specDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsSpecDropdownOpen((prev) => !prev)}
+                        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border transition-colors duration-200 flex items-center justify-between text-left cursor-pointer shadow-xs ${
+                          isSpecDropdownOpen
+                            ? 'border-slate-950'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="text-xs font-medium text-slate-900">
+                          {formData.medicalSpecialization || 'General Medicine'}
+                        </span>
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                            isSpecDropdownOpen ? 'rotate-180 text-slate-950' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {/* Dropdown Options Menu */}
+                      <AnimatePresence>
+                        {isSpecDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 2 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.12, ease: 'easeOut' }}
+                            className="absolute left-0 right-0 z-50 mt-1 max-h-44 sm:max-h-48 overflow-y-auto rounded-2xl bg-white border border-slate-200 shadow-xl p-1 space-y-0.5"
+                          >
+                            {GENERAL_SPECS.map((spec) => {
+                              const isSelected = formData.medicalSpecialization === spec;
+                              return (
+                                <button
+                                  key={spec}
+                                  type="button"
+                                  onClick={() => {
+                                    updateField('medicalSpecialization', spec);
+                                    setIsSpecDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium transition-colors duration-150 flex items-center justify-between text-left cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-slate-950 text-white shadow-xs'
+                                      : 'text-slate-800 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <span>{spec}</span>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                </button>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
