@@ -59,37 +59,37 @@ export function mapDocumentToReport(doc) {
   const labs = structured.lab_investigations || doc.extracted_data?.lab_results || [];
   const parameters = labs.length > 0
     ? labs.map((l) => ({
-        name: l.test_name || 'Investigation',
-        value: `${l.observed_value || '-'} ${l.unit || ''}`.trim(),
-        normalRange: l.reference_range || 'Standard Range',
-        status: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL') ? l.flag : 'Normal',
-        alert: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL'),
-      }))
+      name: l.test_name || 'Investigation',
+      value: `${l.observed_value || '-'} ${l.unit || ''}`.trim(),
+      normalRange: l.reference_range || 'Standard Range',
+      status: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL') ? l.flag : 'Normal',
+      alert: (l.flag === 'LOW' || l.flag === 'HIGH' || l.flag === 'CRITICAL'),
+    }))
     : (structured.prescribed_medicines && structured.prescribed_medicines.length > 0)
-    ? structured.prescribed_medicines.map((m) => ({
+      ? structured.prescribed_medicines.map((m) => ({
         name: m.name || 'Prescribed Drug',
         value: [m.dosage, m.frequency].filter(Boolean).join(' - ') || 'Active',
         normalRange: m.duration || 'Per Rx',
         status: 'Prescribed',
         alert: false,
       }))
-    : (doc.extracted_data?.current_medications && doc.extracted_data.current_medications.length > 0)
-    ? doc.extracted_data.current_medications.map((m) => ({
-        name: m.name || 'Prescribed Drug',
-        value: [m.dosage, m.frequency].filter(Boolean).join(' - ') || 'Active',
-        normalRange: m.duration || 'Per Rx',
-        status: 'Prescribed',
-        alert: false,
-      }))
-    : [
-        {
-          name: 'ABDM Document Status',
-          value: 'Digitized & Verified',
-          normalRange: 'Linked to Patient EHR',
-          status: 'Normal',
+      : (doc.extracted_data?.current_medications && doc.extracted_data.current_medications.length > 0)
+        ? doc.extracted_data.current_medications.map((m) => ({
+          name: m.name || 'Prescribed Drug',
+          value: [m.dosage, m.frequency].filter(Boolean).join(' - ') || 'Active',
+          normalRange: m.duration || 'Per Rx',
+          status: 'Prescribed',
           alert: false,
-        },
-      ];
+        }))
+        : [
+          {
+            name: 'ABDM Document Status',
+            value: 'Digitized & Verified',
+            normalRange: 'Linked to Patient EHR',
+            status: 'Normal',
+            alert: false,
+          },
+        ];
 
   const importantFindings = doc.important_findings || structured.important_findings || [];
   const hasAbnormal = parameters.some((p) => p.alert) || importantFindings.some((f) => f.status !== 'NORMAL') || doc.requires_doctor_verification;
@@ -446,7 +446,7 @@ export async function sendLoginOtp(phone, name, otp) {
       },
       body: JSON.stringify({ phone, name, otp }),
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to send OTP');
     }
@@ -655,4 +655,3 @@ export default {
   linkAbhaAPI,
   getAbhaStatusAPI,
 };
-
