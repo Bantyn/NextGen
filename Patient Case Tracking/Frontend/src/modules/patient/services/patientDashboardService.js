@@ -336,7 +336,8 @@ export async function uploadPatientMedicalDocument(patientId, { file, docType, t
       patient_summary: {
         about: 'Uploaded medical document has been added to your health locker.',
         meaning: 'Document recorded successfully.'
-      }
+      },
+      file_url: URL.createObjectURL(file)
     };
     const report = mapDocumentToReport(fallbackDoc);
     return {
