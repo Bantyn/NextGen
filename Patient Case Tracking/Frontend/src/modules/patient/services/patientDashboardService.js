@@ -313,6 +313,11 @@ export async function uploadPatientMedicalDocument(patientId, { file, docType, t
   try {
     const res = await apiClient.post(API_ENDPOINTS.DOCUMENTS_UPLOAD, formData, { timeout: 120000 });
     const result = res?.data || res;
+
+    if (result?.status === 'failed' || result?.processing_status === 'FAILED' || res?.status === 'failed') {
+      throw new Error(result?.error || res?.message || "We couldn't understand this document. Please upload a clearer document or try again.");
+    }
+
     const report = mapDocumentToReport(result);
 
     return {
