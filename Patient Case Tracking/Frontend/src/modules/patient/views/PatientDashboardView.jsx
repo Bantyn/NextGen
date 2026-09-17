@@ -581,7 +581,10 @@ export const PatientDashboardView = () => {
 
   const handleConfirmUpload = async () => {
     if (!uploadForm.file) {
-      setUploadError('Please select or drag a medical document file (PDF, PNG, JPG, WebP).');
+      setUploadError(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
       return;
     }
 
@@ -596,7 +599,7 @@ export const PatientDashboardView = () => {
       t2 = setTimeout(() => setUploadProgressStep('EXTRACTING'), 1400);
       t3 = setTimeout(() => setUploadProgressStep('SUMMARIZING'), 2500);
 
-      const patientId = safePatient.id || safePatient.patient_id;
+      const patientId = selectedPatientId || safePatient?.id || safePatient?.patient_id || user?.patient_id || user?.id || 'PAT-DEMO';
       const res = await uploadPatientMedicalDocument(patientId, {
         file: uploadForm.file,
         docType: uploadForm.docType,
@@ -3437,6 +3440,7 @@ export const PatientDashboardView = () => {
             {/* Hidden Native File Input */}
             <input
               ref={fileInputRef}
+              id="document-file-input-modal"
               type="file"
               accept=".pdf,.png,.jpg,.jpeg,.webp"
               onChange={(e) => {
@@ -3613,12 +3617,12 @@ export const PatientDashboardView = () => {
 
                 {/* Drag and Drop Zone or Selected File Preview */}
                 {!uploadForm.file ? (
-                  <div
+                  <label
+                    htmlFor="document-file-input-modal"
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`p-6 rounded-2xl border-2 border-dashed transition cursor-pointer text-center space-y-2.5 ${
+                    className={`block p-6 rounded-2xl border-2 border-dashed transition cursor-pointer text-center space-y-2.5 ${
                       isDragging
                         ? 'border-sky-500 bg-sky-50/80 ring-2 ring-sky-200 scale-[1.01]'
                         : 'border-slate-200 hover:border-sky-400 bg-slate-50/50 hover:bg-slate-50'
@@ -3639,7 +3643,7 @@ export const PatientDashboardView = () => {
                       <Paperclip className="w-3 h-3" />
                       <span>Browse Local Files</span>
                     </div>
-                  </div>
+                  </label>
                 ) : (
                   /* Selected File Card */
                   <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200/80 flex items-center justify-between gap-3">
@@ -3691,11 +3695,15 @@ export const PatientDashboardView = () => {
                   <button
                     type="button"
                     onClick={handleConfirmUpload}
-                    disabled={isUploading || !uploadForm.file}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={isUploading}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-2 ${
+                      uploadForm.file
+                        ? 'bg-slate-950 hover:bg-slate-800 text-white'
+                        : 'bg-sky-600 hover:bg-sky-700 text-white'
+                    }`}
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    <span>Confirm Upload & Start AI Processing</span>
+                    <span>{uploadForm.file ? 'Confirm Upload & Start AI Processing' : 'Browse & Select File to Upload'}</span>
                   </button>
                   <button
                     type="button"
