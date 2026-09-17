@@ -39,7 +39,8 @@ export const PatientSuccessView = () => {
     const saved = sessionStorage.getItem('patient_summary') || sessionStorage.getItem('patient_session');
     if (saved) {
       try {
-        setSummary(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setSummary(parsed);
       } catch (err) {
         console.error('Failed to parse summary:', err);
       }
@@ -47,6 +48,9 @@ export const PatientSuccessView = () => {
   }, []);
 
   const tokenNumber = summary.tokenNumber || `TK-${Math.floor(Math.random() * 80 + 101)}`;
+  const doctorDisplayName = summary.assignedDoctorName || (summary.opdMode === 'AYUSH' ? 'Dr. Aarav Mehta' : 'Dr. Parul Patel');
+  const doctorRoomDisplay = summary.assignedDoctorRoom || (summary.opdMode === 'AYUSH' ? 'Room 201 (AYUSH Wing)' : 'Room 104 (General OPD)');
+  const doctorDegreeDisplay = summary.assignedDoctorDegree || (summary.opdMode === 'AYUSH' ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)');
 
   const playAudioSummary = () => {
     if (!('speechSynthesis' in window)) return;
@@ -56,8 +60,8 @@ export const PatientSuccessView = () => {
     const lang = summary.preferredLanguage || 'gu-IN';
     const text =
       lang === 'gu-IN'
-        ? `નમસ્તે શ્રીમાન ${summary.fullName}. તમારી ક્લિનિકલ વિગતો ડૉક્ટરની કન્સલ્ટેશન સ્ક્રીન પર મોકલી દેવાઈ છે. તમારો ટોકન નંબર ${tokenNumber} છે. કૃપા કરીને રૂમ નંબર 104 ની બહાર પ્રતીક્ષા કરો.`
-        : `नमस्ते श्री ${summary.fullName}. आपका स्वास्थ्य विवरण डॉक्टर के परामर्श डैशबोर्ड पर भेज दिया गया है। आपका टोकन नंबर ${tokenNumber} है।`;
+        ? `નમસ્તે શ્રીમાન ${summary.fullName}. તમારી ક્લિનિકલ વિગતો ડૉક્ટર ${doctorDisplayName} ની કન્સલ્ટેશન સ્ક્રીન પર મોકલી દેવાઈ છે. તમારો ટોકન નંબર ${tokenNumber} છે. કૃપા કરીને ${doctorRoomDisplay} ની બહાર પ્રતીક્ષા કરો.`
+        : `नमस्ते श्री ${summary.fullName}. आपका स्वास्थ्य विवरण डॉक्टर ${doctorDisplayName} के परामर्श डैशबोर्ड पर भेज दिया गया है। आपका टोकन नंबर ${tokenNumber} है।`;
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
@@ -107,22 +111,22 @@ export const PatientSuccessView = () => {
               {summary.opdMode === 'AYUSH' ? (
                 <>
                   <Leaf className="w-4 h-4 text-emerald-600" />
-                  <span>Room 104 (Ayush OPD)</span>
+                  <span>{doctorRoomDisplay}</span>
                 </>
               ) : (
                 <>
                   <HeartPulse className="w-4 h-4 text-sky-600" />
-                  <span>Room 202 (General OPD)</span>
+                  <span>{doctorRoomDisplay}</span>
                 </>
               )}
             </div>
             <div className="text-xs text-slate-500 mt-1">
               Assigned to: <span className="font-medium text-slate-700">
-                {summary.opdMode === 'AYUSH' ? 'Vaidya Rajesh Kumar' : 'Dr. Sarah Mitchell'}
+                {doctorDisplayName}
               </span>
             </div>
             <div className="text-[10px] text-slate-400">
-              {summary.opdMode === 'AYUSH' ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'}
+              {doctorDegreeDisplay}
             </div>
           </div>
         </div>

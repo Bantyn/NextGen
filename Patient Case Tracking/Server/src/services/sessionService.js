@@ -4,6 +4,7 @@ import { patientRepository } from '../repositories/patientRepository.js';
 import { buildPaginationMeta } from '../utils/apiResponse.js';
 import { ApiError } from '../utils/apiError.js';
 import { SESSION_STATUS } from '../constants/patientStatus.js';
+import { doctorService } from './doctorService.js';
 
 /**
  * Session Service — Pure Domain Logic for Clinical Intake & Consultation Sessions
@@ -23,39 +24,37 @@ export class SessionService {
     opd_system = 'GENERAL_MEDICINE',
   }) {
     if (!patient_id) {
-      throw ApiError.badRequest('patient_id is required to start a clinical session.', 'PATIENT_ID_REQUIRED');
+      throw ApiError.badRequest('patient_id is required to create a session.', 'PATIENT_ID_REQUIRED');
     }
 
-    // Verify patient exists
-    const patient = await patientRepository.findByPatientId(patient_id);
+    const patient = (patientRepository.findByPatientId ? await patientRepository.findByPatientId(patient_id) : null) || await patientRepository.findById(patient_id);
     if (!patient) {
-      throw ApiError.notFound(`Patient '${patient_id}' does not exist.`, 'PATIENT_NOT_FOUND');
+      throw ApiError.notFound(`Patient with ID '${patient_id}' not found.`, 'PATIENT_NOT_FOUND');
     }
 
-    const session_id = this.generateSessionId();
-    const resolvedOpdType = opd_type || (String(consultation_type).startsWith('AYUSH') ? 'AYUSH' : 'GENERAL');
+    const sessionId = this.generateSessionId();
 
-    const session = await sessionRepository.create({
-      session_id,
-      patient_id: patient_id.toUpperCase(),
+    const newSession = await sessionRepository.create({
+      session_id: sessionId,
+      patient_id,
       language,
       consultation_type,
-      opd_type: resolvedOpdType,
-      opd_system: opd_system || (resolvedOpdType === 'AYUSH' ? 'AYURVEDA' : 'GENERAL_MEDICINE'),
       chief_complaint_category,
+      opd_type,
+      opd_system,
       status: SESSION_STATUS.STARTED,
-      started_at: new Date(),
     });
 
-    // Update patient status to IN_SESSION
-    await patientRepository.updateStatus(patient_id, 'IN_SESSION');
-
-    return session;
+    return newSession;
   }
 
   async getSessionById(sessionId) {
+    if (!sessionId) {
+      throw ApiError.badRequest('sessionId parameter is required.', 'SESSION_ID_REQUIRED');
+    }
+
     let session = await sessionRepository.findBySessionId(sessionId);
-    if (!session && sessionId.match(/^[0-9a-fA-F]{24}$/)) {
+    if (!session) {
       session = await sessionRepository.findById(sessionId);
     }
 
@@ -70,6 +69,32 @@ export class SessionService {
     const session = await sessionRepository.findBySessionId(sessionId);
     if (!session) {
       throw ApiError.notFound(`Clinical session '${sessionId}' was not found.`, 'SESSION_NOT_FOUND');
+    }
+
+    // Auto-allot doctor from MongoDB User collection if not already assigned
+    if (!session.assigned_doctor_id && !extraFields.assigned_doctor_id) {
+      try {
+        const symptoms = extraFields.clinical_state?.symptoms || session.clinical_state?.symptoms || [];
+        const chiefComplaint = extraFields.clinical_state?.chief_complaint || session.clinical_state?.chief_complaint || session.chief_complaint_category || '';
+        const opdType = session.opd_type || extraFields.opd_type || 'GENERAL';
+        const opdSystem = session.opd_system || extraFields.opd_system || '';
+
+        const allotted = await doctorService.allotDoctorForPatient({
+          symptoms,
+          chiefComplaint,
+          opdType,
+          opdSystem,
+        });
+
+        if (allotted) {
+          extraFields.assigned_doctor_id = allotted.doctorId;
+          extraFields.assigned_doctor_name = allotted.doctorName;
+          extraFields.assigned_doctor_specialty = allotted.specialization;
+          extraFields.assigned_doctor_room = allotted.room;
+        }
+      } catch (err) {
+        // Safe fallback
+      }
     }
 
     const updated = await sessionRepository.updateStatus(sessionId, status, extraFields);

@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import { logger } from '../utils/logger.js';
 import { sessionRepository } from '../repositories/sessionRepository.js';
 import { ClinicalSession } from '../models/ClinicalSession.js';
+import { User } from '../models/User.js';
+import clinicalIntelligenceService from './clinicalIntelligenceService.js';
 
 /**
  * Verified Sehat Hospital Specialist Directory
@@ -305,6 +307,146 @@ const VERIFIED_DOCTORS_DIRECTORY = [
  */
 export class DoctorService {
   /**
+   * Fetch all registered doctors dynamically from MongoDB User collection
+   */
+  async getDoctorsFromDB() {
+    try {
+      if (mongoose.connection?.readyState !== 1) {
+        return [];
+      }
+      const dbUsers = await User.find({
+        role: { $in: ['DOCTOR', 'doctor'] },
+        is_active: { $ne: false },
+      }).lean();
+
+      return (dbUsers || []).map((u) => {
+        const docId = u.doctor_id || u._id.toString();
+        const docName = u.name?.startsWith('Dr.') || u.name?.startsWith('Vaidya')
+          ? u.name
+          : (u.opd_type === 'AYUSH' ? `Vaidya ${u.name}` : `Dr. ${u.name}`);
+        const isAyush = u.opd_type === 'AYUSH';
+        const docSpec = u.specialty || (isAyush ? 'Ayurveda' : 'General Medicine');
+        const docQual = u.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)');
+        const docRoom = u.room || (isAyush ? 'Room 201 (AYUSH Wing)' : 'Room 104 (Main OPD)');
+        const docDept = u.department || (isAyush ? 'Department of AYUSH & Integrative Medicine' : 'Department of General Internal Medicine');
+
+        return {
+          doctor_id: docId,
+          id: docId,
+          doctor_name: docName,
+          name: docName,
+          qualification: docQual,
+          specialty: docSpec,
+          sub_specialty: u.sub_specialty || docSpec,
+          department: docDept,
+          hospital: 'Sehat Apex Civil Hospital',
+          room: docRoom,
+          experience_years: u.experience_years || 12,
+          consultation_type: isAyush ? (u.opd_system ? `AYUSH_${u.opd_system}` : 'AYUSH_AYURVEDA') : 'GENERAL',
+          opd_type: u.opd_type || 'GENERAL',
+          opd_system: u.opd_system || (isAyush ? 'AYURVEDA' : 'GENERAL_MEDICINE'),
+          languages: ['English', 'Hindi', 'Gujarati'],
+          days_active: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+          shift: { start: '09:00', end: '18:00', break_start: '13:00', break_end: '14:00' },
+          slot_duration_mins: 15,
+          fixed_slots: ['09:30 AM', '10:30 AM', '11:30 AM', '02:30 PM', '04:00 PM', '05:00 PM'],
+          on_duty: u.on_duty !== false,
+          availability_status: u.availability_status || 'AVAILABLE',
+          is_from_db: true,
+        };
+      });
+    } catch (err) {
+      logger.warn('[DoctorService] Failed to load doctors from User collection:', err.message);
+      return [];
+    }
+  }
+
+  /**
+   * Automatically match and allot a doctor from the MongoDB User collection based on symptoms and OPD mode
+   */
+  async allotDoctorForPatient({ symptoms = [], chiefComplaint = '', opdType = 'GENERAL', opdSystem = '' } = {}) {
+    const dbDocs = await this.getDoctorsFromDB();
+    const isAyush = opdType === 'AYUSH';
+
+    const symptomsList = Array.isArray(symptoms) ? symptoms : [symptoms];
+    const combinedText = [...symptomsList, chiefComplaint].filter(Boolean).join(' ');
+
+    const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(combinedText, '');
+    const targetSpecialty = specialtyMatch?.primary || (isAyush ? 'Ayurveda' : 'General Medicine');
+    const candidates = (specialtyMatch?.candidates || [targetSpecialty]).map((c) => c.toLowerCase());
+
+    logger.info(`[DoctorService] Allotting doctor for symptoms "${combinedText.slice(0, 50)}..." -> Target Specialty: ${targetSpecialty}, OPD Type: ${opdType}`);
+
+    // If doctors exist in database, prioritize DB doctors
+    if (dbDocs.length > 0) {
+      // 1. Filter by OPD mode if relevant
+      const opdMatchedDocs = dbDocs.filter((d) => {
+        if (isAyush) return d.opd_type === 'AYUSH';
+        return d.opd_type !== 'AYUSH';
+      });
+
+      const pool = opdMatchedDocs.length > 0 ? opdMatchedDocs : dbDocs;
+
+      // 2. Specialty match based on clinical intelligence symptoms
+      let bestMatch = pool.find((d) => {
+        const spec = (d.specialty || '').toLowerCase();
+        const subSpec = (d.sub_specialty || '').toLowerCase();
+        const dept = (d.department || '').toLowerCase();
+        return candidates.some((cand) => spec.includes(cand) || subSpec.includes(cand) || dept.includes(cand));
+      });
+
+      // 3. Fallback to General OPD / General Medicine or first available doctor
+      if (!bestMatch) {
+        bestMatch = pool.find((d) => {
+          const spec = (d.specialty || '').toLowerCase();
+          return spec.includes('general') || spec.includes('opd') || spec.includes('internal');
+        });
+      }
+
+      if (!bestMatch) {
+        bestMatch = pool[0];
+      }
+
+      if (bestMatch) {
+        logger.info(`[DoctorService] Successfully allotted DB Doctor: ${bestMatch.doctor_name} (${bestMatch.doctor_id})`);
+        return {
+          doctorId: bestMatch.doctor_id,
+          doctorName: bestMatch.doctor_name,
+          specialization: bestMatch.specialty,
+          qualification: bestMatch.qualification,
+          department: bestMatch.department,
+          room: bestMatch.room,
+          opdType: bestMatch.opd_type || opdType,
+        };
+      }
+    }
+
+    // Fallback to verified roster if no doctors found in DB
+    const directoryDocs = VERIFIED_DOCTORS_DIRECTORY;
+    let fallbackMatch = directoryDocs.find((d) => {
+      const spec = d.specialty.toLowerCase();
+      return candidates.some((cand) => spec.includes(cand));
+    });
+
+    if (!fallbackMatch && isAyush) {
+      fallbackMatch = directoryDocs.find((d) => (d.consultation_type || '').startsWith('AYUSH'));
+    }
+    if (!fallbackMatch) {
+      fallbackMatch = directoryDocs.find((d) => d.doctor_id === 'DOC-MED-01') || directoryDocs[0];
+    }
+
+    return {
+      doctorId: fallbackMatch.doctor_id,
+      doctorName: fallbackMatch.doctor_name,
+      specialization: fallbackMatch.specialty,
+      qualification: fallbackMatch.qualification,
+      department: fallbackMatch.department,
+      room: fallbackMatch.room,
+      opdType: isAyush ? 'AYUSH' : 'GENERAL',
+    };
+  }
+
+  /**
    * Return verified roster of doctors
    */
   getAllDoctors() {
@@ -472,12 +614,17 @@ export class DoctorService {
     } = options;
 
     let candidateDoctors = [];
+    const dbDocs = await this.getDoctorsFromDB();
 
     // 1. AYUSH Discipline-Specific Matching
     const isAyush =
       opdMode === 'AYUSH' ||
       (consultationType && consultationType.startsWith('AYUSH')) ||
       (opdSystem && ['AYURVEDA', 'YOGA_NATUROPATHY', 'UNANI', 'SIDDHA', 'HOMOEOPATHY', 'SOWA_RIGPA'].includes(opdSystem.toUpperCase()));
+
+    // Add matching DB doctors first
+    const relevantDbDocs = dbDocs.filter((d) => (isAyush ? d.opd_type === 'AYUSH' : d.opd_type !== 'AYUSH'));
+    relevantDbDocs.forEach((d) => candidateDoctors.push(d));
 
     if (isAyush) {
       const ayushSystem = (opdSystem || consultationType || '').toUpperCase();
@@ -498,7 +645,12 @@ export class DoctorService {
         matchedAyushDocs = VERIFIED_DOCTORS_DIRECTORY.filter((d) => d.consultation_type === 'AYUSH_AYURVEDA' || d.specialty.includes('Ayurveda'));
       }
 
-      candidateDoctors = matchedAyushDocs.length > 0 ? matchedAyushDocs : VERIFIED_DOCTORS_DIRECTORY.filter((d) => (d.consultation_type || '').startsWith('AYUSH'));
+      const ayushPool = matchedAyushDocs.length > 0 ? matchedAyushDocs : VERIFIED_DOCTORS_DIRECTORY.filter((d) => (d.consultation_type || '').startsWith('AYUSH'));
+      ayushPool.forEach((doc) => {
+        if (!candidateDoctors.some((d) => d.doctor_id === doc.doctor_id)) {
+          candidateDoctors.push(doc);
+        }
+      });
     } else {
       // 2. Modern Medicine (General OPD) Specialty Matching
       if (specialties.length > 0) {
@@ -513,9 +665,12 @@ export class DoctorService {
       }
 
       // Fallback: If no specialty candidates match, include General Medicine
-      if (candidateDoctors.length === 0) {
-        candidateDoctors = this.getDoctorsBySpecialty('General Medicine').filter((d) => !(d.consultation_type || '').startsWith('AYUSH'));
-      }
+      const genDocs = this.getDoctorsBySpecialty('General Medicine').filter((d) => !(d.consultation_type || '').startsWith('AYUSH'));
+      genDocs.forEach((doc) => {
+        if (!candidateDoctors.some((d) => d.doctor_id === doc.doctor_id)) {
+          candidateDoctors.push(doc);
+        }
+      });
     }
 
     // 2. Compute availability for each candidate

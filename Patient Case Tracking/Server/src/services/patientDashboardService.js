@@ -264,14 +264,16 @@ export class PatientDashboardService {
       };
 
       const stageConfig = JOURNEY_STAGES_MAP[stageKey] || JOURNEY_STAGES_MAP.CHECKED_IN;
-      const assignedDoctor = (clinicalRecords && clinicalRecords[0]?.doctor_name)
-        ? clinicalRecords[0].doctor_name
-        : (patient.opd_type === 'AYUSH' ? 'Dr. Aarav Mehta (AYUSH)' : 'Dr. Priya Sharma (OPD)');
+      const assignedDoctor = activeSession.assigned_doctor_name
+        || (clinicalRecords && clinicalRecords[0]?.doctor_name)
+        || (patient.opd_type === 'AYUSH' ? 'Dr. Aarav Mehta (AYUSH)' : 'Dr. Priya Sharma (OPD)');
+      const activeRoom = activeSession.assigned_doctor_room
+        || (patient.opd_type === 'AYUSH' ? 'AYUSH Consultation Block (Room 104)' : 'OPD Main Block (Room 104)');
 
       currentToken = {
         sessionId: activeSession.session_id,
         token: `TK-${resolvedPatientId.slice(-3).toUpperCase()}`,
-        room: patient.opd_type === 'AYUSH' ? 'AYUSH Consultation Block (Room 204)' : 'OPD Main Block (Room 102)',
+        room: activeRoom,
         department: opdSystemDisplay,
         doctor: stageConfig.index >= 2 ? assignedDoctor : stageConfig.doctor,
         status: stageKey,
@@ -318,6 +320,7 @@ export class PatientDashboardService {
     }
 
     // 6B. Format Multi-Intake Encounter History (Preserving all distinct encounters)
+    const dbDocs = await doctorService.getDoctorsFromDB();
     const formattedIntakeHistory = (allSessions || []).map((s) => {
       const isAyush = s.opd_type === 'AYUSH';
       const opdLabel = isAyush
@@ -327,6 +330,99 @@ export class PatientDashboardService {
         s.clinical_state?.chief_complaint ||
         s.clinical_summary?.chief_complaint ||
         (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Consultation');
+
+      // Resolve automatically appointed doctor for this encounter from DB
+      let assignedDocInfo = null;
+      if (s.assigned_doctor_name) {
+        const matchingDbDoc = dbDocs.find(
+          (d) => d.doctor_id === s.assigned_doctor_id || d.id === s.assigned_doctor_id || d.doctor_name?.toLowerCase() === s.assigned_doctor_name?.toLowerCase()
+        );
+        assignedDocInfo = {
+          id: s.assigned_doctor_id || matchingDbDoc?.doctor_id || 'DOC-AUTO',
+          name: s.assigned_doctor_name,
+          specialty: s.assigned_doctor_specialty || matchingDbDoc?.specialty || opdLabel,
+          qualification: matchingDbDoc?.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+          department: matchingDbDoc?.department || opdLabel,
+          room: s.assigned_doctor_room || matchingDbDoc?.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+        };
+      } else if (s.assigned_doctor_id) {
+        const found = dbDocs.find(
+          (d) => d.doctor_id?.toLowerCase() === s.assigned_doctor_id.toLowerCase() || d.id?.toLowerCase() === s.assigned_doctor_id.toLowerCase()
+        ) || (doctorService.getAllDoctors ? doctorService.getAllDoctors() : []).find(
+          (d) => d.doctor_id?.toLowerCase() === s.assigned_doctor_id.toLowerCase()
+        );
+        if (found) {
+          assignedDocInfo = {
+            id: found.doctor_id,
+            name: found.doctor_name || found.name,
+            specialty: found.specialty || opdLabel,
+            qualification: found.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+            department: found.department || opdLabel,
+            room: found.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+          };
+        }
+      }
+
+      if (!assignedDocInfo) {
+        // Auto-allot from MongoDB User collection based on symptoms
+        const symptomsList = s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [];
+        const symptomsText = [...symptomsList, complaintText].join(' ');
+        const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptomsText, '');
+        const targetSpec = (specialtyMatch?.primary || (isAyush ? 'Ayurveda' : 'General Medicine')).toLowerCase();
+        const candidates = (specialtyMatch?.candidates || [targetSpec]).map((c) => c.toLowerCase());
+
+        const pool = dbDocs.filter((d) => (isAyush ? d.opd_type === 'AYUSH' : d.opd_type !== 'AYUSH'));
+        const activePool = pool.length > 0 ? pool : dbDocs;
+
+        let bestDoc = activePool.find((d) => {
+          const sp = (d.specialty || '').toLowerCase();
+          const sub = (d.sub_specialty || '').toLowerCase();
+          const dept = (d.department || '').toLowerCase();
+          return candidates.some((c) => sp.includes(c) || sub.includes(c) || dept.includes(c));
+        });
+
+        if (!bestDoc) {
+          bestDoc = activePool.find((d) => (d.specialty || '').toLowerCase().includes('general') || (d.specialty || '').toLowerCase().includes('opd'));
+        }
+        if (!bestDoc && activePool.length > 0) {
+          bestDoc = activePool[0];
+        }
+
+        if (bestDoc) {
+          assignedDocInfo = {
+            id: bestDoc.doctor_id,
+            name: bestDoc.doctor_name || bestDoc.name,
+            specialty: bestDoc.specialty || opdLabel,
+            qualification: bestDoc.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+            department: bestDoc.department || opdLabel,
+            room: bestDoc.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+          };
+
+          // Persist asynchronously on the session
+          ClinicalSession.updateOne(
+            { session_id: s.session_id },
+            {
+              $set: {
+                assigned_doctor_id: bestDoc.doctor_id,
+                assigned_doctor_name: bestDoc.doctor_name || bestDoc.name,
+                assigned_doctor_specialty: bestDoc.specialty,
+                assigned_doctor_room: bestDoc.room,
+              },
+            }
+          ).catch(() => {});
+        } else {
+          // Fallback if DB completely empty
+          const fallback = (doctorService.getAllDoctors ? doctorService.getAllDoctors() : [])[0];
+          assignedDocInfo = {
+            id: fallback?.doctor_id || 'DOC-MED-01',
+            name: fallback?.doctor_name || 'Dr. Attending Physician',
+            specialty: fallback?.specialty || opdLabel,
+            qualification: fallback?.qualification || 'MBBS, MD',
+            department: fallback?.department || opdLabel,
+            room: fallback?.room || 'Room 104 (Main OPD)',
+          };
+        }
+      }
 
       return {
         id: s.session_id,
@@ -354,6 +450,12 @@ export class PatientDashboardService {
         doctorNotes: s.doctor_notes || null,
         prescriptions: s.prescriptions || [],
         ayushProfile: s.ayush_profile || null,
+        assignedDoctorId: assignedDocInfo.id,
+        assignedDoctorName: assignedDocInfo.name,
+        assignedDoctorSpecialty: assignedDocInfo.specialty,
+        assignedDoctorDegree: assignedDocInfo.qualification,
+        assignedDoctorDepartment: assignedDocInfo.department,
+        assignedDoctorRoom: assignedDocInfo.room,
         startedAt: s.started_at || s.createdAt,
         completedAt: s.completed_at || null,
       };
@@ -1001,36 +1103,133 @@ export class PatientDashboardService {
   async getPatientEncounters(patientId) {
     if (!patientId) throw ApiError.badRequest('Patient ID is required');
 
-    const sessions = await ClinicalSession.find({
-      $or: [
-        { patient_id: patientId },
-        { patient_id: String(patientId).toUpperCase() },
-        { patient_id: String(patientId).toLowerCase() },
-      ],
-    }).sort({ createdAt: -1 }).lean();
+    const [sessions, dbDocs] = await Promise.all([
+      ClinicalSession.find({
+        $or: [
+          { patient_id: patientId },
+          { patient_id: String(patientId).toUpperCase() },
+          { patient_id: String(patientId).toLowerCase() },
+        ],
+      }).sort({ createdAt: -1 }).lean(),
+      doctorService.getDoctorsFromDB(),
+    ]);
 
-    return (sessions || []).map((s) => ({
-      id: s.session_id,
-      sessionId: s.session_id,
-      encounterId: s.session_id,
-      date: new Date(s.createdAt).toLocaleDateString(),
-      time: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timestamp: s.createdAt,
-      opdType: s.opd_type || 'GENERAL',
-      opdSystem: s.opd_system || 'GENERAL_MEDICINE',
-      department: s.opd_type === 'AYUSH' ? `AYUSH — ${(s.opd_system || 'Ayurveda').replace(/_/g, ' ')}` : `General OPD — ${(s.opd_system || 'General Medicine').replace(/_/g, ' ')}`,
-      status: s.status,
-      journeyStage: s.journey_stage,
-      chiefComplaint: s.clinical_state?.chief_complaint || s.clinical_summary?.chief_complaint || (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Intake'),
-      symptoms: s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [],
-      triageLevel: s.triage_level || 'LOW',
-      triageReason: s.triage_reason || '',
-      hasRedFlag: Boolean(s.red_flags?.has_red_flag),
-      redFlagReason: s.red_flags?.reason || null,
-      clinicalSummary: s.clinical_summary || null,
-      startedAt: s.started_at || s.createdAt,
-      completedAt: s.completed_at || null,
-    }));
+    return (sessions || []).map((s) => {
+      const isAyush = s.opd_type === 'AYUSH';
+      const opdLabel = isAyush
+        ? `AYUSH — ${(s.opd_system || 'Ayurveda').replace(/_/g, ' ')}`
+        : `General OPD — ${(s.opd_system || 'General Medicine').replace(/_/g, ' ')}`;
+      const complaintText =
+        s.clinical_state?.chief_complaint ||
+        s.clinical_summary?.chief_complaint ||
+        (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Intake');
+
+      let assignedDocInfo = null;
+      if (s.assigned_doctor_name) {
+        const matchingDbDoc = dbDocs.find(
+          (d) => d.doctor_id === s.assigned_doctor_id || d.id === s.assigned_doctor_id || d.doctor_name?.toLowerCase() === s.assigned_doctor_name?.toLowerCase()
+        );
+        assignedDocInfo = {
+          id: s.assigned_doctor_id || matchingDbDoc?.doctor_id || 'DOC-AUTO',
+          name: s.assigned_doctor_name,
+          specialty: s.assigned_doctor_specialty || matchingDbDoc?.specialty || opdLabel,
+          qualification: matchingDbDoc?.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+          department: matchingDbDoc?.department || opdLabel,
+          room: s.assigned_doctor_room || matchingDbDoc?.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+        };
+      } else if (s.assigned_doctor_id) {
+        const found = dbDocs.find(
+          (d) => d.doctor_id?.toLowerCase() === s.assigned_doctor_id.toLowerCase() || d.id?.toLowerCase() === s.assigned_doctor_id.toLowerCase()
+        ) || (doctorService.getAllDoctors ? doctorService.getAllDoctors() : []).find(
+          (d) => d.doctor_id?.toLowerCase() === s.assigned_doctor_id.toLowerCase()
+        );
+        if (found) {
+          assignedDocInfo = {
+            id: found.doctor_id,
+            name: found.doctor_name || found.name,
+            specialty: found.specialty || opdLabel,
+            qualification: found.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+            department: found.department || opdLabel,
+            room: found.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+          };
+        }
+      }
+
+      if (!assignedDocInfo) {
+        const symptomsList = s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [];
+        const symptomsText = [...symptomsList, complaintText].join(' ');
+        const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptomsText, '');
+        const targetSpec = (specialtyMatch?.primary || (isAyush ? 'Ayurveda' : 'General Medicine')).toLowerCase();
+        const candidates = (specialtyMatch?.candidates || [targetSpec]).map((c) => c.toLowerCase());
+
+        const pool = dbDocs.filter((d) => (isAyush ? d.opd_type === 'AYUSH' : d.opd_type !== 'AYUSH'));
+        const activePool = pool.length > 0 ? pool : dbDocs;
+
+        let bestDoc = activePool.find((d) => {
+          const sp = (d.specialty || '').toLowerCase();
+          const sub = (d.sub_specialty || '').toLowerCase();
+          const dept = (d.department || '').toLowerCase();
+          return candidates.some((c) => sp.includes(c) || sub.includes(c) || dept.includes(c));
+        });
+
+        if (!bestDoc) {
+          bestDoc = activePool.find((d) => (d.specialty || '').toLowerCase().includes('general') || (d.specialty || '').toLowerCase().includes('opd'));
+        }
+        if (!bestDoc && activePool.length > 0) {
+          bestDoc = activePool[0];
+        }
+
+        if (bestDoc) {
+          assignedDocInfo = {
+            id: bestDoc.doctor_id,
+            name: bestDoc.doctor_name || bestDoc.name,
+            specialty: bestDoc.specialty || opdLabel,
+            qualification: bestDoc.qualification || (isAyush ? 'BAMS, MD (Ayurveda)' : 'MBBS, MD (General Medicine)'),
+            department: bestDoc.department || opdLabel,
+            room: bestDoc.room || (isAyush ? 'Room 104 (Ayush OPD)' : 'Room 104 (General OPD)'),
+          };
+        } else {
+          const fallback = (doctorService.getAllDoctors ? doctorService.getAllDoctors() : [])[0];
+          assignedDocInfo = {
+            id: fallback?.doctor_id || 'DOC-MED-01',
+            name: fallback?.doctor_name || 'Dr. Attending Physician',
+            specialty: fallback?.specialty || opdLabel,
+            qualification: fallback?.qualification || 'MBBS, MD',
+            department: fallback?.department || opdLabel,
+            room: fallback?.room || 'Room 104 (Main OPD)',
+          };
+        }
+      }
+
+      return {
+        id: s.session_id,
+        sessionId: s.session_id,
+        encounterId: s.session_id,
+        date: new Date(s.createdAt).toLocaleDateString(),
+        time: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: s.createdAt,
+        opdType: s.opd_type || 'GENERAL',
+        opdSystem: s.opd_system || 'GENERAL_MEDICINE',
+        department: opdLabel,
+        status: s.status,
+        journeyStage: s.journey_stage,
+        chiefComplaint: s.clinical_state?.chief_complaint || s.clinical_summary?.chief_complaint || (s.chief_complaint_category ? s.chief_complaint_category.replace(/_/g, ' ') : 'Clinical Intake'),
+        symptoms: s.clinical_state?.symptoms || s.clinical_summary?.symptoms || [],
+        triageLevel: s.triage_level || 'LOW',
+        triageReason: s.triage_reason || '',
+        hasRedFlag: Boolean(s.red_flags?.has_red_flag),
+        redFlagReason: s.red_flags?.reason || null,
+        clinicalSummary: s.clinical_summary || null,
+        assignedDoctorId: assignedDocInfo.id,
+        assignedDoctorName: assignedDocInfo.name,
+        assignedDoctorSpecialty: assignedDocInfo.specialty,
+        assignedDoctorDegree: assignedDocInfo.qualification,
+        assignedDoctorDepartment: assignedDocInfo.department,
+        assignedDoctorRoom: assignedDocInfo.room,
+        startedAt: s.started_at || s.createdAt,
+        completedAt: s.completed_at || null,
+      };
+    });
   }
 
   /**
