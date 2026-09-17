@@ -145,6 +145,23 @@ const ClinicalSessionSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    assigned_doctor_id: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    assigned_doctor_name: {
+      type: String,
+      default: null,
+    },
+    assigned_doctor_specialty: {
+      type: String,
+      default: null,
+    },
+    assigned_doctor_room: {
+      type: String,
+      default: null,
+    },
     prescriptions: {
       type: mongoose.Schema.Types.Mixed,
       default: [],

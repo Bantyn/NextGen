@@ -1884,45 +1884,33 @@ Extract clinical entities in JSON:
         }
 
         let assignedDoctorId = undefined;
-
-        // Feature: Auto-assign doctor on Intake Completion
-        if (nextQuestionResult.is_complete) {
-          try {
-            const symptomsText = state.symptoms?.join(', ') || state.chief_complaint || '';
-            if (symptomsText) {
-              const specialtyMatch = clinicalIntelligenceService.matchSpecialtyFromSymptoms(symptomsText, '');
-              const targetSpecialty = specialtyMatch?.primary || 'General Medicine';
-              
-              const availableDocs = await doctorService.getAvailableDoctors({ opd_type: opd_mode || 'GENERAL' });
-              
-              let bestMatch = availableDocs.find(
-                doc => 
-                  (doc.specialization && doc.specialization.toLowerCase().includes(targetSpecialty.toLowerCase())) ||
-                  (doc.department && doc.department.toLowerCase().includes(targetSpecialty.toLowerCase()))
-              );
-              
-              if (!bestMatch && availableDocs.length > 0) {
-                bestMatch = availableDocs[0];
-              }
-              
-              if (bestMatch) {
-                assignedDoctorId = bestMatch.doctor_id;
-                logger.info(`[IntakeService] Auto-assigned Doctor ${assignedDoctorId} for Specialty ${targetSpecialty}`);
-              }
-            }
-          } catch (assignErr) {
-            logger.warn(`[IntakeService] Auto-assignment failed: ${assignErr.message}`);
-          }
-        }
-
         const extraFields = {
           clinical_state: state,
           triage_level: triageResult.triage_level,
           triage_reason: triageResult.reason,
         };
 
-        if (assignedDoctorId) {
-          extraFields.assigned_doctor_id = assignedDoctorId;
+        // Feature: Auto-assign doctor on Intake Completion or when symptoms are captured
+        if (nextQuestionResult.is_complete || (state.symptoms && state.symptoms.length > 0) || state.chief_complaint) {
+          try {
+            const allotted = await doctorService.allotDoctorForPatient({
+              symptoms: state.symptoms || [],
+              chiefComplaint: state.chief_complaint || '',
+              opdType: opd_mode || 'GENERAL',
+              opdSystem: state.opd_system || '',
+            });
+
+            if (allotted) {
+              assignedDoctorId = allotted.doctorId;
+              extraFields.assigned_doctor_id = allotted.doctorId;
+              extraFields.assigned_doctor_name = allotted.doctorName;
+              extraFields.assigned_doctor_specialty = allotted.specialization;
+              extraFields.assigned_doctor_room = allotted.room;
+              logger.info(`[IntakeService] Auto-assigned DB Doctor ${allotted.doctorName} (${allotted.doctorId}) for symptoms`);
+            }
+          } catch (assignErr) {
+            logger.warn(`[IntakeService] Auto-assignment failed: ${assignErr.message}`);
+          }
         }
 
         await sessionRepository.updateStatus(

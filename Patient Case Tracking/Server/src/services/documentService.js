@@ -74,7 +74,16 @@ export class DocumentService {
       const metadata = await sharp(buffer).metadata();
       let pipeline = sharp(buffer).rotate();
 
-      if (metadata.width && metadata.width < 1400) {
+      // Optimize image dimensions for peak OCR speed & character accuracy:
+      // Downscale huge camera photos (> 1800px) to prevent 30s+ CPU bottlenecks.
+      // Upscale low-res scans (< 1200px) for crisp character recognition.
+      if (metadata.width && metadata.width > 1800) {
+        pipeline = pipeline.resize({
+          width: 1800,
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
+      } else if (metadata.width && metadata.width < 1200) {
         pipeline = pipeline.resize({
           width: Math.min(1800, metadata.width * 2),
           fit: 'inside',

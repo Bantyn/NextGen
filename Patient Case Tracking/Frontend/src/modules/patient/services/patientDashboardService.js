@@ -310,7 +310,7 @@ export async function uploadPatientMedicalDocument(patientId, { file, docType, t
   }
   if (sessionId) formData.append('session_id', sessionId);
 
-  const res = await apiClient.post(API_ENDPOINTS.DOCUMENTS_UPLOAD, formData);
+  const res = await apiClient.post(API_ENDPOINTS.DOCUMENTS_UPLOAD, formData, { timeout: 120000 });
   const result = res?.data || res;
   const report = mapDocumentToReport(result);
 
