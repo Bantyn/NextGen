@@ -158,9 +158,20 @@ export const PatientCheckinView = () => {
     return text.trim();
   };
 
-  // Helper for circuit breaker
   const isOpenRouterRateLimited = () => {
     try {
+      const lastKey = localStorage.getItem("sehat_openrouter_last_key");
+      const lastModel = localStorage.getItem("sehat_openrouter_last_model");
+      if (lastKey !== OPENROUTER_API_KEY || lastModel !== FISH_AUDIO_MODEL) {
+        localStorage.setItem("sehat_openrouter_last_key", OPENROUTER_API_KEY);
+        localStorage.setItem("sehat_openrouter_last_model", FISH_AUDIO_MODEL);
+        localStorage.removeItem("sehat_openrouter_disabled");
+        sessionStorage.removeItem("sehat_openrouter_rate_limit_until");
+        return false;
+      }
+      if (FISH_AUDIO_MODEL.includes(":free")) {
+        localStorage.removeItem("sehat_openrouter_disabled");
+      }
       if (localStorage.getItem("sehat_openrouter_disabled") === "true") return true;
       const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
       return until && Date.now() < Number(until);
@@ -191,7 +202,9 @@ export const PatientCheckinView = () => {
         return;
       }
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
       const utterance = new SpeechSynthesisUtterance(tunedText);
+      window.__activeCheckinUtterance = utterance;
       const targetLang = langCode || formData.preferredLanguage || 'gu-IN';
       
       const LANGUAGE_MAP = {
@@ -234,8 +247,14 @@ export const PatientCheckinView = () => {
         utterance.voice = chosenVoice;
       }
 
-      utterance.onend = () => setAudioSpeechActive(false);
-      utterance.onerror = () => setAudioSpeechActive(false);
+      utterance.onend = () => {
+        window.__activeCheckinUtterance = null;
+        setAudioSpeechActive(false);
+      };
+      utterance.onerror = () => {
+        window.__activeCheckinUtterance = null;
+        setAudioSpeechActive(false);
+      };
       window.speechSynthesis.speak(utterance);
     };
 
@@ -292,7 +311,12 @@ export const PatientCheckinView = () => {
       const contentType = response.headers.get('content-type') || '';
       let audioBlob;
       if (contentType.includes('audio/pcm') || contentType.includes('pcm')) {
-        audioBlob = pcmToWavBlob(buffer.buffer, 44100);
+        let sampleRate = FISH_AUDIO_MODEL.includes("fish") ? 44100 : 24000;
+        const rateMatch = contentType.match(/rate=(\d+)/i);
+        if (rateMatch) {
+          sampleRate = parseInt(rateMatch[1], 10);
+        }
+        audioBlob = pcmToWavBlob(buffer.buffer, sampleRate);
       } else {
         audioBlob = new Blob([buffer], { type: contentType || 'audio/mpeg' });
       }

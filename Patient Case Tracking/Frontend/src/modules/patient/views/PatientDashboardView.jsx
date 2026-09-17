@@ -596,7 +596,7 @@ export const PatientDashboardView = () => {
       t2 = setTimeout(() => setUploadProgressStep('EXTRACTING'), 1400);
       t3 = setTimeout(() => setUploadProgressStep('SUMMARIZING'), 2500);
 
-      const patientId = safePatient.id || safePatient.patient_id;
+      const patientId = safePatient?.id || safePatient?.patient_id || selectedPatientId || user?.patient_id || user?.id || null;
       const res = await uploadPatientMedicalDocument(patientId, {
         file: uploadForm.file,
         docType: uploadForm.docType,

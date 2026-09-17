@@ -38,9 +38,20 @@ const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
 const FISH_AUDIO_MODEL = import.meta.env.VITE_FISH_AUDIO_MODEL || "fish-audio/s2.1-pro";
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 
-// Circuit breaker helper to prevent repeated 429 or 402 network requests
 function isOpenRouterRateLimited() {
   try {
+    const lastKey = localStorage.getItem("sehat_openrouter_last_key");
+    const lastModel = localStorage.getItem("sehat_openrouter_last_model");
+    if (lastKey !== OPENROUTER_API_KEY || lastModel !== FISH_AUDIO_MODEL) {
+      localStorage.setItem("sehat_openrouter_last_key", OPENROUTER_API_KEY);
+      localStorage.setItem("sehat_openrouter_last_model", FISH_AUDIO_MODEL);
+      localStorage.removeItem("sehat_openrouter_disabled");
+      sessionStorage.removeItem("sehat_openrouter_rate_limit_until");
+      return false;
+    }
+    if (FISH_AUDIO_MODEL.includes(":free")) {
+      localStorage.removeItem("sehat_openrouter_disabled");
+    }
     if (localStorage.getItem("sehat_openrouter_disabled") === "true") return true;
     const until = sessionStorage.getItem("sehat_openrouter_rate_limit_until");
     return until && Date.now() < Number(until);
@@ -148,7 +159,8 @@ export const VoiceRecorder = ({
   const [redFlagAlert, setRedFlagAlert] = useState(null);
   const [sessionStatus, setSessionStatus] = useState("IN_PROGRESS");
   const [historyCompleted, setHistoryCompleted] = useState(false);
-      const [apiError, setApiError] = useState(null);
+  const [apiError, setApiError] = useState(null);
+  const [openRouterError, setOpenRouterError] = useState(null);
 
   const availableVoicesRef = useRef([]);
 
@@ -187,6 +199,8 @@ export const VoiceRecorder = ({
   const silenceTimerRef = useRef(null);
   const chatScrollRef = useRef(null);
   const fallbackSpeechTimerRef = useRef(null);
+  const currentUtteranceRef = useRef(null);
+  const chromeHeartbeatRef = useRef(null);
 
   isCallActiveRef.current = isCallActive;
   isSpeakingTTSRef.current = isSpeakingTTS;
@@ -284,13 +298,17 @@ export const VoiceRecorder = ({
     return () => {
       stopAudio();
       SpeechRecognition.stopListening();
+      if (chromeHeartbeatRef.current) {
+        clearInterval(chromeHeartbeatRef.current);
+        chromeHeartbeatRef.current = null;
+      }
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (fallbackSpeechTimerRef.current)
         clearTimeout(fallbackSpeechTimerRef.current);
     };
   }, []);
 
-  // 1. Keepalive Watchdog: If call is active, keep mic listening
+  // 1. Keepalive Watchdog: If call is active and AI is NOT speaking, keep mic listening
   useEffect(() => {
     if (
       !isCallActive ||
@@ -342,6 +360,7 @@ export const VoiceRecorder = ({
         if (
           text.length > 2 &&
           isCallActiveRef.current &&
+          !isSpeakingTTSRef.current &&
           !apiLoadingRef.current
         ) {
           handleAutoSubmit(text);
@@ -351,12 +370,20 @@ export const VoiceRecorder = ({
   }, [transcript, isCallActive, isSpeakingTTS, apiLoading, sessionStatus, historyCompleted]);
 
   const stopAudio = useCallback(() => {
+    if (chromeHeartbeatRef.current) {
+      clearInterval(chromeHeartbeatRef.current);
+      chromeHeartbeatRef.current = null;
+    }
     if (currentAudioRef.current) {
       try {
         currentAudioRef.current.pause();
         currentAudioRef.current.currentTime = 0;
       } catch (e) {}
       currentAudioRef.current = null;
+    }
+    if (currentUtteranceRef.current) {
+      currentUtteranceRef.current = null;
+      window.__sehat_active_utterance = null;
     }
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -367,7 +394,7 @@ export const VoiceRecorder = ({
     isSpeakingTTSRef.current = false;
   }, []);
 
-  // Safe resume mic listening
+  // Safe resume mic listening with anti-echo buffer (prevents picking up speaker audio)
   const resumeListeningSafe = useCallback(() => {
     stopAudio();
     if (
@@ -391,11 +418,11 @@ export const VoiceRecorder = ({
             console.warn("Resume mic error:", e);
           }
         }
-      }, 250);
+      }, 600); // 600ms anti-echo safety window
     }
   }, [resetTranscript, stopAudio, sessionStatus, historyCompleted]);
 
-  // Web Speech Synthesis Fallback with Intelligent Locale Matching
+  // Web Speech Synthesis Fallback with Intelligent Locale Matching & Anti-Cutoff Guard
   const fallbackTTS = useCallback(
     (text) => {
       const cleanText = cleanAndTuneSpeech(text);
@@ -405,11 +432,36 @@ export const VoiceRecorder = ({
       }
 
       setTtsSource("Browser Web Speech");
-      stopAudio();
+
+      // 1. Immediately silence microphone & clear transcript to eliminate self-talk echo
+      SpeechRecognition.stopListening();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      resetTranscript();
+
+      // 2. Lock speaking state
+      setIsSpeakingTTS(true);
+      isSpeakingTTSRef.current = true;
+
+      // 3. Stop any previous media audio/heartbeat safely
+      if (chromeHeartbeatRef.current) {
+        clearInterval(chromeHeartbeatRef.current);
+        chromeHeartbeatRef.current = null;
+      }
+      if (currentAudioRef.current) {
+        try {
+          currentAudioRef.current.pause();
+          currentAudioRef.current.currentTime = 0;
+        } catch (e) {}
+        currentAudioRef.current = null;
+      }
       window.speechSynthesis.cancel();
       window.speechSynthesis.resume();
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
+      // Retain utterance in component ref and window object to defeat Chromium Garbage Collector mid-speech bug
+      currentUtteranceRef.current = utterance;
+      window.__sehat_active_utterance = utterance;
+
       const targetLang = selectedLanguageRef.current || "gu-IN";
       const bcp47 = LANGUAGE_MAP[targetLang]?.bcp47 || targetLang || "gu-IN";
       utterance.lang = bcp47;
@@ -439,15 +491,12 @@ export const VoiceRecorder = ({
 
       let chosenVoice = null;
       if (matchingVoices.length > 0) {
-        // Priority 1: Explicit male voice in target language (e.g., Madhur, Niranjan, Prabhat)
         chosenVoice =
           matchingVoices.find(isExplicitMale) ||
-          // Priority 2: Non-female voice in target language
           matchingVoices.find(isNotFemale) ||
           matchingVoices[0];
       }
 
-      // If no language-matched voice, fallback to any system male voice
       if (!chosenVoice) {
         chosenVoice = voices.find(isExplicitMale);
       }
@@ -456,23 +505,49 @@ export const VoiceRecorder = ({
         utterance.voice = chosenVoice;
       }
 
+      // Chrome Heartbeat: prevents browser engine from pausing synthesis mid-sentence (> 15s)
+      chromeHeartbeatRef.current = setInterval(() => {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        } else {
+          if (chromeHeartbeatRef.current) {
+            clearInterval(chromeHeartbeatRef.current);
+            chromeHeartbeatRef.current = null;
+          }
+        }
+      }, 8000);
+
+      const finishSpeech = () => {
+        if (chromeHeartbeatRef.current) {
+          clearInterval(chromeHeartbeatRef.current);
+          chromeHeartbeatRef.current = null;
+        }
+        currentUtteranceRef.current = null;
+        window.__sehat_active_utterance = null;
+        resumeListeningSafe();
+      };
+
       utterance.onstart = () => {
         setIsSpeakingTTS(true);
         isSpeakingTTSRef.current = true;
+        SpeechRecognition.stopListening();
       };
 
       utterance.onend = () => {
-        resumeListeningSafe();
+        finishSpeech();
       };
 
       utterance.onerror = (err) => {
         console.warn("Web Speech Synthesis event notice:", err);
-        resumeListeningSafe();
+        if (err.error !== "interrupted" && err.error !== "canceled") {
+          finishSpeech();
+        }
       };
 
       window.speechSynthesis.speak(utterance);
     },
-    [resumeListeningSafe, stopAudio],
+    [resumeListeningSafe, resetTranscript],
   );
 
   /**
@@ -535,6 +610,11 @@ export const VoiceRecorder = ({
         });
 
         if (!response.ok) {
+          if (response.status === 402) {
+            setOpenRouterError(
+              "OpenRouter account balance is 0 credits (HTTP 402 Payment Required). Please add credits at https://openrouter.ai/settings/credits to enable Fish Audio."
+            );
+          }
           if (response.status === 429 || response.status === 402 || response.status === 401) {
             markOpenRouterRateLimited(response.status === 402 ? "no_credits" : "rate_limit");
             console.warn(
@@ -545,7 +625,8 @@ export const VoiceRecorder = ({
           return;
         }
 
-        setTtsSource("OpenRouter Fish Audio");
+        setOpenRouterError(null);
+        setTtsSource(FISH_AUDIO_MODEL.includes("fish") ? "OpenRouter Fish Audio" : "OpenRouter Deepgram");
 
         const reader = response.body.getReader();
         const chunks = [];
@@ -568,7 +649,12 @@ export const VoiceRecorder = ({
         const contentType = response.headers.get("content-type") || "";
         let audioBlob;
         if (contentType.includes("audio/pcm") || contentType.includes("pcm")) {
-          audioBlob = pcmToWavBlob(buffer.buffer, 44100);
+          let sampleRate = FISH_AUDIO_MODEL.includes("fish") ? 44100 : 24000;
+          const rateMatch = contentType.match(/rate=(\d+)/i);
+          if (rateMatch) {
+            sampleRate = parseInt(rateMatch[1], 10);
+          }
+          audioBlob = pcmToWavBlob(buffer.buffer, sampleRate);
         } else {
           audioBlob = new Blob([buffer], { type: contentType || "audio/mpeg" });
         }
@@ -605,7 +691,7 @@ export const VoiceRecorder = ({
    */
   const handleAutoSubmit = async (patientAnswerText) => {
     const trimmed = (patientAnswerText || "").trim();
-    if (!trimmed || apiLoadingRef.current) return;
+    if (!trimmed || apiLoadingRef.current || isSpeakingTTSRef.current) return;
 
     // Immediate lock before any async gap to prevent multiple rapid clicks / duplicate voice events
     apiLoadingRef.current = true;
@@ -845,6 +931,39 @@ export const VoiceRecorder = ({
           )}
         </div>
       </div>
+
+      {/* OpenRouter Credit Status Alert */}
+      {openRouterError && (
+        <div className="w-full my-2 p-3 rounded-2xl bg-amber-50/90 border border-amber-300 text-amber-950 text-xs shadow-xs space-y-1 text-left animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>OpenRouter Audio: Insufficient Account Credits (HTTP 402)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpenRouterError(null)}
+              className="text-amber-500 hover:text-amber-800 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-[11px] text-amber-800 leading-relaxed font-normal">
+            Aapki OpenRouter API key free-tier par hai aur account me $0 credits hain.
+            Fish Audio neural voice chalane ke liye kripya{" "}
+            <a
+              href="https://openrouter.ai/settings/credits"
+              target="_blank"
+              rel="noreferrer"
+              className="font-bold underline text-amber-950 hover:text-sky-700"
+            >
+              openrouter.ai/settings/credits
+            </a>{" "}
+            par credits add karein. Filhal backup <strong>Browser Speech</strong> active hai taaki patient conversation na ruke.
+          </p>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* RED FLAG PRIORITY EMERGENCY TRIAGE BANNER */}
