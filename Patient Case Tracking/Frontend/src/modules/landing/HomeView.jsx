@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Mic, ShieldCheck, FileText, Activity } from "lucide-react";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { ClinicalTestimonial } from "./components/ClinicalTestimonial";
-import { CinematicJourney } from "./components/CinematicJourney";
+import { WhoCanUseSehat } from "./components/WhoCanUseSehat";
 import { Hero } from "@/components/ui/hero-with-group-of-images-text-and-two-buttons";
 
 /**
@@ -206,10 +206,10 @@ export const HomeView = () => {
         </div>
       </section>
 
-      {/* 3. 5-STEP END-TO-END PATIENT & DOCTOR JOURNEY */}
-      <CinematicJourney />
+      {/* 3. WHO CAN USE SEHAT — STAKEHOLDERS & ECOSYSTEM */}
+      <WhoCanUseSehat />
 
-      {/* 4. CLINICAL ENDORSEMENTS & TESTIMONIALS (FRAMER MOTION ASYMMETRIC) */}
+      {/* 4. 5-STEP END-TO-END PATIENT & DOCTOR JOURNEY */}
       <ClinicalTestimonial />
 
       {/* 4. INTERACTIVE LIVE VOICE INTAKE DEMO */}
